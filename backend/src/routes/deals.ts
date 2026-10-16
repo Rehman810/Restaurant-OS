@@ -3,6 +3,9 @@ import { Role } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { ADMIN_LIKE } from "../lib/roles";
 import { requireAuth, requireRole } from "../middleware/auth";
+import { writeAudit } from "../lib/audit";
+import { AuditAction } from "../lib/audit-actions";
+import { clientIp } from "../lib/client-ip";
 
 const DEAL_CATEGORY_PRESETS = [
   "Summer deals",
@@ -128,17 +131,38 @@ dealsRouter.put("/:id", requireAuth, requireRole(...ADMIN_LIKE), async (req, res
       }
     }
 
-    const deal = await prisma.deal.update({
-      where: { id: req.params.id },
-      data: {
-        ...(title != null && { title: String(title).trim() }),
-        ...(description != null && { description }),
-        ...(category != null && { category: canonicalDealCategory(category) }),
-        ...(dealPrice != null && { dealPrice: Number(dealPrice) }),
-        ...(imageUrl != null && { imageUrl }),
-        ...(isActive != null && { isActive }),
-      },
-      include: dealInclude,
+    const deal = await prisma.$transaction(async (tx) => {
+      const updated = await tx.deal.update({
+        where: { id: req.params.id },
+        data: {
+          ...(title != null && { title: String(title).trim() }),
+          ...(description != null && { description }),
+          ...(category != null && { category: canonicalDealCategory(category) }),
+          ...(dealPrice != null && { dealPrice: Number(dealPrice) }),
+          ...(imageUrl != null && { imageUrl }),
+          ...(isActive != null && { isActive }),
+        },
+        include: dealInclude,
+      });
+      await writeAudit(tx, {
+        actorId: req.user!.id,
+        actorRole: req.user!.role,
+        action: AuditAction.DEAL_CHANGED,
+        entityType: "deal",
+        entityId: updated.id,
+        before: {
+          title: existing.title,
+          dealPrice: existing.dealPrice,
+          isActive: existing.isActive,
+        },
+        after: {
+          title: updated.title,
+          dealPrice: updated.dealPrice,
+          isActive: updated.isActive,
+        },
+        ip: clientIp(req),
+      });
+      return updated;
     });
     res.json(deal);
   } catch {

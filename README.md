@@ -69,6 +69,8 @@ E2E_RUN=1 E2E_BASE_URL=http://localhost:3000 npm run test:e2e -w restaurant-os-w
 
 Optional dev login shortcuts: set `NEXT_PUBLIC_ENABLE_DEMO_LOGIN=true` in `frontend/.env.local` (never in production).
 
+Phase 2 feature notes and QA checklist: [docs/PHASE2.md](docs/PHASE2.md).
+
 Check dishes missing images:
 
 ```bash

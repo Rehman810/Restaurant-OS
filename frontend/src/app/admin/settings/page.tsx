@@ -16,6 +16,7 @@ import {
   Plus,
   Save,
   Settings,
+  Shield,
   Share2,
   Star,
   Trash2,
@@ -25,6 +26,7 @@ import {
 import { ConfirmSheet } from "@/components/admin/ConfirmSheet";
 import { OpeningHoursEditor } from "@/components/admin/OpeningHoursEditor";
 import { TwoFactorSettings } from "@/components/admin/TwoFactorSettings";
+import { ApprovalPinSettings } from "@/components/admin/ApprovalPinSettings";
 import { SettingsField, SettingsSection } from "@/components/admin/SettingsSection";
 import { api, apiUpload, ApiError } from "@/lib/api";
 import { resolveMediaUrl } from "@/lib/media-url";
@@ -52,6 +54,7 @@ const SETTINGS_TABS = [
   { id: "social", label: "Social" },
   { id: "banners", label: "Banners" },
   { id: "inventory", label: "Inventory" },
+  { id: "controls", label: "Controls" },
   { id: "security", label: "Security" },
 ] as const;
 
@@ -341,7 +344,12 @@ export default function AdminSettingsPage() {
         })}
       </div>
 
-      {tab === "security" && <TwoFactorSettings />}
+      {tab === "security" && (
+        <div className="space-y-6">
+          <ApprovalPinSettings />
+          <TwoFactorSettings />
+        </div>
+      )}
 
       <form onSubmit={onSave} className={tab === "banners" || tab === "security" ? "hidden" : "space-y-6"}>
         {tab === "store" && (
@@ -835,6 +843,27 @@ export default function AdminSettingsPage() {
             </label>
             <label
               className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition ${
+                settings.autoPrintKitchenTickets
+                  ? "border-sky-300 bg-sky-50"
+                  : "border-stone-200 bg-stone-50"
+              }`}
+            >
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 rounded border-stone-300 text-brand-600"
+                checked={settings.autoPrintKitchenTickets ?? false}
+                onChange={(e) => setSettings({ ...settings, autoPrintKitchenTickets: e.target.checked })}
+              />
+              <div>
+                <p className="text-sm font-semibold text-stone-900">Auto-print kitchen tickets</p>
+                <p className="mt-1 text-xs leading-relaxed text-stone-600">
+                  When enabled, the kitchen board opens a browser print dialog for each new confirmed order (allow pop-ups).
+                  Tickets split by print station.
+                </p>
+              </div>
+            </label>
+            <label
+              className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition ${
                 settings.autoAssignRiders
                   ? "border-violet-300 bg-violet-50"
                   : "border-stone-200 bg-stone-50"
@@ -985,6 +1014,118 @@ export default function AdminSettingsPage() {
         </SettingsSection>
         )}
       </form>
+
+      {tab === "controls" && settings && (
+        <SettingsSection
+          icon={Shield}
+          title="POS controls"
+          description="Manager approval rules for voids, refunds, and discounts."
+        >
+          <SettingsField
+            label="Max cashier discount (%)"
+            hint="Cashiers can discount up to this percent without a manager PIN."
+          >
+            <input
+              type="number"
+              min={0}
+              max={100}
+              className="input w-full max-w-xs"
+              value={settings.maxCashierDiscountPercent ?? 10}
+              onChange={(e) =>
+                setSettings({ ...settings, maxCashierDiscountPercent: e.target.value })
+              }
+            />
+          </SettingsField>
+          {(
+            [
+              ["requireApprovalForVoid", "Require manager approval to void orders"],
+              ["requireApprovalForRefund", "Require manager approval for refunds"],
+              ["requireApprovalForPriceOverride", "Require manager approval for price overrides"],
+            ] as const
+          ).map(([key, label]) => (
+            <label
+              key={key}
+              className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 dark:border-stone-600 dark:bg-stone-800/50"
+            >
+              <span className="text-sm font-medium text-stone-900 dark:text-stone-100">{label}</span>
+              <input
+                type="checkbox"
+                className="h-5 w-5 shrink-0 rounded border-stone-300 text-brand-600 focus:ring-brand-500"
+                checked={Boolean(settings[key])}
+                onChange={(e) => setSettings({ ...settings, [key]: e.target.checked })}
+              />
+            </label>
+          ))}
+          <SettingsField
+            label="Void reasons (one per line)"
+            hint="Shown when staff void or cancel orders."
+          >
+            <textarea
+              className="input min-h-[88px] w-full font-mono text-sm"
+              value={(settings.voidReasonOptions ?? []).join("\n")}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  voidReasonOptions: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean),
+                })
+              }
+            />
+          </SettingsField>
+          <SettingsField label="Discount reasons (one per line)">
+            <textarea
+              className="input min-h-[88px] w-full font-mono text-sm"
+              value={(settings.discountReasonOptions ?? []).join("\n")}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  discountReasonOptions: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean),
+                })
+              }
+            />
+          </SettingsField>
+          <SettingsField
+            label="Shift variance tolerance (Rs)"
+            hint="Closing variance above this amount requires a manager note."
+          >
+            <input
+              type="number"
+              min={0}
+              className="input w-full max-w-xs"
+              value={settings.shiftVarianceTolerance ?? 500}
+              onChange={(e) =>
+                setSettings({ ...settings, shiftVarianceTolerance: e.target.value })
+              }
+            />
+          </SettingsField>
+          <SettingsField
+            label="Rider cash stale alert (hours)"
+            hint="Dashboard flags pending COD older than this many hours."
+          >
+            <input
+              type="number"
+              min={1}
+              max={336}
+              className="input w-full max-w-xs"
+              value={settings.riderCashStaleHours ?? 24}
+              onChange={(e) =>
+                setSettings({ ...settings, riderCashStaleHours: Number(e.target.value) || 24 })
+              }
+            />
+          </SettingsField>
+          <SettingsField label="Refund reasons (one per line)">
+            <textarea
+              className="input min-h-[88px] w-full font-mono text-sm"
+              value={(settings.refundReasonOptions ?? []).join("\n")}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  refundReasonOptions: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean),
+                })
+              }
+            />
+          </SettingsField>
+        </SettingsSection>
+      )}
 
       {tab === "inventory" && settings && (
         <SettingsSection

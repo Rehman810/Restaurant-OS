@@ -33,6 +33,30 @@ export type AdminStats = {
   recentOrders: Order[];
   posTodayOrders: number;
   posTodayRevenue: number;
+  riderCashPendingTotal?: number;
+  riderCashPendingCount?: number;
+  riderCashStaleCount?: number;
+};
+
+export type RiderCashLedgerEntry = {
+  id: string;
+  status: "PENDING" | "SETTLED";
+  expectedAmount: number | string;
+  collectedAmount: number | string;
+  varianceReason: string | null;
+  deliveredAt: string;
+  settledAt: string | null;
+  rider: { id: string; name: string; phone: string | null };
+  order: { orderNumber: string; customerName: string; total: number | string };
+  settlement: { id: string; createdAt: string; receivedTotal: number | string } | null;
+};
+
+export type RiderCashSummary = {
+  totalPending: number;
+  pendingCount: number;
+  staleCount: number;
+  staleHours: number;
+  riders: { riderId: string; name: string; pendingAmount: number; count: number }[];
 };
 
 export type AnalyticsPeriod = "today" | "week" | "month" | "year";

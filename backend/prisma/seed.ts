@@ -375,6 +375,24 @@ async function seedDeliveryAreas(city: string) {
   console.log(`Seeded ${areas.length} delivery areas for ${city}.`);
 }
 
+async function seedDemoCoupons() {
+  const restaurantId = "11111111-1111-4111-8111-111111111111";
+  await prisma.coupon.upsert({
+    where: { restaurantId_code: { restaurantId, code: "WELCOME10" } },
+    create: {
+      restaurantId,
+      code: "WELCOME10",
+      type: "PERCENT",
+      value: 10,
+      minSubtotal: 500,
+      maxDiscount: 300,
+      usageLimit: 10_000,
+      isActive: true,
+    },
+    update: { isActive: true, minSubtotal: 500, value: 10 },
+  });
+}
+
 async function main() {
   await prisma.restaurant.upsert({
     where: { id: "11111111-1111-4111-8111-111111111111" },
@@ -414,6 +432,7 @@ async function main() {
       const inv = await seedInventoryDemo(mainBranch.id);
       console.log(`Inventory demo refreshed: ${inv.ingredients} ingredients, ${inv.recipes} menu recipes.`);
     }
+    await seedDemoCoupons();
     console.log("Demo data already present. Branding updated. Admin password was not reset.");
     return;
   }
@@ -911,8 +930,10 @@ async function main() {
 
   const { seedInventoryDemo } = await import("../src/lib/inventory/seed-demo");
   await seedInventoryDemo(mainBranch.id);
+  await seedDemoCoupons();
 
   console.log(`Seeded ${BRAND_NAME} in ${CITY}.`);
+  console.log("Demo promo: WELCOME10 — 10% off orders over 500 (max 300 off).");
   console.log("Demo accounts (password shown once; it will not be printed or reset on the next seed):");
   console.log("  customer@demo.restaurant");
   console.log("  admin@admin.com");

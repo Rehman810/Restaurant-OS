@@ -1,5 +1,7 @@
 import { Router } from "express";
 import {
+  CashMovementType,
+  CashShiftStatus,
   FulfillmentType,
   OrderSource,
   OrderStatus,
@@ -12,15 +14,57 @@ import { findOrderBlock } from "../lib/blocklist";
 import { buildOrderLines, nextOrderNumber } from "../lib/order-lines";
 import { emitOrderChange } from "../lib/realtime";
 import { storeNameFrom } from "../lib/branding";
-import { quoteCharges } from "../lib/charges";
+import { applyOrderDiscount, quoteCharges } from "../lib/charges";
+import {
+  discountNeedsManagerApproval,
+  parseReasonList,
+  resolveSensitiveApproval,
+  validateReasonCode,
+} from "../lib/order-approval";
+import { writeAudit } from "../lib/audit";
+import { AuditAction } from "../lib/audit-actions";
+import { clientIp } from "../lib/client-ip";
 import { cleanText } from "../lib/text";
 import { getStoreSettings } from "../lib/settings-data";
 import { branchScopeError, getDefaultBranchId, resolveBranchScope } from "../lib/branch-scope";
 import { ADMIN_LIKE } from "../lib/roles";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { posLimiter } from "../middleware/security";
+import {
+  recordCashMovement,
+  SHIFT_REQUIRED_CODE,
+  SHIFT_REQUIRED_ERROR,
+  type CashDb,
+} from "../lib/cash-shift";
+import { posShiftRouter } from "./pos-shift";
 
 export const posRouter = Router();
+posRouter.use("/shift", posShiftRouter);
+
+async function recordRefundCash(
+  db: CashDb,
+  branchId: string,
+  cashierId: string,
+  orderId: string,
+  amount: number,
+  reason: string,
+  createdById: string
+) {
+  const shift = await db.cashShift.findFirst({
+    where: { branchId, cashierId, status: CashShiftStatus.OPEN },
+  });
+  if (!shift) {
+    throw Object.assign(new Error(SHIFT_REQUIRED_ERROR), { status: 403, code: SHIFT_REQUIRED_CODE });
+  }
+  await recordCashMovement(db, {
+    shiftId: shift.id,
+    type: CashMovementType.REFUND_CASH,
+    amount,
+    reason,
+    orderId,
+    createdById,
+  });
+}
 
 const include = {
   items: true,
@@ -52,6 +96,10 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
     waiterId,
     paymentMethod,
     paymentStatus,
+    discountPercent,
+    discountReasonCode,
+    discountReasonNote,
+    approval,
   } = req.body as {
     items?: {
       menuItemId: string;
@@ -60,6 +108,7 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
       optionIds?: string[];
       addonIds?: string[];
       instructions?: string;
+      unitPriceOverride?: number;
     }[];
     deals?: { dealId: string; quantity: number }[];
     fulfillmentType?: FulfillmentType;
@@ -74,6 +123,10 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
     waiterId?: string;
     paymentMethod?: PaymentMethod;
     paymentStatus?: "PAID" | "UNPAID";
+    discountPercent?: number;
+    discountReasonCode?: string;
+    discountReasonNote?: string;
+    approval?: { approverId?: string; pin?: string };
   };
 
   const mode =
@@ -85,6 +138,19 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
 
   const built = await buildOrderLines(items ?? [], deals ?? []);
   if (!built.ok) return res.status(built.status).json({ error: built.error });
+
+  if (built.hadPriceOverride) {
+    const resolved = await resolveSensitiveApproval(
+      "PRICE_OVERRIDE",
+      { id: req.user!.id, role: req.user!.role },
+      storeSettings,
+      approval,
+      { ip: clientIp(req) ?? undefined }
+    );
+    if (!resolved.ok) {
+      return res.status(resolved.status).json({ error: resolved.error, code: resolved.code });
+    }
+  }
 
   let scope;
   try {
@@ -154,6 +220,17 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
   const name = cleanText(customerName, 80) || "Walk-in";
   const phone = normalizePhone(String(customerPhone || ""));
   const quoted = quoteCharges(built.subtotal, deliveryCharge, storeSettings);
+  const pct = Number(discountPercent ?? 0);
+  const maxCashierPct = Number(storeSettings.maxCashierDiscountPercent ?? 10);
+  const needsDiscountApproval = discountNeedsManagerApproval(req.user!.role, pct, storeSettings);
+  if (pct > 0) {
+    const reasons = parseReasonList(storeSettings.discountReasonOptions);
+    const code = String(discountReasonCode || "").trim();
+    if (!validateReasonCode(code, reasons)) {
+      return res.status(400).json({ error: "Select a discount reason." });
+    }
+  }
+  const discounted = applyOrderDiscount(quoted, pct > 0 ? pct : null, null);
 
   const blocked = await findOrderBlock(null, phone || "");
   if (blocked) {
@@ -162,40 +239,295 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
     });
   }
 
-  const order = await prisma.order.create({
-    data: {
-      orderNumber: await nextOrderNumber(),
-      branchId: resolvedBranchId,
-      orderSource: OrderSource.POS,
-      createdById: req.user!.id,
-      fulfillmentType: mode,
-      deliveryAreaId: areaId,
-      subtotal: built.subtotal,
-      deliveryCharge,
-      taxAmount: quoted.tax,
-      serviceAmount: quoted.service,
-      total: quoted.total,
-      deliveryAddress: address,
-      notes: notes ? cleanText(notes, 400) || null : null,
-      tableNumber: mode === FulfillmentType.DINE_IN ? resolvedTableNumber : null,
-      diningTableId: mode === FulfillmentType.DINE_IN ? resolvedDiningTableId : null,
-      tableSessionId: mode === FulfillmentType.DINE_IN ? resolvedSessionId : null,
-      waiterId: mode === FulfillmentType.DINE_IN ? resolvedWaiterId : null,
-      customerName: name,
-      customerPhone: phone,
-      paymentMethod: payMethod,
-      paymentStatus: payStatus,
-      status: OrderStatus.CONFIRMED,
-      items: { create: built.lines },
-    },
-    include,
-  });
+  let discountApproverId: string | null = null;
+  if (needsDiscountApproval) {
+    const resolved = await resolveSensitiveApproval(
+      "DISCOUNT",
+      { id: req.user!.id, role: req.user!.role },
+      storeSettings,
+      approval,
+      { ip: clientIp(req) ?? undefined }
+    );
+    if (!resolved.ok) {
+      return res.status(resolved.status).json({ error: resolved.error, code: resolved.code });
+    }
+    discountApproverId = resolved.approverId;
+  } else if (pct > 0) {
+    discountApproverId = req.user!.id;
+  }
 
+  const orderNumber = await nextOrderNumber();
+  let order;
+  try {
+    order = await prisma.$transaction(async (tx) => {
+      const db = tx as unknown as CashDb & { order: typeof prisma.order };
+      if (payMethod === PaymentMethod.CASH && payStatus === "PAID") {
+        const shift = await tx.cashShift.findFirst({
+          where: {
+            branchId: resolvedBranchId,
+            cashierId: req.user!.id,
+            status: CashShiftStatus.OPEN,
+          },
+        });
+        if (!shift) {
+          throw Object.assign(new Error(SHIFT_REQUIRED_ERROR), {
+            status: 403,
+            code: SHIFT_REQUIRED_CODE,
+          });
+        }
+      }
+      const created = await tx.order.create({
+        data: {
+          orderNumber,
+          branchId: resolvedBranchId,
+          orderSource: OrderSource.POS,
+          createdById: req.user!.id,
+          fulfillmentType: mode,
+          deliveryAreaId: areaId,
+          subtotal: built.subtotal,
+          deliveryCharge,
+          taxAmount: quoted.tax,
+          serviceAmount: quoted.service,
+          discountAmount: discounted.discountAmount,
+          discountPercent: pct > 0 ? pct : null,
+          total: discounted.total,
+          adjustmentReasonCode: pct > 0 ? String(discountReasonCode || "").trim() : null,
+          adjustmentReasonNote: pct > 0 ? cleanText(discountReasonNote, 200) || null : null,
+          adjustmentRequestedById: pct > 0 ? req.user!.id : null,
+          adjustmentApprovedById: discountApproverId,
+          deliveryAddress: address,
+          notes: notes ? cleanText(notes, 400) || null : null,
+          tableNumber: mode === FulfillmentType.DINE_IN ? resolvedTableNumber : null,
+          diningTableId: mode === FulfillmentType.DINE_IN ? resolvedDiningTableId : null,
+          tableSessionId: mode === FulfillmentType.DINE_IN ? resolvedSessionId : null,
+          waiterId: mode === FulfillmentType.DINE_IN ? resolvedWaiterId : null,
+          customerName: name,
+          customerPhone: phone,
+          paymentMethod: payMethod,
+          paymentStatus: payStatus,
+          status: OrderStatus.CONFIRMED,
+          items: { create: built.lines },
+        },
+        include,
+      });
+      if (payMethod === PaymentMethod.CASH && payStatus === "PAID") {
+        const shift = await tx.cashShift.findFirst({
+          where: {
+            branchId: resolvedBranchId,
+            cashierId: req.user!.id,
+            status: CashShiftStatus.OPEN,
+          },
+        });
+        if (shift) {
+          await recordCashMovement(db, {
+            shiftId: shift.id,
+            type: CashMovementType.SALE_CASH,
+            amount: Number(created.total),
+            reason: `POS sale ${created.orderNumber}`,
+            orderId: created.id,
+            createdById: req.user!.id,
+          });
+        }
+      }
+      return created;
+    });
+  } catch (err) {
+    const status = typeof err === "object" && err && "status" in err ? Number((err as { status: number }).status) : 500;
+    const code = typeof err === "object" && err && "code" in err ? String((err as { code: string }).code) : undefined;
+    const message = err instanceof Error ? err.message : "Could not create order.";
+    return res.status(status).json({ error: message, code });
+  }
+
+  if (pct > 0) {
+    await writeAudit(prisma, {
+      actorId: req.user!.id,
+      actorRole: req.user!.role,
+      branchId: resolvedBranchId,
+      action: AuditAction.DISCOUNT_APPLIED,
+      entityType: "order",
+      entityId: order.id,
+      after: { discountPercent: pct, discountAmount: discounted.discountAmount },
+      reason: String(discountReasonCode || ""),
+      ip: clientIp(req) ?? undefined,
+    });
+  }
   emitOrderChange("order:created", order);
   const { deductInventoryForOrder } = await import("../lib/inventory/stock");
   void deductInventoryForOrder(order.id, req.user!.id).catch(() => null);
   res.status(201).json(order);
 });
+
+posRouter.post(
+  "/:orderId/void",
+  requireAuth,
+  requireRole(...ADMIN_LIKE, Role.CASHIER, Role.WAITER),
+  async (req, res) => {
+    const storeSettings = await getStoreSettings();
+    const existing = await prisma.order.findUnique({ where: { id: req.params.orderId }, include });
+    if (!existing || existing.orderSource !== OrderSource.POS) {
+      return res.status(404).json({ error: "POS order not found." });
+    }
+    if (existing.status === OrderStatus.CANCELLED) {
+      return res.status(400).json({ error: "Order is already voided." });
+    }
+    const { voidReasonCode, voidReasonNote, approval } = req.body as {
+      voidReasonCode?: string;
+      voidReasonNote?: string;
+      approval?: { approverId?: string; pin?: string };
+    };
+    const reasons = parseReasonList(storeSettings.voidReasonOptions);
+    const code = String(voidReasonCode || "").trim();
+    if (!validateReasonCode(code, reasons)) {
+      return res.status(400).json({ error: "Select a void reason." });
+    }
+    const resolved = await resolveSensitiveApproval(
+      "VOID",
+      { id: req.user!.id, role: req.user!.role },
+      storeSettings,
+      approval,
+      { ip: clientIp(req) ?? undefined }
+    );
+    if (!resolved.ok) {
+      return res.status(resolved.status).json({ error: resolved.error, code: resolved.code });
+    }
+    const order = await prisma.$transaction(async (tx) => {
+      const updated = await tx.order.update({
+        where: { id: existing.id },
+        data: {
+          status: OrderStatus.CANCELLED,
+          voidReasonCode: code,
+          voidReasonNote: cleanText(voidReasonNote, 200) || null,
+          voidApprovedById: resolved.approverId,
+          events: {
+            create: {
+              fromStatus: existing.status,
+              toStatus: OrderStatus.CANCELLED,
+              actorId: req.user!.id,
+              actorRole: req.user!.role,
+              reason: code,
+            },
+          },
+        },
+        include,
+      });
+      if (
+        existing.paymentMethod === PaymentMethod.CASH &&
+        existing.paymentStatus === "PAID" &&
+        existing.branchId
+      ) {
+        await recordRefundCash(
+          tx as unknown as CashDb,
+          existing.branchId,
+          req.user!.id,
+          existing.id,
+          Number(existing.total),
+          `Void ${existing.orderNumber}`,
+          req.user!.id
+        );
+      }
+      await writeAudit(tx, {
+        actorId: req.user!.id,
+        actorRole: req.user!.role,
+        branchId: existing.branchId,
+        action: AuditAction.ORDER_VOIDED,
+        entityType: "order",
+        entityId: updated.id,
+        before: { status: existing.status },
+        after: { status: OrderStatus.CANCELLED },
+        reason: code,
+        ip: clientIp(req) ?? undefined,
+      });
+      return updated;
+    });
+    const { reverseInventoryForOrder } = await import("../lib/inventory/stock");
+    void reverseInventoryForOrder(order.id, req.user!.id).catch(() => null);
+    emitOrderChange("order:updated", order);
+    res.json(order);
+  }
+);
+
+posRouter.post(
+  "/:orderId/refund",
+  requireAuth,
+  requireRole(...ADMIN_LIKE, Role.CASHIER),
+  async (req, res) => {
+    const storeSettings = await getStoreSettings();
+    const existing = await prisma.order.findUnique({ where: { id: req.params.orderId }, include });
+    if (!existing || existing.orderSource !== OrderSource.POS) {
+      return res.status(404).json({ error: "POS order not found." });
+    }
+    if (existing.status === OrderStatus.CANCELLED) {
+      return res.status(400).json({ error: "Cannot refund a voided order." });
+    }
+    const { refundAmount, refundReasonCode, refundReasonNote, approval } = req.body as {
+      refundAmount?: number;
+      refundReasonCode?: string;
+      refundReasonNote?: string;
+      approval?: { approverId?: string; pin?: string };
+    };
+    const amount = Number(refundAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ error: "Enter a valid refund amount." });
+    }
+    if (amount > Number(existing.total)) {
+      return res.status(400).json({ error: "Refund cannot exceed order total." });
+    }
+    const reasons = parseReasonList(storeSettings.refundReasonOptions);
+    const code = String(refundReasonCode || "").trim();
+    if (!validateReasonCode(code, reasons)) {
+      return res.status(400).json({ error: "Select a refund reason." });
+    }
+    const resolved = await resolveSensitiveApproval(
+      "REFUND",
+      { id: req.user!.id, role: req.user!.role },
+      storeSettings,
+      approval,
+      { ip: clientIp(req) ?? undefined }
+    );
+    if (!resolved.ok) {
+      return res.status(resolved.status).json({ error: resolved.error, code: resolved.code });
+    }
+
+    const order = await prisma.$transaction(async (tx) => {
+      const updated = await tx.order.update({
+        where: { id: existing.id },
+        data: {
+          refundAmount: amount,
+          refundReasonCode: code,
+          refundReasonNote: cleanText(refundReasonNote, 200) || null,
+          refundApprovedById: resolved.approverId,
+          paymentStatus: amount >= Number(existing.total) ? "REFUNDED" : "PARTIAL_REFUND",
+        },
+        include,
+      });
+      await writeAudit(tx, {
+        actorId: req.user!.id,
+        actorRole: req.user!.role,
+        branchId: existing.branchId,
+        action: AuditAction.REFUND_ISSUED,
+        entityType: "order",
+        entityId: updated.id,
+        after: { refundAmount: amount },
+        reason: code,
+        ip: clientIp(req) ?? undefined,
+      });
+      if (existing.paymentMethod === PaymentMethod.CASH && existing.branchId) {
+        await recordRefundCash(
+          tx as unknown as CashDb,
+          existing.branchId,
+          req.user!.id,
+          existing.id,
+          amount,
+          `Refund ${existing.orderNumber}`,
+          req.user!.id
+        );
+      }
+      return updated;
+    });
+    emitOrderChange("order:updated", order);
+    res.json(order);
+  }
+);
 
 posRouter.get(
   "/receipt/:orderId",

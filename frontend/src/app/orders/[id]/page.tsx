@@ -9,7 +9,7 @@ import { OrderTrackForm } from "@/components/OrderTrackForm";
 import { StatusTrack } from "@/components/StatusTrack";
 import { ConfirmSheet } from "@/components/admin/ConfirmSheet";
 import { api, downloadInvoice } from "@/lib/api";
-import { fetchAllDeals, fetchAllMenuItems } from "@/lib/catalog-api";
+import { fillCartFromOrder } from "@/lib/reorder-from-order";
 import { getGuestOrderToken, orderApiPath, orderCancelPath, saveGuestOrderToken } from "@/lib/guest-order";
 import { useCart } from "@/lib/cart";
 import { useAuth } from "@/lib/auth";
@@ -17,7 +17,7 @@ import { eta, formatWhen, pkr } from "@/lib/format";
 import { usePoll } from "@/hooks/usePoll";
 import { useLiveOrders } from "@/hooks/useLiveOrders";
 import { FulfillmentBadge } from "@/components/FulfillmentBadge";
-import { Deal, MenuItem, Order, orderStatusLabel } from "@/lib/types";
+import { Order, orderStatusLabel } from "@/lib/types";
 
 export default function OrderDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -77,42 +77,7 @@ export default function OrderDetailPage() {
 
   async function repeatOrder() {
     if (!order) return;
-    const [menu, deals] = await Promise.all([
-      fetchAllMenuItems().catch(() => []),
-      fetchAllDeals(true).catch(() => []),
-    ]);
-
-    const addedDeals = new Set<string>();
-    for (const line of order.items) {
-      if (line.nameAtOrder.includes(" · ")) {
-        const dealTitle = line.nameAtOrder.split(" · ")[0];
-        const deal = deals.find((d) => d.title === dealTitle);
-        if (!deal || addedDeals.has(deal.id)) continue;
-        const anchor = deal.items[0];
-        const matching = order.items.find(
-          (l) => l.menuItemId === anchor?.menuItemId && l.nameAtOrder.startsWith(`${dealTitle} ·`)
-        );
-        const dealQty = matching && anchor
-          ? Math.max(1, Math.round(matching.quantity / anchor.quantity))
-          : 1;
-        addDeal(deal);
-        if (dealQty > 1) {
-          for (let i = 1; i < dealQty; i++) addDeal(deal);
-        }
-        addedDeals.add(deal.id);
-        continue;
-      }
-
-      const item = menu.find((m) => m.id === line.menuItemId);
-      if (!item || !item.isAvailable) continue;
-      addConfigured({
-        item,
-        price: Number(line.priceAtOrder),
-        quantity: line.quantity,
-        optionsLabel: line.optionsLabel || undefined,
-        instructions: line.instructions || undefined,
-      });
-    }
+    await fillCartFromOrder(order, { addConfigured, addDeal });
     router.push("/checkout");
   }
 

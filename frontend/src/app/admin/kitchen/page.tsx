@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BellOff, ChefHat, Timer, Volume2 } from "lucide-react";
+import Link from "next/link";
+import { BellOff, ChefHat, Printer, Timer, Volume2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { fetchOrderBoard } from "@/lib/admin-orders";
 import { Order, OrderStatus } from "@/lib/types";
@@ -16,6 +17,8 @@ import {
   unlockKitchenAudio,
   writeKitchenAlertsEnabled,
 } from "@/lib/kitchen-chime";
+import { useStore } from "@/lib/store";
+import { printKotForOrder } from "@/lib/print-kot";
 
 type Lane = "CONFIRMED" | "PREPARING" | "READY";
 type TypeFilter = "ALL" | "DELIVERY" | "PICKUP" | "DINE_IN";
@@ -31,8 +34,12 @@ export default function KitchenPage() {
   const [soundOn, setSoundOn] = useState(false);
   const [soundReady, setSoundReady] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [printBusyId, setPrintBusyId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const seenRef = useRef<Set<string> | null>(null);
+  const printedRef = useRef<Set<string>>(new Set());
+  const store = useStore();
+  const autoPrintKot = Boolean(store?.settings.autoPrintKitchenTickets);
 
   const load = useCallback(
     () =>
@@ -65,8 +72,36 @@ export default function KitchenPage() {
     }
     const fresh = newIds.filter((id) => !seenRef.current!.has(id));
     if (fresh.length && soundOn) void playKitchenChime();
+    if (fresh.length && autoPrintKot) {
+      for (const id of fresh) {
+        if (printedRef.current.has(id)) continue;
+        printedRef.current.add(id);
+        void printKotForOrder(id).catch(() => {
+          printedRef.current.delete(id);
+        });
+      }
+    }
     seenRef.current = new Set(newIds.concat(kitchenOrders.map((o) => o.id)));
-  }, [kitchenOrders, soundOn]);
+  }, [kitchenOrders, soundOn, autoPrintKot]);
+
+  async function printKot(orderId: string) {
+    setPrintBusyId(orderId);
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next[orderId];
+      return next;
+    });
+    try {
+      await printKotForOrder(orderId);
+    } catch (e) {
+      setErrors((prev) => ({
+        ...prev,
+        [orderId]: e instanceof Error ? e.message : "Could not print KOT.",
+      }));
+    } finally {
+      setPrintBusyId(null);
+    }
+  }
 
   async function toggleAlerts() {
     if (soundOn && soundReady) {
@@ -219,6 +254,12 @@ export default function KitchenPage() {
               {soundOn ? <Volume2 size={14} /> : <BellOff size={14} />}
               {soundOn ? (soundReady ? "Alerts on" : "Tap to enable sound") : "Alerts off"}
             </button>
+            <Link
+              href="/admin/kitchen/stations"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-600"
+            >
+              <Printer size={14} /> Stations
+            </Link>
             <RefreshButton busy={loading || refreshing} onClick={refresh} variant="primary" />
           </div>
         </div>
@@ -273,6 +314,8 @@ export default function KitchenPage() {
                       order={order}
                       actionLabel={action?.label}
                       onAction={action?.run}
+                      onPrint={() => void printKot(order.id)}
+                      printBusy={printBusyId === order.id}
                       busy={busyId === order.id}
                       error={errors[order.id]}
                     />

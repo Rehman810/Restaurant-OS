@@ -40,9 +40,11 @@ export const SOCKET_URL = getSocketUrl();
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  code?: string;
+  constructor(message: string, status: number, code?: string) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -83,13 +85,15 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   }
   if (!res.ok) {
     let message = "Request failed";
+    let code: string | undefined;
     try {
       const data = await res.json();
       message = data.error || message;
+      code = typeof data.code === "string" ? data.code : undefined;
     } catch {
       /* ignore */
     }
-    throw new ApiError(message, res.status);
+    throw new ApiError(message, res.status, code);
   }
   if (res.headers.get("content-type")?.includes("application/json")) {
     return res.json() as Promise<T>;
@@ -127,6 +131,31 @@ export function invoiceUrl(orderId: string, guestToken?: string | null) {
   const base = `${getApiUrl()}/invoices/${orderId}/download`;
   if (!guestToken) return base;
   return `${base}?token=${encodeURIComponent(guestToken)}`;
+}
+
+export async function downloadRiderCashCsv() {
+  const res = await fetch(`${getApiUrl()}/admin/rider-cash/export.csv`, { credentials: "include" });
+  if (!res.ok) throw new Error("Could not export rider cash ledger");
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "rider-cash.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function downloadAuditLogCsv(query = "") {
+  const path = `/admin/audit-logs/export.csv${query ? `?${query}` : ""}`;
+  const res = await fetch(`${getApiUrl()}${path}`, { credentials: "include" });
+  if (!res.ok) throw new Error("Could not export audit log");
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "audit-log.csv";
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 export async function downloadInvoice(orderId: string, guestToken?: string | null) {

@@ -27,6 +27,7 @@ model Restaurant {
   suppliers            Supplier[]
   inventoryItems       InventoryItem[]
   ingredientCategories IngredientCategory[]
+  coupons              Coupon[]
 }
 
 model Branch {
@@ -59,6 +60,11 @@ model Branch {
   stockCounts          StockCount[]
   transfersOut         StockTransfer[] @relation("TransferFrom")
   transfersIn          StockTransfer[] @relation("TransferTo")
+  cashShifts           CashShift[]
+  riderCashEntries     RiderCashEntry[]
+  riderSettlements     RiderSettlement[]
+  printStations        PrintStation[]
+  branchCoupons        Coupon[]
 
   @@unique([restaurantId, code])
   @@index([restaurantId, isActive])
@@ -233,6 +239,9 @@ model User {
   tokenVersion         Int       @default(0)
   failedLoginCount     Int       @default(0)
   lockedUntil          DateTime?
+  approvalPinHash      String?
+  approvalPinFailedCount Int     @default(0)
+  approvalPinLockedUntil DateTime?
   lastLoginAt          DateTime?
   passwordResetToken   String?
   passwordResetExpires DateTime?
@@ -246,6 +255,16 @@ model User {
   branchMembers        BranchMember[]
   confirmedReservations Reservation[] @relation("ReservationConfirmedBy")
   auditLogs            AuditLog[]
+  ordersAdjustmentRequested Order[] @relation("OrderAdjRequester")
+  ordersAdjustmentApproved  Order[] @relation("OrderAdjApprover")
+  ordersVoidApproved        Order[] @relation("OrderVoidApprover")
+  ordersRefundApproved      Order[] @relation("OrderRefundApprover")
+  cashShifts                CashShift[] @relation("CashierShifts")
+  cashMovementsCreated      CashMovement[] @relation("CashMovementCreator")
+  riderCashEntries          RiderCashEntry[] @relation("RiderCashEntries")
+  riderSettlementsReceived  RiderSettlement[] @relation("RiderSettlementsRider")
+  riderSettlementsSettled   RiderSettlement[] @relation("RiderSettlementsSettledBy")
+  loyaltyPoints             Int               @default(0)
 }
 
 model DiningFloor {
@@ -365,19 +384,27 @@ model WaitlistEntry {
 }
 
 model AuditLog {
-  id        String   @id @default(uuid())
-  branchId  String
-  branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  actorId   String?
-  actor     User?    @relation(fields: [actorId], references: [id])
-  action    String
-  entity    String
-  entityId  String
-  meta      Json?
-  createdAt DateTime @default(now())
+  id         String   @id @default(uuid())
+  createdAt  DateTime @default(now())
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id])
+  actorRole  Role?
+  branchId   String?
+  branch     Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String   @map("entity")
+  entityId   String
+  before     Json?
+  after      Json?
+  reason     String?
+  ip         String?
+  meta       Json?
 
+  @@index([createdAt])
+  @@index([actorId])
+  @@index([action])
   @@index([branchId, createdAt])
-  @@index([entity, entityId])
+  @@index([entityType, entityId])
 }
 
 model EmailLog {
@@ -425,9 +452,29 @@ model MenuItem {
   sizes         MenuItemSize[]
   addons        MenuItemAddon[]
   optionGroups  MenuItemOptionGroup[]
-  recipeLines   RecipeLine[]
-  menuRecipe    MenuRecipe?
-  wasteLogs     WasteLog[]
+  recipeLines     RecipeLine[]
+  menuRecipe      MenuRecipe?
+  wasteLogs       WasteLog[]
+  printStationId  String?
+  printStation    PrintStation? @relation(fields: [printStationId], references: [id], onDelete: SetNull)
+
+  @@index([printStationId])
+}
+
+model PrintStation {
+  id        String   @id @default(uuid())
+  branchId  String
+  branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  name      String
+  code      String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  menuItems MenuItem[]
+
+  @@unique([branchId, code])
+  @@index([branchId, isActive, sortOrder])
 }
 
 model IngredientCategory {
@@ -799,7 +846,147 @@ model StoreSettings {
   inventoryAllowNegative   Boolean @default(false)
   inventoryAutoHideMenu    Boolean @default(false)
   inventoryDeductAtPreparing Boolean @default(true)
+  maxCashierDiscountPercent Decimal @default(10) @db.Decimal(5, 2)
+  requireApprovalForVoid Boolean @default(true)
+  requireApprovalForRefund Boolean @default(true)
+  requireApprovalForPriceOverride Boolean @default(true)
+  voidReasonOptions     Json     @default("[\"Wrong order\",\"Customer changed mind\",\"Kitchen error\",\"Other\"]")
+  discountReasonOptions Json     @default("[\"Staff courtesy\",\"Service issue\",\"Manager special\",\"Other\"]")
+  refundReasonOptions   Json     @default("[\"Order cancelled\",\"Wrong charge\",\"Quality issue\",\"Other\"]")
+  shiftVarianceTolerance Decimal @default(500) @db.Decimal(10, 2)
+  riderCashStaleHours    Int      @default(24)
+  autoPrintKitchenTickets Boolean @default(false)
+  loyaltyEarnPer100       Decimal @default(1) @db.Decimal(10, 2)
+  loyaltyRedeemPerPoint   Decimal @default(1) @db.Decimal(10, 2)
+  loyaltyMaxRedeemPercent Decimal @default(20) @db.Decimal(5, 2)
   updatedAt           DateTime @updatedAt
+}
+
+enum CouponDiscountType {
+  PERCENT
+  FIXED
+}
+
+model Coupon {
+  id             String             @id @default(uuid())
+  restaurantId   String             @default("11111111-1111-4111-8111-111111111111")
+  restaurant     Restaurant         @relation(fields: [restaurantId], references: [id])
+  branchId       String?
+  branch         Branch?            @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  code           String
+  type           CouponDiscountType
+  value          Decimal            @db.Decimal(10, 2)
+  minSubtotal    Decimal            @default(0) @db.Decimal(10, 2)
+  maxDiscount    Decimal?           @db.Decimal(10, 2)
+  usageLimit     Int?
+  usedCount      Int                @default(0)
+  startsAt       DateTime?
+  endsAt         DateTime?
+  isActive       Boolean            @default(true)
+  createdAt      DateTime           @default(now())
+  orders         Order[]
+
+  @@unique([restaurantId, code])
+  @@index([restaurantId, isActive])
+}
+
+enum CashShiftStatus {
+  OPEN
+  CLOSED
+}
+
+enum CashMovementType {
+  SALE_CASH
+  REFUND_CASH
+  PAID_IN
+  PAID_OUT
+  RIDER_SETTLEMENT
+  ADJUSTMENT
+}
+
+model CashShift {
+  id                   String          @id @default(uuid())
+  branchId             String
+  branch               Branch          @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  cashierId            String
+  cashier              User            @relation("CashierShifts", fields: [cashierId], references: [id])
+  status               CashShiftStatus @default(OPEN)
+  openedAt             DateTime        @default(now())
+  closedAt             DateTime?
+  openingCash          Decimal         @db.Decimal(10, 2)
+  closingCountedCash   Decimal?        @db.Decimal(10, 2)
+  closingDenominations Json?
+  expectedCash         Decimal?        @db.Decimal(10, 2)
+  variance             Decimal?        @db.Decimal(10, 2)
+  note                 String?
+  closingManagerNote   String?
+  movements            CashMovement[]
+
+  @@index([branchId, status])
+  @@index([cashierId, status])
+  @@index([openedAt])
+}
+
+enum RiderCashEntryStatus {
+  PENDING
+  SETTLED
+}
+
+model RiderCashEntry {
+  id               String               @id @default(uuid())
+  branchId         String
+  branch           Branch               @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  riderId          String
+  rider            User                 @relation("RiderCashEntries", fields: [riderId], references: [id])
+  orderId          String                 @unique
+  order            Order                  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  expectedAmount   Decimal                @db.Decimal(10, 2)
+  collectedAmount  Decimal                @db.Decimal(10, 2)
+  varianceReason   String?
+  status           RiderCashEntryStatus   @default(PENDING)
+  settlementId     String?
+  settlement       RiderSettlement?       @relation(fields: [settlementId], references: [id], onDelete: SetNull)
+  deliveredAt      DateTime               @default(now())
+  settledAt        DateTime?
+
+  @@index([branchId, status, deliveredAt])
+  @@index([riderId, status])
+}
+
+model RiderSettlement {
+  id              String           @id @default(uuid())
+  branchId        String
+  branch          Branch           @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  riderId         String
+  rider           User             @relation("RiderSettlementsRider", fields: [riderId], references: [id])
+  settledById     String
+  settledBy       User             @relation("RiderSettlementsSettledBy", fields: [settledById], references: [id])
+  expectedTotal   Decimal          @db.Decimal(10, 2)
+  receivedTotal   Decimal          @db.Decimal(10, 2)
+  variance        Decimal          @db.Decimal(10, 2)
+  note            String?
+  createdAt       DateTime         @default(now())
+  entries         RiderCashEntry[]
+
+  @@index([branchId, createdAt])
+  @@index([riderId, createdAt])
+}
+
+model CashMovement {
+  id        String           @id @default(uuid())
+  shiftId   String
+  shift     CashShift        @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  type      CashMovementType
+  amount    Decimal          @db.Decimal(10, 2)
+  reason    String
+  orderId   String?
+  order     Order?           @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  createdAt DateTime         @default(now())
+  createdById String?
+  createdBy User?            @relation("CashMovementCreator", fields: [createdById], references: [id])
+
+  @@index([shiftId, createdAt])
+  @@index([orderId])
 }
 
 model PromoBanner {
@@ -885,7 +1072,24 @@ model Order {
   deliveryCharge   Decimal         @default(0) @db.Decimal(10, 2)
   taxAmount        Decimal         @default(0) @db.Decimal(10, 2)
   serviceAmount    Decimal         @default(0) @db.Decimal(10, 2)
+  discountAmount   Decimal         @default(0) @db.Decimal(10, 2)
+  discountPercent  Decimal?        @db.Decimal(5, 2)
   total            Decimal         @db.Decimal(10, 2)
+  adjustmentReasonCode String?
+  adjustmentReasonNote String?
+  adjustmentRequestedById String?
+  adjustmentRequestedBy User? @relation("OrderAdjRequester", fields: [adjustmentRequestedById], references: [id])
+  adjustmentApprovedById  String?
+  adjustmentApprovedBy User? @relation("OrderAdjApprover", fields: [adjustmentApprovedById], references: [id])
+  voidReasonCode   String?
+  voidReasonNote   String?
+  voidApprovedById String?
+  voidApprovedBy User? @relation("OrderVoidApprover", fields: [voidApprovedById], references: [id])
+  refundAmount     Decimal?        @db.Decimal(10, 2)
+  refundReasonCode String?
+  refundReasonNote String?
+  refundApprovedById String?
+  refundApprovedBy User? @relation("OrderRefundApprover", fields: [refundApprovedById], references: [id])
   deliveryAddress  String
   notes            String?
   customerName     String
@@ -901,6 +1105,13 @@ model Order {
   items            OrderItem[]
   invoice          Invoice?
   events           OrderEvent[]
+  cashMovements    CashMovement[]
+  riderCashEntry   RiderCashEntry?
+  couponId         String?
+  coupon           Coupon?         @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  couponCode       String?
+  loyaltyPointsRedeemed Int        @default(0)
+  loyaltyPointsEarned   Int        @default(0)
 }
 
 model OrderEvent {

@@ -96,7 +96,14 @@ export default function RidersPage() {
         description="Fleet overview — live assignments and delivery stats"
         icon={Bike}
         iconAccent="violet"
-        actions={<RefreshButton busy={loading || refreshing} onClick={refresh} />}
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <Link href="/admin/riders/cash" className="btn-secondary inline-flex items-center gap-1.5 text-sm">
+              Rider cash
+            </Link>
+            <RefreshButton busy={loading || refreshing} onClick={refresh} />
+          </div>
+        }
       />
 
       <AdminAlert variant="info">

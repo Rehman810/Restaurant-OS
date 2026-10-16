@@ -13,14 +13,21 @@ export default function RiderDeliveriesPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [actionError, setActionError] = useState("");
+  const [cashPending, setCashPending] = useState<{ todayPending: number; totalPending: number; pendingCount: number } | null>(null);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     else setRefreshing(true);
     try {
-      setOrders(await api<Order[]>("/rider/orders"));
+      const [orders, cash] = await Promise.all([
+        api<Order[]>("/rider/orders"),
+        api<{ todayPending: number; totalPending: number; pendingCount: number }>("/rider/cash/pending").catch(() => null),
+      ]);
+      setOrders(orders);
+      setCashPending(cash);
     } catch {
       setOrders([]);
+      setCashPending(null);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -70,6 +77,13 @@ export default function RiderDeliveriesPage() {
           Refresh
         </button>
       </div>
+
+      {cashPending && cashPending.pendingCount > 0 && (
+        <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          You are holding {pkr(cashPending.totalPending)} COD ({cashPending.pendingCount} orders). Hand cash to the cashier when you return.
+          {cashPending.todayPending > 0 ? ` Today: ${pkr(cashPending.todayPending)}.` : ""}
+        </p>
+      )}
 
       {actionError && (
         <p className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{actionError}</p>

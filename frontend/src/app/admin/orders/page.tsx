@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ClipboardList, LayoutGrid, Search, Sparkles, Table2 } from "lucide-react";
 import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { fetchAdminOrders, fetchRidersSummary } from "@/lib/admin-orders";
 import { pkr } from "@/lib/format";
 import {
@@ -22,6 +23,7 @@ import { OrderDetailSheet } from "@/components/admin/OrderDetailSheet";
 import { OrderPanel } from "@/components/admin/OrderPanel";
 import { OrderTable } from "@/components/admin/OrderTable";
 import { AdminEmptyState, AdminPage, AdminPageHeader } from "@/components/admin/ui";
+import { ManagerApprovalModal } from "@/components/admin/ManagerApprovalModal";
 
 type OrderView = "grid" | "table";
 const VIEW_KEY = "uff-orders-view";
@@ -57,6 +59,8 @@ const FILTER_THEME: Record<OrderStatus | "ALL", { dot: string; active: string; i
 const DEFAULT_RANGE = quickPresetRange("today");
 
 export default function AdminOrders() {
+  const { user } = useAuth();
+  const isManagerLike = user?.role === "ADMIN" || user?.role === "MANAGER";
   const [filter, setFilter] = useState<OrderStatus | "ALL">("ALL");
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState(DEFAULT_RANGE.from);
@@ -105,8 +109,41 @@ export default function AdminOrders() {
   useLiveOrders(refresh);
   const showSkeleton = loading && !data;
 
+  const [cancelTarget, setCancelTarget] = useState<{ id: string } | null>(null);
+  const [voidReasonCode, setVoidReasonCode] = useState("");
+  const [voidReasonNote, setVoidReasonNote] = useState("");
+  const [voidReasons, setVoidReasons] = useState<string[]>([]);
+
+  useEffect(() => {
+    void api<{ voidReasonOptions: string[] }>("/admin/approval/controls").then((c) => {
+      const list = Array.isArray(c.voidReasonOptions) ? c.voidReasonOptions.map(String) : [];
+      setVoidReasons(list);
+    });
+  }, []);
+
   async function setStatus(id: string, status: OrderStatus) {
+    if (status === "CANCELLED") {
+      setCancelTarget({ id });
+      return;
+    }
     await api(`/orders/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
+    refresh();
+  }
+
+  async function submitCancel(approval?: { approverId: string; pin: string }) {
+    if (!cancelTarget) return;
+    await api(`/orders/${cancelTarget.id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        status: "CANCELLED",
+        voidReasonCode,
+        voidReasonNote,
+        approval,
+      }),
+    });
+    setCancelTarget(null);
+    setVoidReasonCode("");
+    setVoidReasonNote("");
     refresh();
   }
 
@@ -306,6 +343,55 @@ export default function AdminOrders() {
           onPageChange={setPage}
         />
         </>
+      )}
+
+      {cancelTarget && isManagerLike && (
+        <div className="fixed inset-0 z-[80] flex items-end justify-center bg-stone-950/50 p-4 sm:items-center">
+          <div className="w-full max-w-md rounded-3xl border border-stone-200 bg-white p-5 shadow-xl dark:border-stone-600 dark:bg-stone-900">
+            <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-50">Cancel order</h2>
+            <label className="mt-4 block text-xs font-semibold uppercase text-stone-500">Reason</label>
+            <select
+              className="input mt-1 w-full"
+              value={voidReasonCode}
+              onChange={(e) => setVoidReasonCode(e.target.value)}
+            >
+              <option value="">Select…</option>
+              {voidReasons.map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+            <input
+              className="input mt-2 w-full"
+              placeholder="Optional note"
+              value={voidReasonNote}
+              onChange={(e) => setVoidReasonNote(e.target.value)}
+            />
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button type="button" className="btn-ghost" onClick={() => setCancelTarget(null)}>Back</button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => void submitCancel()}
+              >
+                Confirm cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cancelTarget && !isManagerLike && (
+        <ManagerApprovalModal
+          open
+          title="Manager approval to cancel"
+          reasonOptions={voidReasons}
+          reasonCode={voidReasonCode}
+          reasonNote={voidReasonNote}
+          onReasonCodeChange={setVoidReasonCode}
+          onReasonNoteChange={setVoidReasonNote}
+          onCancel={() => setCancelTarget(null)}
+          onApproved={(r) => void submitCancel({ approverId: r.approverId, pin: r.pin })}
+        />
       )}
     </AdminPage>
   );

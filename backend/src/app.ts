@@ -17,6 +17,13 @@ import { posRouter } from "./routes/pos";
 import { branchesRouter } from "./routes/branches";
 import { dineInPublicRouter, dineInRouter } from "./routes/dine-in";
 import { inventoryRouter } from "./routes/inventory";
+import { auditLogsRouter } from "./routes/audit-logs";
+import { approvalRouter } from "./routes/approval";
+import { shiftsRouter } from "./routes/shifts";
+import { riderCashRouter } from "./routes/rider-cash";
+import { printStationsRouter } from "./routes/print-stations";
+import { kotRouter } from "./routes/kot";
+import { couponsAdminRouter, couponsPublicRouter } from "./routes/coupons";
 import { UPLOAD_DIR } from "./lib/uploads";
 import { resolveRestaurantId, runWithRestaurant } from "./lib/prisma";
 import {
@@ -63,6 +70,8 @@ export function createApp() {
   app.use("/deals", dealsRouter);
   app.use("/delivery-areas", deliveryAreasRouter);
   app.use("/settings", settingsRouter);
+  app.use("/coupons", couponsPublicRouter);
+  app.use("/admin/coupons", couponsAdminRouter);
   app.use("/branches", branchesRouter);
   app.use("/dine-in", dineInPublicRouter);
   app.use("/admin/dine-in", dineInRouter);
@@ -72,6 +81,12 @@ export function createApp() {
   app.use("/rider", riderRouter);
   app.use("/admin/staff", staffRouter);
   app.use("/admin/blocks", blocklistRouter);
+  app.use("/admin/audit-logs", auditLogsRouter);
+  app.use("/admin/approval", approvalRouter);
+  app.use("/admin/shifts", shiftsRouter);
+  app.use("/admin/rider-cash", riderCashRouter);
+  app.use("/admin/print-stations", printStationsRouter);
+  app.use("/admin/kot", kotRouter);
   app.use("/admin", adminRouter);
   app.use("/invoices", invoicesRouter);
 

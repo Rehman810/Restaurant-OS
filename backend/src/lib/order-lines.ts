@@ -8,6 +8,7 @@ export type CartItemInput = {
   optionIds?: string[];
   addonIds?: string[];
   instructions?: string;
+  unitPriceOverride?: number;
 };
 
 export type CartDealInput = { dealId: string; quantity: number };
@@ -22,7 +23,7 @@ export type OrderLine = {
 };
 
 type BuildResult =
-  | { ok: true; lines: OrderLine[]; subtotal: number }
+  | { ok: true; lines: OrderLine[]; subtotal: number; hadPriceOverride: boolean }
   | { ok: false; error: string; status: number };
 
 export async function buildOrderLines(
@@ -45,6 +46,7 @@ export async function buildOrderLines(
 
   const lines: OrderLine[] = [];
   let subtotal = 0;
+  let hadPriceOverride = false;
 
   for (const row of cartItems) {
     const menu = byId.get(row.menuItemId);
@@ -83,6 +85,14 @@ export async function buildOrderLines(
       if (!addon) return { ok: false, error: "Invalid add-on selected.", status: 400 };
       unitPrice += Number(addon.price);
       labels.push(addon.name);
+    }
+
+    if (row.unitPriceOverride != null && Number.isFinite(Number(row.unitPriceOverride))) {
+      const override = Number(row.unitPriceOverride);
+      if (Math.abs(override - unitPrice) > 0.009) {
+        hadPriceOverride = true;
+        unitPrice = override;
+      }
     }
 
     const instructions = String(row.instructions || "").trim().slice(0, 500);
@@ -135,7 +145,7 @@ export async function buildOrderLines(
     }
   }
 
-  return { ok: true, lines, subtotal };
+  return { ok: true, lines, subtotal, hadPriceOverride };
 }
 
 export async function nextOrderNumber() {

@@ -20,6 +20,7 @@ import { useStoreOpen } from "@/lib/use-store-open";
 import { getCheckoutLocation } from "@/lib/geolocation";
 import { Order } from "@/lib/types";
 import { quoteCharges } from "@/lib/charges";
+import { loyaltyRedeemPreview } from "@/lib/loyalty-client";
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -49,6 +50,11 @@ export default function CheckoutPage() {
   const [error, setError] = useState("");
   const [cartNotice, setCartNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [couponInput, setCouponInput] = useState("");
+  const [couponDiscount, setCouponDiscount] = useState(0);
+  const [couponApplied, setCouponApplied] = useState("");
+  const [couponError, setCouponError] = useState("");
+  const [loyaltyRedeem, setLoyaltyRedeem] = useState(0);
   const [locating, setLocating] = useState(false);
   const [cartChecked, setCartChecked] = useState(false);
   const idempotencyKey = useMemo(() => {
@@ -71,7 +77,11 @@ export default function CheckoutPage() {
   const qualifiesFreeDelivery = freeAbove != null && subtotal >= freeAbove;
   const effectiveDelivery = isDelivery && !qualifiesFreeDelivery ? deliveryCharge : 0;
   const quoted = quoteCharges(subtotal, effectiveDelivery, settings ?? {});
-  const grandTotal = quoted.total;
+  const totalBeforeDiscounts = quoted.total;
+  const loyaltyPreview = user?.role === "CUSTOMER"
+    ? loyaltyRedeemPreview(loyaltyRedeem, totalBeforeDiscounts - couponDiscount, user.loyaltyPoints ?? 0, settings)
+    : { points: 0, discount: 0 };
+  const grandTotal = Math.max(0, totalBeforeDiscounts - couponDiscount - loyaltyPreview.discount);
   const belowMinimum = minimumOrder > 0 && subtotal < minimumOrder;
   const storeClosed = !storeOpen;
   const cashOn = settings?.acceptCash !== false;
@@ -187,6 +197,8 @@ export default function CheckoutPage() {
           items: payload.items,
           deals: payload.deals,
           idempotencyKey,
+          ...(couponApplied ? { couponCode: couponApplied } : {}),
+          ...(loyaltyPreview.points > 0 ? { loyaltyPointsRedeem: loyaltyPreview.points } : {}),
           ...(location
             ? {
                 customerLatitude: location.latitude,
@@ -427,6 +439,63 @@ export default function CheckoutPage() {
                   {settings?.serviceIncluded ? " (included)" : ""}
                 </span>
                 <span>{pkr(quoted.service)}</span>
+              </div>
+            )}
+            <div className="space-y-2 border-t border-orange-100 pt-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Promo code</p>
+              <div className="flex gap-2">
+                <input
+                  className="input flex-1 font-mono uppercase"
+                  placeholder="WELCOME10"
+                  value={couponInput}
+                  onChange={(e) => setCouponInput(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="btn-secondary shrink-0 text-xs"
+                  onClick={async () => {
+                    setCouponError("");
+                    try {
+                      const res = await api<{ discount: number; code: string }>("/coupons/validate", {
+                        method: "POST",
+                        body: JSON.stringify({ code: couponInput, subtotal, branchId }),
+                      });
+                      setCouponDiscount(res.discount);
+                      setCouponApplied(res.code);
+                    } catch (err) {
+                      setCouponDiscount(0);
+                      setCouponApplied("");
+                      setCouponError(err instanceof Error ? err.message : "Invalid code");
+                    }
+                  }}
+                >
+                  Apply
+                </button>
+              </div>
+              {couponError && <p className="text-xs text-red-600">{couponError}</p>}
+              {couponApplied && (
+                <p className="text-xs text-emerald-700">
+                  {couponApplied} applied (−{pkr(couponDiscount)})
+                </p>
+              )}
+            </div>
+            {user?.role === "CUSTOMER" && (user.loyaltyPoints ?? 0) > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                  Loyalty ({user.loyaltyPoints} pts)
+                </p>
+                <input
+                  type="number"
+                  min={0}
+                  max={user.loyaltyPoints}
+                  className="input w-full"
+                  value={loyaltyRedeem || ""}
+                  onChange={(e) => setLoyaltyRedeem(Number(e.target.value) || 0)}
+                  placeholder="Points to redeem"
+                />
+                {loyaltyPreview.discount > 0 && (
+                  <p className="text-xs text-emerald-700">−{pkr(loyaltyPreview.discount)} from points</p>
+                )}
               </div>
             )}
             <p className="text-xs text-stone-500">

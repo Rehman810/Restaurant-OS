@@ -11,8 +11,12 @@ import {
   syncUserBranches,
 } from "../lib/branch-scope";
 import { requireAuth, requireRole } from "../middleware/auth";
+import { writeAudit } from "../lib/audit";
+import { AuditAction } from "../lib/audit-actions";
+import { clientIp } from "../lib/client-ip";
 import { sendStaffWelcomeEmail } from "../lib/email";
 import { STAFF_DIRECTORY_ROLES } from "../lib/roles";
+import { APPROVAL_PIN_ROLES, isValidPinFormat, setApprovalPin } from "../lib/approval-pin";
 
 export const staffRouter = Router();
 
@@ -181,6 +185,16 @@ staffRouter.post("/", requireAuth, requireRole(Role.ADMIN), async (req, res) => 
     return res.status(status).json({ error: message });
   }
 
+  await writeAudit(prisma, {
+    actorId: req.user!.id,
+    actorRole: req.user!.role,
+    action: AuditAction.STAFF_CREATED,
+    entityType: "user",
+    entityId: user.id,
+    after: { role: user.role, email: user.email, branchIds: ids },
+    ip: clientIp(req),
+  });
+
   const emailed = generated || !password?.trim();
   if (emailed) {
     void sendStaffWelcomeEmail(user.email, user.name, user.role, plainPassword);
@@ -241,26 +255,76 @@ staffRouter.patch("/:id", requireAuth, requireRole(Role.ADMIN), async (req, res)
     }
   }
 
-  const user = await prisma.user.update({
-    where: { id: existing.id },
-    data: {
-      ...(body.name !== undefined ? { name: String(body.name).trim() } : {}),
-      ...(body.phone !== undefined ? { phone: body.phone ? String(body.phone).trim() : null } : {}),
-      ...(body.role !== undefined ? { role: body.role } : {}),
-      ...(body.isActive !== undefined ? { isActive: Boolean(body.isActive) } : {}),
-      ...(body.password ? { passwordHash: await bcrypt.hash(body.password, 12) } : {}),
-      ...(bumpSession ? { tokenVersion: { increment: 1 } } : {}),
-    },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      phone: true,
-      role: true,
-      isActive: true,
-      totpEnabled: true,
-      createdAt: true,
-    },
+  const passwordHash = body.password ? await bcrypt.hash(body.password, 12) : undefined;
+  const user = await prisma.$transaction(async (tx) => {
+    const updated = await tx.user.update({
+      where: { id: existing.id },
+      data: {
+        ...(body.name !== undefined ? { name: String(body.name).trim() } : {}),
+        ...(body.phone !== undefined ? { phone: body.phone ? String(body.phone).trim() : null } : {}),
+        ...(body.role !== undefined ? { role: body.role } : {}),
+        ...(body.isActive !== undefined ? { isActive: Boolean(body.isActive) } : {}),
+        ...(passwordHash ? { passwordHash } : {}),
+        ...(bumpSession ? { tokenVersion: { increment: 1 } } : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        role: true,
+        isActive: true,
+        totpEnabled: true,
+        createdAt: true,
+      },
+    });
+    if (body.role !== undefined && body.role !== existing.role) {
+      await writeAudit(tx, {
+        actorId: req.user!.id,
+        actorRole: req.user!.role,
+        action: AuditAction.STAFF_ROLE_CHANGED,
+        entityType: "user",
+        entityId: updated.id,
+        before: { role: existing.role },
+        after: { role: updated.role },
+        ip: clientIp(req),
+      });
+    }
+    if (body.isActive === false && existing.isActive) {
+      await writeAudit(tx, {
+        actorId: req.user!.id,
+        actorRole: req.user!.role,
+        action: AuditAction.STAFF_DEACTIVATED,
+        entityType: "user",
+        entityId: updated.id,
+        before: { isActive: true },
+        after: { isActive: false },
+        ip: clientIp(req),
+      });
+    }
+    return updated;
   });
   res.json(user);
+});
+
+staffRouter.patch("/me/approval-pin", requireAuth, requireRole(...APPROVAL_PIN_ROLES), async (req, res) => {
+  const { pin } = req.body as { pin?: string };
+  if (!pin || !isValidPinFormat(pin)) {
+    return res.status(400).json({ error: "PIN must be 4–6 digits." });
+  }
+  await setApprovalPin(req.user!.id, pin);
+  res.json({ ok: true });
+});
+
+staffRouter.patch("/:id/approval-pin", requireAuth, requireRole(Role.ADMIN), async (req, res) => {
+  const existing = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!existing || !APPROVAL_PIN_ROLES.includes(existing.role)) {
+    return res.status(404).json({ error: "Manager account not found." });
+  }
+  const { pin } = req.body as { pin?: string };
+  if (!pin || !isValidPinFormat(pin)) {
+    return res.status(400).json({ error: "PIN must be 4–6 digits." });
+  }
+  await setApprovalPin(existing.id, pin);
+  res.json({ ok: true });
 });

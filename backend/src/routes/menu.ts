@@ -4,6 +4,9 @@ import { prisma } from "../lib/prisma";
 import { effectiveItemPrice } from "../lib/store-settings";
 import { ADMIN_LIKE } from "../lib/roles";
 import { requireAuth, requireRole } from "../middleware/auth";
+import { writeAudit } from "../lib/audit";
+import { AuditAction } from "../lib/audit-actions";
+import { clientIp } from "../lib/client-ip";
 
 export const menuRouter = Router();
 
@@ -14,6 +17,7 @@ const menuInclude = {
   },
   sizes: { orderBy: { sortOrder: "asc" as const } },
   addons: { orderBy: { sortOrder: "asc" as const } },
+  printStation: { select: { id: true, name: true, code: true } },
 };
 
 type OptionRow = {
@@ -194,8 +198,18 @@ async function syncAddons(menuItemId: string, addons?: { name: string; price: nu
 }
 
 menuRouter.post("/", requireAuth, requireRole(...ADMIN_LIKE), async (req, res) => {
-  const { name, description, price, discountPrice, category, imageUrl, isAvailable, optionGroups, addons } =
-    req.body;
+  const {
+    name,
+    description,
+    price,
+    discountPrice,
+    category,
+    imageUrl,
+    isAvailable,
+    optionGroups,
+    addons,
+    printStationId,
+  } = req.body;
   if (!name || price == null || !category) {
     return res.status(400).json({ error: "Name, price and category are required." });
   }
@@ -207,6 +221,7 @@ menuRouter.post("/", requireAuth, requireRole(...ADMIN_LIKE), async (req, res) =
       discountPrice:
         discountPrice != null && discountPrice !== "" ? Number(discountPrice) : null,
       category,
+      printStationId: printStationId ? String(printStationId) : null,
       imageUrl:
         imageUrl ||
         "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80",
@@ -220,25 +235,73 @@ menuRouter.post("/", requireAuth, requireRole(...ADMIN_LIKE), async (req, res) =
 });
 
 menuRouter.put("/:id", requireAuth, requireRole(...ADMIN_LIKE), async (req, res) => {
-  const { name, description, price, discountPrice, category, imageUrl, isAvailable, optionGroups, addons, sizes } =
-    req.body;
+  const {
+    name,
+    description,
+    price,
+    discountPrice,
+    category,
+    imageUrl,
+    isAvailable,
+    optionGroups,
+    addons,
+    sizes,
+    printStationId,
+  } = req.body;
   try {
-    const item = await prisma.menuItem.update({
-      where: { id: req.params.id },
-      data: {
-        ...(name != null && { name }),
-        ...(description != null && { description }),
-        ...(price != null && { price: Number(price) }),
-        ...(discountPrice !== undefined && {
-          discountPrice:
-            discountPrice === null || discountPrice === ""
-              ? null
-              : Number(discountPrice),
-        }),
-        ...(category != null && { category }),
-        ...(imageUrl != null && { imageUrl }),
-        ...(isAvailable != null && { isAvailable }),
-      },
+    const prior = await prisma.menuItem.findUnique({ where: { id: req.params.id } });
+    if (!prior) return res.status(404).json({ error: "Menu item not found." });
+    const item = await prisma.$transaction(async (tx) => {
+      const updated = await tx.menuItem.update({
+        where: { id: req.params.id },
+        data: {
+          ...(name != null && { name }),
+          ...(description != null && { description }),
+          ...(price != null && { price: Number(price) }),
+          ...(discountPrice !== undefined && {
+            discountPrice:
+              discountPrice === null || discountPrice === ""
+                ? null
+                : Number(discountPrice),
+          }),
+          ...(category != null && { category }),
+          ...(imageUrl != null && { imageUrl }),
+          ...(isAvailable != null && { isAvailable }),
+          ...(printStationId !== undefined && {
+            printStationId: printStationId ? String(printStationId) : null,
+          }),
+        },
+      });
+      const priceChanged =
+        price != null && Number(prior.price) !== Number(updated.price) ||
+        discountPrice !== undefined &&
+          String(prior.discountPrice ?? "") !== String(updated.discountPrice ?? "");
+      const availChanged = isAvailable != null && prior.isAvailable !== updated.isAvailable;
+      if (priceChanged) {
+        await writeAudit(tx, {
+          actorId: req.user!.id,
+          actorRole: req.user!.role,
+          action: AuditAction.ITEM_PRICE_CHANGED,
+          entityType: "menu_item",
+          entityId: updated.id,
+          before: { price: prior.price, discountPrice: prior.discountPrice },
+          after: { price: updated.price, discountPrice: updated.discountPrice },
+          ip: clientIp(req),
+        });
+      }
+      if (availChanged) {
+        await writeAudit(tx, {
+          actorId: req.user!.id,
+          actorRole: req.user!.role,
+          action: AuditAction.ITEM_AVAILABILITY_CHANGED,
+          entityType: "menu_item",
+          entityId: updated.id,
+          before: { isAvailable: prior.isAvailable },
+          after: { isAvailable: updated.isAvailable },
+          ip: clientIp(req),
+        });
+      }
+      return updated;
     });
     if (optionGroups !== undefined) {
       await syncOptionGroups(item.id, optionGroups);

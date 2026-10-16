@@ -59,6 +59,7 @@ export type MenuFormData = {
   category: string;
   imageUrl: string;
   isAvailable: boolean;
+  printStationId: string;
   optionGroups: OptionGroupRow[];
   addons: AddonRow[];
 };
@@ -69,6 +70,7 @@ export function MenuFormSheet({
   form,
   setForm,
   categories,
+  printStations,
   saving,
   uploading,
   uploadError,
@@ -81,6 +83,7 @@ export function MenuFormSheet({
   form: MenuFormData;
   setForm: Dispatch<SetStateAction<MenuFormData>>;
   categories: string[];
+  printStations?: { id: string; name: string; code: string }[];
   saving: boolean;
   uploading: boolean;
   uploadError: string;
@@ -491,6 +494,19 @@ export function MenuFormSheet({
               options={categories.map((c) => ({ value: c, label: c }))}
               minWidth="min-w-full"
             />
+
+            {printStations && printStations.length > 0 && (
+              <AdminSelect
+                label="Print station (KOT)"
+                value={form.printStationId}
+                onChange={(v) => setForm((f) => ({ ...f, printStationId: v }))}
+                options={[
+                  { value: "", label: "Default station" },
+                  ...printStations.map((s) => ({ value: s.id, label: `${s.name} (${s.code})` })),
+                ]}
+                minWidth="min-w-full"
+              />
+            )}
 
             <button
               type="button"

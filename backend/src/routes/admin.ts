@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import { FulfillmentType, OrderSource, OrderStatus, Role } from "@prisma/client";
+import { FulfillmentType, OrderSource, OrderStatus, RiderCashEntryStatus, Role } from "@prisma/client";
 import { normalizeBlockEmail, normalizeBlockPhone } from "../lib/blocklist";
 import {
   buildCustomerDirectory,
@@ -22,7 +22,11 @@ import {
 } from "../lib/branch-scope";
 import { ADMIN_LIKE, ORDER_OPS } from "../lib/roles";
 import { requireAuth, requireRole } from "../middleware/auth";
+import { writeAudit } from "../lib/audit";
+import { AuditAction } from "../lib/audit-actions";
+import { clientIp } from "../lib/client-ip";
 import { sendStaffWelcomeEmail } from "../lib/email";
+import { getStoreSettings } from "../lib/settings-data";
 
 export const adminRouter = Router();
 
@@ -329,6 +333,16 @@ adminRouter.get("/stats", requireAuth, requireRole(...ADMIN_LIKE), async (req, r
     statusCounts.map((s) => [s.status, s._count.status])
   ) as Record<string, number>;
 
+  const storeSettings = await getStoreSettings();
+  const staleHours = storeSettings.riderCashStaleHours ?? 24;
+  const staleBefore = new Date(Date.now() - staleHours * 60 * 60 * 1000);
+  const pendingRiderCash = await prisma.riderCashEntry.findMany({
+    where: { ...bw, status: RiderCashEntryStatus.PENDING },
+    select: { collectedAmount: true, deliveredAt: true },
+  });
+  const riderCashPendingTotal = pendingRiderCash.reduce((s, e) => s + Number(e.collectedAmount), 0);
+  const riderCashStaleCount = pendingRiderCash.filter((e) => e.deliveredAt < staleBefore).length;
+
   const ridersWithStats = await Promise.all(
     riders.map(async (r) => {
       const [active, completedToday] = await Promise.all([
@@ -368,6 +382,9 @@ adminRouter.get("/stats", requireAuth, requireRole(...ADMIN_LIKE), async (req, r
     recentOrders,
     posTodayOrders,
     posTodayRevenue: Number(posTodayRevenueAgg._sum.total || 0),
+    riderCashPendingTotal,
+    riderCashPendingCount: pendingRiderCash.length,
+    riderCashStaleCount,
   });
 });
 
@@ -774,15 +791,28 @@ adminRouter.post("/branches", requireAuth, requireRole(Role.ADMIN), async (req, 
     if (isDefault) {
       await prisma.branch.updateMany({ data: { isDefault: false } });
     }
-    const branch = await prisma.branch.create({
-      data: {
-        name: name.trim(),
-        code: branchCode,
-        address: address?.trim() || "",
-        phone: phone?.trim() || "",
-        isDefault: Boolean(isDefault),
-        sortOrder: Number(sortOrder) || 0,
-      },
+    const branch = await prisma.$transaction(async (tx) => {
+      const created = await tx.branch.create({
+        data: {
+          name: name.trim(),
+          code: branchCode,
+          address: address?.trim() || "",
+          phone: phone?.trim() || "",
+          isDefault: Boolean(isDefault),
+          sortOrder: Number(sortOrder) || 0,
+        },
+      });
+      await writeAudit(tx, {
+        actorId: req.user!.id,
+        actorRole: req.user!.role,
+        branchId: created.id,
+        action: AuditAction.BRANCH_CHANGED,
+        entityType: "branch",
+        entityId: created.id,
+        after: { name: created.name, code: created.code },
+        ip: clientIp(req),
+      });
+      return created;
     });
     res.status(201).json({ branch });
   } catch {
@@ -812,17 +842,39 @@ adminRouter.patch("/branches/:id", requireAuth, requireRole(Role.ADMIN), async (
   }
 
   try {
-    const branch = await prisma.branch.update({
-      where: { id: existing.id },
-      data: {
-        ...(name !== undefined ? { name: name.trim() } : {}),
-        ...(code !== undefined ? { code: normalizeBranchCode(code) } : {}),
-        ...(address !== undefined ? { address: address.trim() } : {}),
-        ...(phone !== undefined ? { phone: phone.trim() } : {}),
-        ...(isActive !== undefined ? { isActive: Boolean(isActive) } : {}),
-        ...(isDefault !== undefined ? { isDefault: Boolean(isDefault) } : {}),
-        ...(sortOrder !== undefined ? { sortOrder: Number(sortOrder) || 0 } : {}),
-      },
+    const branch = await prisma.$transaction(async (tx) => {
+      const updated = await tx.branch.update({
+        where: { id: existing.id },
+        data: {
+          ...(name !== undefined ? { name: name.trim() } : {}),
+          ...(code !== undefined ? { code: normalizeBranchCode(code) } : {}),
+          ...(address !== undefined ? { address: address.trim() } : {}),
+          ...(phone !== undefined ? { phone: phone.trim() } : {}),
+          ...(isActive !== undefined ? { isActive: Boolean(isActive) } : {}),
+          ...(isDefault !== undefined ? { isDefault: Boolean(isDefault) } : {}),
+          ...(sortOrder !== undefined ? { sortOrder: Number(sortOrder) || 0 } : {}),
+        },
+      });
+      await writeAudit(tx, {
+        actorId: req.user!.id,
+        actorRole: req.user!.role,
+        branchId: updated.id,
+        action: AuditAction.BRANCH_CHANGED,
+        entityType: "branch",
+        entityId: updated.id,
+        before: {
+          name: existing.name,
+          isActive: existing.isActive,
+          isDefault: existing.isDefault,
+        },
+        after: {
+          name: updated.name,
+          isActive: updated.isActive,
+          isDefault: updated.isDefault,
+        },
+        ip: clientIp(req),
+      });
+      return updated;
     });
     res.json({ branch });
   } catch {

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import crypto from "crypto";
-import { FulfillmentType, OrderStatus, Role } from "@prisma/client";
+import { FulfillmentType, OrderSource, OrderStatus, Role } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { findOrderBlock } from "../lib/blocklist";
 import { canAccessOrder, phonesMatch, stripGuestToken } from "../lib/order-access";
@@ -35,6 +35,23 @@ import { signOrderViewToken } from "../lib/order-access";
 import { effectiveItemPrice, isStoreOpen, publicClosedMessage } from "../lib/store-settings";
 import { quoteCharges } from "../lib/charges";
 import { cleanText } from "../lib/text";
+import { writeAudit } from "../lib/audit";
+import { AuditAction } from "../lib/audit-actions";
+import { recalculateOrderTotals } from "../lib/order-totals";
+import { recordRiderCodOnDelivered, releaseRiderCashOnCancel } from "../lib/rider-cod";
+import {
+  computeCouponDiscount,
+  normalizeCouponCode,
+  validateCouponWindow,
+} from "../lib/coupon";
+import { loyaltyRedeemDiscount } from "../lib/loyalty";
+import { maybeAwardLoyalty } from "../lib/loyalty-award";
+import {
+  parseReasonList,
+  resolveSensitiveApproval,
+  resolveStaffVoidApproval,
+  validateReasonCode,
+} from "../lib/order-approval";
 
 function zonedDayStart(isoDate: string, timeZone: string) {
   try {
@@ -65,6 +82,10 @@ const include = {
   rider: { select: { id: true, name: true, phone: true } },
   invoice: true,
   deliveryArea: { select: { id: true, name: true, deliveryCharge: true } },
+  adjustmentRequestedBy: { select: { id: true, name: true } },
+  adjustmentApprovedBy: { select: { id: true, name: true } },
+  voidApprovedBy: { select: { id: true, name: true } },
+  refundApprovedBy: { select: { id: true, name: true } },
 };
 
 function normalizePhone(phone: string) {
@@ -101,6 +122,8 @@ ordersRouter.post("/", optionalAuth, async (req, res) => {
     customerLocationAccuracy,
     branchId: branchIdBody,
     idempotencyKey,
+    couponCode: couponCodeBody,
+    loyaltyPointsRedeem,
   } = req.body as {
     items?: {
       menuItemId: string;
@@ -123,6 +146,8 @@ ordersRouter.post("/", optionalAuth, async (req, res) => {
     customerLocationAccuracy?: number;
     branchId?: string;
     idempotencyKey?: string;
+    couponCode?: string;
+    loyaltyPointsRedeem?: number;
   };
   const checkoutKey = idempotencyKey ? cleanText(String(idempotencyKey), 120) : "";
   if (checkoutKey) {
@@ -350,40 +375,105 @@ ordersRouter.post("/", optionalAuth, async (req, res) => {
   }
 
   const quoted = quoteCharges(subtotal, deliveryCharge, storeSettings);
+  let couponDiscount = 0;
+  let couponId: string | null = null;
+  let couponCodeSnap: string | null = null;
+  const normalizedCoupon = couponCodeBody ? normalizeCouponCode(String(couponCodeBody)) : "";
+  if (normalizedCoupon) {
+    const coupon = await prisma.coupon.findFirst({ where: { code: normalizedCoupon, isActive: true } });
+    if (!coupon) return res.status(400).json({ error: "Promo code not found." });
+    if (coupon.branchId && coupon.branchId !== resolvedBranchId) {
+      return res.status(400).json({ error: "This promo code is not valid for your branch." });
+    }
+    const windowErr = validateCouponWindow(coupon);
+    if (windowErr) return res.status(400).json({ error: windowErr });
+    const computed = computeCouponDiscount(coupon, subtotal);
+    if (!computed.ok) return res.status(400).json({ error: computed.error });
+    couponDiscount = computed.discount;
+    couponId = computed.couponId;
+    couponCodeSnap = computed.code;
+  }
+
+  const totalBeforeLoyalty = Math.max(0, quoted.total - couponDiscount);
+  let loyaltyDiscount = 0;
+  let loyaltyRedeemed = 0;
+  if (isRegisteredCustomer && loyaltyPointsRedeem) {
+    const customer = await prisma.user.findUnique({ where: { id: req.user!.id } });
+    const redeem = loyaltyRedeemDiscount(
+      loyaltyPointsRedeem,
+      totalBeforeLoyalty,
+      customer?.loyaltyPoints ?? 0,
+      storeSettings
+    );
+    loyaltyDiscount = redeem.discount;
+    loyaltyRedeemed = redeem.points;
+  }
+  const orderTotal = Math.max(0, totalBeforeLoyalty - loyaltyDiscount);
+  const discountAmount = couponDiscount + loyaltyDiscount;
 
   const lat = parseCoord(customerLatitude, -90, 90);
   const lng = parseCoord(customerLongitude, -180, 180);
   const locAccuracy = parseCoord(customerLocationAccuracy, 0, 50_000);
   const ip = clientIp(req);
 
-  const order = await prisma.order.create({
-    data: {
-      orderNumber: await nextOrderNumber(),
-      branchId: resolvedBranchId,
-      customerId: isRegisteredCustomer ? user!.id : null,
-      guestAccessToken,
-      fulfillmentType: mode,
-      deliveryAreaId: areaId,
-      subtotal,
-      deliveryCharge,
-      taxAmount: quoted.tax,
-      serviceAmount: quoted.service,
-      total: quoted.total,
-      deliveryAddress: trimmedAddress,
-      notes: safeNotes || null,
-      customerName: trimmedName,
-      customerPhone: phone,
-      customerEmail: email,
-      customerIp: ip,
-      customerLatitude: lat,
-      customerLongitude: lng,
-      customerLocationAccuracy: locAccuracy,
-      status: initialStatus,
-      checkoutIdempotencyKey: checkoutKey || null,
-      items: { create: lines },
-    },
-    include,
-  });
+  let order;
+  try {
+    order = await prisma.$transaction(async (tx) => {
+      if (couponId) {
+        const c = await tx.coupon.findUnique({ where: { id: couponId } });
+        if (!c) throw Object.assign(new Error("Promo code not found."), { status: 400 });
+        if (c.usageLimit != null && c.usedCount >= c.usageLimit) {
+          throw Object.assign(new Error("This promo code has reached its usage limit."), { status: 400 });
+        }
+        await tx.coupon.update({ where: { id: couponId }, data: { usedCount: { increment: 1 } } });
+      }
+      if (loyaltyRedeemed > 0 && isRegisteredCustomer && user) {
+        const customer = await tx.user.findUnique({ where: { id: user.id } });
+        if (!customer || customer.loyaltyPoints < loyaltyRedeemed) {
+          throw Object.assign(new Error("Not enough loyalty points."), { status: 400 });
+        }
+        await tx.user.update({
+          where: { id: user.id },
+          data: { loyaltyPoints: { decrement: loyaltyRedeemed } },
+        });
+      }
+      return tx.order.create({
+        data: {
+          orderNumber: await nextOrderNumber(),
+          branchId: resolvedBranchId,
+          customerId: isRegisteredCustomer && user ? user.id : null,
+          guestAccessToken,
+          fulfillmentType: mode,
+          deliveryAreaId: areaId,
+          subtotal,
+          deliveryCharge,
+          taxAmount: quoted.tax,
+          serviceAmount: quoted.service,
+          discountAmount,
+          total: orderTotal,
+          couponId,
+          couponCode: couponCodeSnap,
+          loyaltyPointsRedeemed: loyaltyRedeemed,
+          deliveryAddress: trimmedAddress,
+          notes: safeNotes || null,
+          customerName: trimmedName,
+          customerPhone: phone,
+          customerEmail: email,
+          customerIp: ip,
+          customerLatitude: lat,
+          customerLongitude: lng,
+          customerLocationAccuracy: locAccuracy,
+          status: initialStatus,
+          checkoutIdempotencyKey: checkoutKey || null,
+          items: { create: lines },
+        },
+        include,
+      });
+    });
+  } catch (err) {
+    const e = err as Error & { status?: number };
+    return res.status(e.status || 500).json({ error: e.message });
+  }
 
   void sendOrderPlacedEmail(order, storeSettings.autoConfirmOrders);
   void sendOrderReceivedWhatsApp(order, storeSettings.autoConfirmOrders);
@@ -581,26 +671,61 @@ ordersRouter.patch("/:id/cancel", optionalAuth, async (req, res) => {
   if (!canTransitionStatus(existing.status, OrderStatus.CANCELLED, existing.fulfillmentType)) {
     return res.status(400).json({ error: "This order can no longer be cancelled." });
   }
-  const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
-  if (!reason) {
-    return res.status(400).json({ error: "A reason is required to cancel an order." });
+  const storeSettings = await getStoreSettings();
+  const customerSelf =
+    Boolean(req.user?.role === Role.CUSTOMER && existing.customerId && req.user.id === existing.customerId);
+  const voidCheck = await resolveStaffVoidApproval(
+    req.user ? { id: req.user.id, role: req.user.role } : undefined,
+    storeSettings,
+    req.body as {
+      reason?: string;
+      voidReasonCode?: string;
+      voidReasonNote?: string;
+      approval?: { approverId?: string; pin?: string };
+    },
+    customerSelf,
+    { ip: clientIp(req) ?? undefined }
+  );
+  if (!voidCheck.ok) {
+    return res.status(voidCheck.status).json({ error: voidCheck.error, code: voidCheck.code });
   }
 
-  const order = await prisma.order.update({
-    where: { id: existing.id },
-    data: {
-      status: OrderStatus.CANCELLED,
-      events: {
-        create: {
-          fromStatus: existing.status,
-          toStatus: OrderStatus.CANCELLED,
-          actorId: req.user?.id,
-          actorRole: req.user?.role,
-          reason,
+  const order = await prisma.$transaction(async (tx) => {
+    const updated = await tx.order.update({
+      where: { id: existing.id },
+      data: {
+        status: OrderStatus.CANCELLED,
+        voidReasonCode: voidCheck.reasonCode,
+        voidReasonNote: voidCheck.reasonNote,
+        voidApprovedById: voidCheck.approverId,
+        events: {
+          create: {
+            fromStatus: existing.status,
+            toStatus: OrderStatus.CANCELLED,
+            actorId: req.user?.id,
+            actorRole: req.user?.role,
+            reason: voidCheck.reasonCode,
+          },
         },
       },
-    },
-    include,
+      include,
+    });
+    const auditAction =
+      existing.orderSource === OrderSource.POS ? AuditAction.ORDER_VOIDED : AuditAction.ORDER_CANCELLED;
+    await writeAudit(tx, {
+      actorId: req.user?.id,
+      actorRole: req.user?.role ?? null,
+      branchId: existing.branchId,
+      action: auditAction,
+      entityType: "order",
+      entityId: updated.id,
+      before: { status: existing.status },
+      after: { status: OrderStatus.CANCELLED },
+      reason: voidCheck.reasonCode,
+      ip: clientIp(req) ?? undefined,
+    });
+    await releaseRiderCashOnCancel(tx, existing.id);
+    return updated;
   });
   void sendOrderCancelledEmail(order);
   emitOrderChange("order:updated", order);
@@ -636,14 +761,36 @@ ordersRouter.patch("/:id/confirm", requireAuth, requireRole(...ADMIN_LIKE), asyn
 ordersRouter.patch("/:id/status", requireAuth, requireRole(...ORDER_OPS), async (req, res) => {
   const status = req.body.status as OrderStatus;
   const reason = typeof req.body.reason === "string" ? req.body.reason.trim() : "";
+  const collectedAmount =
+    req.body.collectedAmount !== undefined ? Number(req.body.collectedAmount) : undefined;
+  const varianceReason =
+    typeof req.body.varianceReason === "string" ? req.body.varianceReason.trim() : undefined;
   if (!Object.values(OrderStatus).includes(status)) {
     return res.status(400).json({ error: "Invalid status" });
   }
-  if (status === OrderStatus.CANCELLED && !reason) {
-    return res.status(400).json({ error: "A reason is required to cancel an order." });
-  }
   const existing = await prisma.order.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: "Order not found." });
+
+  const storeSettings = await getStoreSettings();
+  let voidMeta: { reasonCode: string; reasonNote: string | null; approverId: string | null } | null = null;
+  if (status === OrderStatus.CANCELLED) {
+    const voidCheck = await resolveStaffVoidApproval(
+      { id: req.user!.id, role: req.user!.role },
+      storeSettings,
+      req.body as {
+        reason?: string;
+        voidReasonCode?: string;
+        voidReasonNote?: string;
+        approval?: { approverId?: string; pin?: string };
+      },
+      false,
+      { ip: clientIp(req) ?? undefined }
+    );
+    if (!voidCheck.ok) {
+      return res.status(voidCheck.status).json({ error: voidCheck.error, code: voidCheck.code });
+    }
+    voidMeta = voidCheck;
+  }
 
   if (req.user!.role === Role.CHEF) {
     const next = chefNextStatus(existing.status, existing.fulfillmentType);
@@ -658,7 +805,6 @@ ordersRouter.patch("/:id/status", requireAuth, requireRole(...ORDER_OPS), async 
     }
   }
 
-  const storeSettings = await getStoreSettings();
   let riderId = existing.riderId;
   const needsRider = deliveryNeedsRider(existing.fulfillmentType);
 
@@ -681,22 +827,63 @@ ordersRouter.patch("/:id/status", requireAuth, requireRole(...ORDER_OPS), async 
     }
   }
 
-  const order = await prisma.order.update({
-    where: { id: req.params.id },
-    data: {
-      status,
-      ...(riderId && !existing.riderId ? { riderId } : {}),
-      events: {
-        create: {
-          fromStatus: existing.status,
-          toStatus: status,
-          actorId: req.user!.id,
-          actorRole: req.user!.role,
-          reason: reason || null,
+  const order = await prisma.$transaction(async (tx) => {
+    const updated = await tx.order.update({
+      where: { id: req.params.id },
+      data: {
+        status,
+        ...(riderId && !existing.riderId ? { riderId } : {}),
+        ...(voidMeta
+          ? {
+              voidReasonCode: voidMeta.reasonCode,
+              voidReasonNote: voidMeta.reasonNote,
+              voidApprovedById: voidMeta.approverId,
+            }
+          : {}),
+        events: {
+          create: {
+            fromStatus: existing.status,
+            toStatus: status,
+            actorId: req.user!.id,
+            actorRole: req.user!.role,
+            reason: voidMeta?.reasonCode || reason || null,
+          },
         },
       },
-    },
-    include,
+      include,
+    });
+    const auditAction =
+      status === OrderStatus.CANCELLED
+        ? existing.orderSource === OrderSource.POS
+          ? AuditAction.ORDER_VOIDED
+          : AuditAction.ORDER_CANCELLED
+        : AuditAction.ORDER_STATUS_CHANGED;
+    await writeAudit(tx, {
+      actorId: req.user!.id,
+      actorRole: req.user!.role,
+      branchId: existing.branchId,
+      action: auditAction,
+      entityType: "order",
+      entityId: updated.id,
+      before: { status: existing.status, riderId: existing.riderId },
+      after: { status, riderId: updated.riderId },
+      reason: voidMeta?.reasonCode || reason || null,
+      ip: clientIp(req) ?? undefined,
+    });
+    if (status === OrderStatus.CANCELLED) {
+      await releaseRiderCashOnCancel(tx, existing.id);
+    }
+    if (status === OrderStatus.DELIVERED) {
+      await recordRiderCodOnDelivered(tx, updated, { collectedAmount, varianceReason });
+    }
+    if (
+      status === OrderStatus.DELIVERED ||
+      status === OrderStatus.COLLECTED ||
+      status === OrderStatus.SERVED
+    ) {
+      await maybeAwardLoyalty(tx, updated.id);
+    }
+    return updated;
   });
 
   if (
@@ -732,6 +919,76 @@ ordersRouter.patch("/:id/status", requireAuth, requireRole(...ORDER_OPS), async 
   const fresh = await prisma.order.findUnique({ where: { id: order.id }, include });
   res.json(fresh);
 });
+
+const KITCHEN_SENT: OrderStatus[] = [
+  OrderStatus.PREPARING,
+  OrderStatus.READY,
+  OrderStatus.OUT_FOR_DELIVERY,
+  OrderStatus.DELIVERED,
+  OrderStatus.COLLECTED,
+  OrderStatus.SERVED,
+];
+
+ordersRouter.delete(
+  "/:orderId/items/:itemId",
+  requireAuth,
+  requireRole(...ORDER_OPS),
+  async (req, res) => {
+    const storeSettings = await getStoreSettings();
+    const existing = await prisma.order.findUnique({
+      where: { id: req.params.orderId },
+      include: { items: true },
+    });
+    if (!existing) return res.status(404).json({ error: "Order not found." });
+    if (!KITCHEN_SENT.includes(existing.status)) {
+      return res.status(400).json({ error: "Lines can only be removed after the order is in the kitchen." });
+    }
+    const item = existing.items.find((i) => i.id === req.params.itemId);
+    if (!item) return res.status(404).json({ error: "Line not found." });
+    if (existing.items.length <= 1) {
+      return res.status(400).json({ error: "Cannot remove the only line. Void the order instead." });
+    }
+    const { reasonCode, reasonNote, approval } = req.body as {
+      reasonCode?: string;
+      reasonNote?: string;
+      approval?: { approverId?: string; pin?: string };
+    };
+    const reasons = parseReasonList(storeSettings.voidReasonOptions);
+    const code = String(reasonCode || "").trim();
+    if (!validateReasonCode(code, reasons)) {
+      return res.status(400).json({ error: "Select a reason for removing this line." });
+    }
+    const resolved = await resolveSensitiveApproval(
+      "VOID",
+      { id: req.user!.id, role: req.user!.role },
+      storeSettings,
+      approval,
+      { ip: clientIp(req) ?? undefined }
+    );
+    if (!resolved.ok) {
+      return res.status(resolved.status).json({ error: resolved.error, code: resolved.code });
+    }
+
+    const order = await prisma.$transaction(async (tx) => {
+      await tx.orderItem.delete({ where: { id: item.id } });
+      await recalculateOrderTotals(tx, existing.id, storeSettings);
+      await writeAudit(tx, {
+        actorId: req.user!.id,
+        actorRole: req.user!.role,
+        branchId: existing.branchId,
+        action: AuditAction.ORDER_STATUS_CHANGED,
+        entityType: "order_item",
+        entityId: item.id,
+        before: { name: item.nameAtOrder, qty: item.quantity, price: item.priceAtOrder },
+        reason: code,
+        ip: clientIp(req) ?? undefined,
+      });
+      return tx.order.findUniqueOrThrow({ where: { id: existing.id }, include });
+    });
+    emitOrderChange("order:updated", order);
+    res.json(order);
+  }
+);
 
 ordersRouter.patch("/:id/assign", requireAuth, requireRole(...ADMIN_LIKE), async (req, res) => {
   const { riderId } = req.body as { riderId?: string };

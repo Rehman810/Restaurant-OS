@@ -59,6 +59,33 @@ export function validateSettingsInput(body: Record<string, unknown>): SettingsEr
     if (!Number.isFinite(n) || n < 0) errors.freeDeliveryAbove = "Free-delivery threshold must be zero or greater.";
   }
 
+  if (body.shiftVarianceTolerance !== undefined && body.shiftVarianceTolerance !== "") {
+    const n = Number(body.shiftVarianceTolerance);
+    if (!Number.isFinite(n) || n < 0) {
+      errors.shiftVarianceTolerance = "Variance tolerance must be zero or greater.";
+    }
+  }
+
+  if (body.autoPrintKitchenTickets !== undefined && body.autoPrintKitchenTickets !== null) {
+    if (typeof body.autoPrintKitchenTickets !== "boolean") {
+      errors.autoPrintKitchenTickets = "Must be true or false.";
+    }
+  }
+
+  if (body.riderCashStaleHours !== undefined && body.riderCashStaleHours !== "") {
+    const n = Number(body.riderCashStaleHours);
+    if (!Number.isInteger(n) || n < 1 || n > 24 * 14) {
+      errors.riderCashStaleHours = "Enter whole hours between 1 and 336.";
+    }
+  }
+
+  if (body.maxCashierDiscountPercent !== undefined && body.maxCashierDiscountPercent !== "") {
+    const n = Number(body.maxCashierDiscountPercent);
+    if (!Number.isFinite(n) || n < 0 || n > 100) {
+      errors.maxCashierDiscountPercent = "Enter a percentage from 0 to 100.";
+    }
+  }
+
   if (body.weeklySchedule !== undefined && body.weeklySchedule !== null) {
     const schedule = body.weeklySchedule;
     if (typeof schedule !== "object" || Array.isArray(schedule)) {

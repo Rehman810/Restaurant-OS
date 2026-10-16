@@ -12,10 +12,17 @@ import { PAGE_SIZE } from "@/lib/pagination";
 import { fetchMyOrdersPage } from "@/lib/admin-orders";
 import { FulfillmentBadge } from "@/components/FulfillmentBadge";
 import { Order } from "@/lib/types";
-import { ClipboardList } from "lucide-react";
+import { ClipboardList, RotateCcw } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useCart } from "@/lib/cart";
+import { api } from "@/lib/api";
+import { fillCartFromOrder } from "@/lib/reorder-from-order";
 import { useLiveOrders } from "@/hooks/useLiveOrders";
 
 export default function OrdersPage() {
+  const router = useRouter();
+  const addConfigured = useCart((s) => s.addConfigured);
+  const addDeal = useCart((s) => s.addDeal);
   const { user, loading: authLoading } = useAuth();
   const [page, setPage] = useState(1);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -48,6 +55,12 @@ export default function OrdersPage() {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE.list));
   const rangeStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE.list + 1;
   const rangeEnd = Math.min(page * PAGE_SIZE.list, total);
+
+  async function reorder(orderId: string) {
+    const order = await api<Order>(`/orders/${orderId}`);
+    await fillCartFromOrder(order, { addConfigured, addDeal });
+    router.push("/checkout");
+  }
 
   return (
     <StoreShell>
@@ -98,6 +111,17 @@ export default function OrdersPage() {
                       <p className="text-brand-700">{pkr(o.total)}</p>
                     </div>
                     <p className="mt-1 text-xs text-stone-500">{formatWhen(o.createdAt)}</p>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void reorder(o.id).catch(() => null);
+                      }}
+                      className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-brand-700 hover:underline"
+                    >
+                      <RotateCcw size={14} /> Reorder
+                    </button>
                     <div className="mt-5">
                       <StatusTrack status={o.status} fulfillmentType={o.fulfillmentType} />
                     </div>

@@ -6,6 +6,9 @@ import QRCode from "qrcode";
 import { generateSecret, generateURI, verifyTotp } from "../lib/totp";
 import { Role } from "@prisma/client";
 import { prisma } from "../lib/prisma";
+import { writeAudit } from "../lib/audit";
+import { AuditAction } from "../lib/audit-actions";
+import { clientIp } from "../lib/client-ip";
 import { requireAuth, requireRole, signToken } from "../middleware/auth";
 import { storeNameFrom } from "../lib/branding";
 import { sendPasswordResetEmail } from "../lib/email";
@@ -63,6 +66,7 @@ function publicUser(user: {
   role: Role;
   phone: string | null;
   totpEnabled?: boolean;
+  loyaltyPoints?: number;
 }) {
   return {
     id: user.id,
@@ -71,6 +75,7 @@ function publicUser(user: {
     role: user.role,
     phone: user.phone,
     totpEnabled: Boolean(user.totpEnabled),
+    loyaltyPoints: user.role === Role.CUSTOMER ? user.loyaltyPoints ?? 0 : undefined,
   };
 }
 
@@ -128,6 +133,23 @@ authRouter.post("/login", authLimiter, async (req, res) => {
     if (user?.isActive) {
       await prisma.user.update({ where: { id: user.id }, data: nextLockState(user.failedLoginCount) });
     }
+    if (user?.isActive) {
+      await writeAudit(prisma, {
+        actorId: user.id,
+        actorRole: user.role,
+        action: AuditAction.LOGIN_FAILED,
+        entityType: "user",
+        entityId: user.id,
+        ip: clientIp(req),
+      });
+    } else {
+      await writeAudit(prisma, {
+        action: AuditAction.LOGIN_FAILED,
+        entityType: "user",
+        entityId: email.toLowerCase().trim(),
+        ip: clientIp(req),
+      });
+    }
     return res.status(401).json({ error: GENERIC_LOGIN_ERROR });
   }
 
@@ -142,6 +164,16 @@ authRouter.post("/login", authLimiter, async (req, res) => {
   }
 
   const token = issueSession(res, req, user);
+  if (user.role !== Role.CUSTOMER) {
+    await writeAudit(prisma, {
+      actorId: user.id,
+      actorRole: user.role,
+      action: AuditAction.LOGIN_SUCCESS,
+      entityType: "user",
+      entityId: user.id,
+      ip: clientIp(req),
+    });
+  }
   res.json(authResponseBody(token, user));
 });
 

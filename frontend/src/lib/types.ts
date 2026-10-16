@@ -9,6 +9,7 @@ export type User = {
   role: Role;
   phone?: string | null;
   totpEnabled?: boolean;
+  loyaltyPoints?: number;
 };
 
 export type MenuItemOption = {
@@ -46,6 +47,8 @@ export type MenuItem = {
   isAvailable: boolean;
   optionGroups?: MenuItemOptionGroup[];
   addons?: MenuItemAddon[];
+  printStationId?: string | null;
+  printStation?: { id: string; name: string; code: string } | null;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -88,6 +91,19 @@ export type StoreSettings = {
   inventoryAutoHideMenu?: boolean;
   inventoryAllowNegative?: boolean;
   inventoryDeductAtPreparing?: boolean;
+  maxCashierDiscountPercent?: number | string;
+  requireApprovalForVoid?: boolean;
+  requireApprovalForRefund?: boolean;
+  requireApprovalForPriceOverride?: boolean;
+  voidReasonOptions?: string[];
+  discountReasonOptions?: string[];
+  refundReasonOptions?: string[];
+  shiftVarianceTolerance?: number | string;
+  riderCashStaleHours?: number;
+  autoPrintKitchenTickets?: boolean;
+  loyaltyEarnPer100?: number | string;
+  loyaltyRedeemPerPoint?: number | string;
+  loyaltyMaxRedeemPercent?: number | string;
   phone: string;
   whatsapp: string;
   address: string;
@@ -244,6 +260,19 @@ export type Order = {
   deliveryCharge?: string | number;
   taxAmount?: string | number;
   serviceAmount?: string | number;
+  discountAmount?: string | number;
+  discountPercent?: string | number | null;
+  adjustmentReasonCode?: string | null;
+  adjustmentReasonNote?: string | null;
+  voidReasonCode?: string | null;
+  voidReasonNote?: string | null;
+  refundAmount?: string | number | null;
+  refundReasonCode?: string | null;
+  refundReasonNote?: string | null;
+  adjustmentRequestedBy?: { id: string; name: string } | null;
+  adjustmentApprovedBy?: { id: string; name: string } | null;
+  voidApprovedBy?: { id: string; name: string } | null;
+  refundApprovedBy?: { id: string; name: string } | null;
   total: string | number;
   deliveryAddress: string;
   notes?: string | null;

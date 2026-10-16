@@ -31,6 +31,7 @@ import { CATEGORIES as DEFAULT_CATEGORIES, Category, Deal, MenuItem } from "@/li
 import { MenuFormSheet, MenuFormData } from "@/components/admin/MenuFormSheet";
 import { DealFormSheet, DealFormData } from "@/components/admin/DealFormSheet";
 import { CategoryFormSheet, CategoryFormData } from "@/components/admin/CategoryFormSheet";
+import { fetchPrintStations, PrintStation } from "@/lib/admin-print-stations";
 
 type Tab = "dishes" | "deals" | "categories";
 type DeleteTarget = { kind: "dish" | "deal" | "category"; id: string; label: string };
@@ -45,6 +46,7 @@ const emptyDish: MenuFormData = {
   isAvailable: true,
   optionGroups: [],
   addons: [],
+  printStationId: "",
 };
 
 const emptyDeal: DealFormData = {
@@ -87,6 +89,7 @@ function DishImage({ src, alt }: { src: string; alt: string }) {
 export default function AdminMenu() {
   const [tab, setTab] = useState<Tab>("dishes");
   const [items, setItems] = useState<MenuItem[]>([]);
+  const [printStations, setPrintStations] = useState<PrintStation[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -127,14 +130,16 @@ export default function AdminMenu() {
     else setLoading(true);
     setLoadError("");
     try {
-      const [menu, dealList, cats] = await Promise.all([
+      const [menu, dealList, cats, stationsRes] = await Promise.all([
         fetchAllMenuItems(),
         fetchAllDeals(),
         fetchAllCategories().catch(() => []),
+        fetchPrintStations().catch(() => ({ stations: [] as PrintStation[] })),
       ]);
       setItems(menu);
       setDeals(dealList);
       setCategories(enrichCategories(cats));
+      setPrintStations(stationsRes.stations);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Could not load menu.");
     } finally {
@@ -260,6 +265,7 @@ export default function AdminMenu() {
                 discountPrice: o.discountPrice ? Number(o.discountPrice) : null,
               })),
           })),
+        printStationId: dishForm.printStationId || null,
         addons: dishForm.addons
           .filter((a) => a.name.trim())
           .map((a) => ({ name: a.name.trim(), price: Number(a.price) || 0 })),
@@ -450,6 +456,7 @@ export default function AdminMenu() {
         })),
       })),
       addons: (item.addons ?? []).map((a) => ({ name: a.name, price: String(a.price) })),
+      printStationId: item.printStationId || item.printStation?.id || "",
     });
     setDishFormOpen(true);
   }
@@ -756,6 +763,7 @@ export default function AdminMenu() {
           form={dishForm}
           setForm={setDishForm}
           categories={categoryNames}
+          printStations={printStations.map((s) => ({ id: s.id, name: s.name, code: s.code }))}
           saving={saving}
           uploading={uploading}
           uploadError={uploadError}

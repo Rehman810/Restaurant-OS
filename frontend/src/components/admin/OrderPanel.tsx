@@ -8,6 +8,7 @@ import { STATUS_THEME } from "@/lib/admin-status";
 import { isBackwardMove, Order, OrderStatus, STATUS_FLOW, STATUS_LABEL, orderStatusLabel } from "@/lib/types";
 import { FulfillmentBadge } from "@/components/FulfillmentBadge";
 import { OrderDeviceInfo } from "./OrderDeviceInfo";
+import { OrderControlsSummary } from "./OrderControlsSummary";
 import { StatusBadge } from "./StatusBadge";
 import { AdminSelect } from "./AdminSelect";
 
@@ -105,6 +106,7 @@ export function OrderPanel({
         </div>
 
         {!compact && <OrderDeviceInfo order={order} />}
+        {!compact && <OrderControlsSummary order={order} />}
 
         {/* Items */}
         {!compact && (

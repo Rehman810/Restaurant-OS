@@ -148,6 +148,17 @@ export default function AdminDashboard() {
         </div>
       </div>
 
+      {(stats.riderCashPendingCount ?? 0) > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950 dark:border-emerald-800/60 dark:bg-emerald-950/35 dark:text-emerald-100">
+          <p>
+            <Wallet className="mr-1.5 inline size-4" />
+            {pkr(stats.riderCashPendingTotal ?? 0)} COD still with riders ({stats.riderCashPendingCount} orders)
+            {(stats.riderCashStaleCount ?? 0) > 0 ? ` · ${stats.riderCashStaleCount} overdue` : ""}
+          </p>
+          <Link href="/admin/riders/cash" className="font-bold underline">Settle rider cash</Link>
+        </div>
+      )}
+
       {/* KPI row — 4 focused metrics, not 8 */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Today's orders" value={stats.todayOrders} icon={ClipboardList} accent="blue" sub="orders" />

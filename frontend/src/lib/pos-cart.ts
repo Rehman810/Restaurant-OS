@@ -10,6 +10,7 @@ export type PosLine = {
   kind?: "item" | "deal";
   name: string;
   price: number;
+  catalogPrice?: number;
   quantity: number;
   dealId?: string;
   optionIds?: string[];
@@ -32,6 +33,7 @@ type PosCartState = {
   addDeal: (deal: { id: string; title: string; dealPrice: string | number }) => void;
   setQty: (id: string, qty: number) => void;
   remove: (id: string) => void;
+  setLinePrice: (id: string, price: number) => void;
   clear: () => void;
 };
 
@@ -51,6 +53,7 @@ export const usePosCart = create<PosCartState>((set, get) => ({
         kind: "item",
         name: item.name,
         price,
+        catalogPrice: price,
         quantity,
         optionIds,
         addonIds,
@@ -73,6 +76,7 @@ export const usePosCart = create<PosCartState>((set, get) => ({
         dealId: deal.id,
         name: deal.title,
         price: Number(deal.dealPrice),
+        catalogPrice: Number(deal.dealPrice),
         quantity: 1,
       });
     }
@@ -86,6 +90,13 @@ export const usePosCart = create<PosCartState>((set, get) => ({
     set({ lines: get().lines.map((l) => (l.id === id ? { ...l, quantity: qty } : l)) });
   },
   remove: (id) => set({ lines: get().lines.filter((l) => l.id !== id) }),
+  setLinePrice: (id, price) => {
+    const n = Number(price);
+    if (!Number.isFinite(n) || n < 0) return;
+    set({
+      lines: get().lines.map((l) => (l.id === id ? { ...l, price: n } : l)),
+    });
+  },
   clear: () => set({ lines: [] }),
 }));
 
@@ -103,6 +114,9 @@ export function buildPosOrderPayload(lines: PosLine[]) {
       optionIds: l.optionIds,
       addonIds: l.addonIds,
       instructions: l.instructions,
+      ...(l.catalogPrice != null && Math.abs(l.price - l.catalogPrice) > 0.009
+        ? { unitPriceOverride: l.price }
+        : {}),
     }));
   const deals = lines
     .filter((l) => l.kind === "deal" && l.dealId)

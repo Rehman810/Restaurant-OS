@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, ChefHat, Check, Package, StickyNote } from "lucide-react";
+import { ArrowRight, ChefHat, Check, Package, Printer, StickyNote } from "lucide-react";
 import { FulfillmentBadge } from "@/components/FulfillmentBadge";
 import { STATUS_THEME } from "@/lib/admin-status";
 import { formatElapsed } from "@/lib/format";
@@ -10,12 +10,16 @@ export function KitchenTicket({
   order,
   actionLabel,
   onAction,
+  onPrint,
+  printBusy,
   busy,
   error,
 }: {
   order: Order;
   actionLabel?: string;
   onAction?: () => void;
+  onPrint?: () => void;
+  printBusy?: boolean;
   busy?: boolean;
   error?: string;
 }) {
@@ -82,18 +86,31 @@ export function KitchenTicket({
 
         {error && <p className="mt-2 text-[11px] font-medium text-rose-600">{error}</p>}
 
-        {onAction && actionLabel ? (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onAction}
-            className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg bg-stone-900 py-2 text-xs font-medium text-white transition hover:bg-brand-600 disabled:opacity-60"
-          >
-            {order.status === "CONFIRMED" ? <ChefHat size={13} /> : <Check size={13} />}
-            {busy ? "Updating…" : actionLabel}
-            <ArrowRight size={13} />
-          </button>
-        ) : null}
+        <div className="mt-3 flex gap-2">
+          {onPrint && (
+            <button
+              type="button"
+              disabled={printBusy || busy}
+              onClick={onPrint}
+              className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-stone-200 bg-white py-2 text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-60"
+            >
+              <Printer size={13} />
+              {printBusy ? "Printing…" : "Print KOT"}
+            </button>
+          )}
+          {onAction && actionLabel ? (
+            <button
+              type="button"
+              disabled={busy || printBusy}
+              onClick={onAction}
+              className="inline-flex flex-[2] items-center justify-center gap-1.5 rounded-lg bg-stone-900 py-2 text-xs font-medium text-white transition hover:bg-brand-600 disabled:opacity-60"
+            >
+              {order.status === "CONFIRMED" ? <ChefHat size={13} /> : <Check size={13} />}
+              {busy ? "Updating…" : actionLabel}
+              <ArrowRight size={13} />
+            </button>
+          ) : null}
+        </div>
       </div>
     </article>
   );

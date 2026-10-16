@@ -5,6 +5,9 @@ import { fetchGoogleReviews } from "../lib/google-reviews";
 import { getPublicStorePayload, getStoreSettings } from "../lib/settings-data";
 import { validateSettingsInput } from "../lib/settings-validate";
 import { requireAuth, requireRole } from "../middleware/auth";
+import { diffSettingsKeys, settingsSnapshotForAudit, writeAudit } from "../lib/audit";
+import { AuditAction } from "../lib/audit-actions";
+import { clientIp } from "../lib/client-ip";
 
 export const settingsRouter = Router();
 
@@ -76,7 +79,10 @@ settingsRouter.patch("/", requireAuth, requireRole(Role.ADMIN), async (req, res)
   }
 
   const current = await getStoreSettings();
-  const settings = await prisma.storeSettings.update({
+  const beforeSnap = settingsSnapshotForAudit(current as unknown as Record<string, unknown>);
+  const touchedKeys = Object.keys(body);
+  const settings = await prisma.$transaction(async (tx) => {
+    const updated = await tx.storeSettings.update({
     where: { id: current.id },
     data: {
       ...(body.storeName !== undefined ? { storeName: String(body.storeName).trim() } : {}),
@@ -99,6 +105,43 @@ settingsRouter.patch("/", requireAuth, requireRole(Role.ADMIN), async (req, res)
         : {}),
       ...(body.inventoryDeductAtPreparing !== undefined
         ? { inventoryDeductAtPreparing: Boolean(body.inventoryDeductAtPreparing) }
+        : {}),
+      ...(body.maxCashierDiscountPercent !== undefined
+        ? { maxCashierDiscountPercent: num(body.maxCashierDiscountPercent) ?? 10 }
+        : {}),
+      ...(body.requireApprovalForVoid !== undefined
+        ? { requireApprovalForVoid: Boolean(body.requireApprovalForVoid) }
+        : {}),
+      ...(body.requireApprovalForRefund !== undefined
+        ? { requireApprovalForRefund: Boolean(body.requireApprovalForRefund) }
+        : {}),
+      ...(body.requireApprovalForPriceOverride !== undefined
+        ? { requireApprovalForPriceOverride: Boolean(body.requireApprovalForPriceOverride) }
+        : {}),
+      ...(body.voidReasonOptions !== undefined ? { voidReasonOptions: body.voidReasonOptions as object } : {}),
+      ...(body.discountReasonOptions !== undefined
+        ? { discountReasonOptions: body.discountReasonOptions as object }
+        : {}),
+      ...(body.refundReasonOptions !== undefined
+        ? { refundReasonOptions: body.refundReasonOptions as object }
+        : {}),
+      ...(body.shiftVarianceTolerance !== undefined
+        ? { shiftVarianceTolerance: num(body.shiftVarianceTolerance) ?? 500 }
+        : {}),
+      ...(body.riderCashStaleHours !== undefined
+        ? { riderCashStaleHours: Number(body.riderCashStaleHours) || 24 }
+        : {}),
+      ...(body.autoPrintKitchenTickets !== undefined
+        ? { autoPrintKitchenTickets: Boolean(body.autoPrintKitchenTickets) }
+        : {}),
+      ...(body.loyaltyEarnPer100 !== undefined
+        ? { loyaltyEarnPer100: num(body.loyaltyEarnPer100) ?? 1 }
+        : {}),
+      ...(body.loyaltyRedeemPerPoint !== undefined
+        ? { loyaltyRedeemPerPoint: num(body.loyaltyRedeemPerPoint) ?? 1 }
+        : {}),
+      ...(body.loyaltyMaxRedeemPercent !== undefined
+        ? { loyaltyMaxRedeemPercent: num(body.loyaltyMaxRedeemPercent) ?? 20 }
         : {}),
       ...(body.storeTagline !== undefined
         ? { storeTagline: String(body.storeTagline).trim() || "Order in minutes" }
@@ -166,6 +209,20 @@ settingsRouter.patch("/", requireAuth, requireRole(Role.ADMIN), async (req, res)
       ...(body.youtubeUrl !== undefined ? { youtubeUrl: String(body.youtubeUrl) } : {}),
       ...(body.googlePlaceId !== undefined ? { googlePlaceId: String(body.googlePlaceId).trim() } : {}),
     },
+  });
+    const afterSnap = settingsSnapshotForAudit(updated as unknown as Record<string, unknown>);
+    const { before, after } = diffSettingsKeys(beforeSnap, afterSnap, touchedKeys);
+    await writeAudit(tx, {
+      actorId: req.user!.id,
+      actorRole: req.user!.role,
+      action: AuditAction.SETTINGS_CHANGED,
+      entityType: "store_settings",
+      entityId: updated.id,
+      before,
+      after,
+      ip: clientIp(req),
+    });
+    return updated;
   });
   res.json(settings);
 });

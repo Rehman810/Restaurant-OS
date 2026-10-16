@@ -19,7 +19,7 @@ import {
   Trash2,
   UtensilsCrossed,
 } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { fetchAllDeals, fetchAllMenuItems } from "@/lib/catalog-api";
 import { useAuth } from "@/lib/auth";
 import { DEFAULT_STORE_NAME, storeDisplayName } from "@/lib/branding";
@@ -29,6 +29,9 @@ import { printReceipt } from "@/lib/print-receipt";
 import { pkr } from "@/lib/format";
 import { Deal, DeliveryArea, FulfillmentType, MenuItem, Order, PaymentMethod } from "@/lib/types";
 import { PosItemSheet } from "@/components/admin/PosItemSheet";
+import { ManagerApprovalModal } from "@/components/admin/ManagerApprovalModal";
+import { InputSheet } from "@/components/admin/InputSheet";
+import { CashShiftPanel } from "@/components/admin/pos/CashShiftPanel";
 import { fetchFloor, openTableSession, seatReservation, type FloorTable } from "@/modules/dine-in/api";
 import { useBranch } from "@/modules/branches/BranchContext";
 
@@ -87,6 +90,7 @@ export default function PosPage() {
   const addDeal = usePosCart((s) => s.addDeal);
   const setQty = usePosCart((s) => s.setQty);
   const remove = usePosCart((s) => s.remove);
+  const setLinePrice = usePosCart((s) => s.setLinePrice);
   const clear = usePosCart((s) => s.clear);
 
   const [menu, setMenu] = useState<MenuItem[]>([]);
@@ -118,6 +122,17 @@ export default function PosPage() {
   const [showDetails, setShowDetails] = useState(false);
   const [clock, setClock] = useState("");
   const [mobileView, setMobileView] = useState<MobileView>("menu");
+  const [discountPercent, setDiscountPercent] = useState("");
+  const [discountReasonCode, setDiscountReasonCode] = useState("");
+  const [discountReasonNote, setDiscountReasonNote] = useState("");
+  const [maxCashierDiscountPercent, setMaxCashierDiscountPercent] = useState(10);
+  const [discountReasons, setDiscountReasons] = useState<string[]>([]);
+  const [voidReasons, setVoidReasons] = useState<string[]>([]);
+  const [approvalFlow, setApprovalFlow] = useState<"checkout" | "void" | null>(null);
+  const [voidReasonCode, setVoidReasonCode] = useState("");
+  const [voidReasonNote, setVoidReasonNote] = useState("");
+  const [priceEditLine, setPriceEditLine] = useState<{ id: string; price: number } | null>(null);
+  const [shiftOpen, setShiftOpen] = useState(true);
 
   const loadFloor = useCallback(async () => {
     if (selection === "all") return;
@@ -169,6 +184,17 @@ export default function PosPage() {
 
   useEffect(() => {
     load().catch(() => setError("Could not load menu."));
+    void api<{
+      maxCashierDiscountPercent: number;
+      discountReasonOptions: string[];
+      voidReasonOptions: string[];
+    }>("/admin/approval/controls")
+      .then((c) => {
+        setMaxCashierDiscountPercent(Number(c.maxCashierDiscountPercent) || 10);
+        setDiscountReasons(Array.isArray(c.discountReasonOptions) ? c.discountReasonOptions.map(String) : []);
+        setVoidReasons(Array.isArray(c.voidReasonOptions) ? c.voidReasonOptions.map(String) : []);
+      })
+      .catch(() => null);
   }, [load]);
 
   useEffect(() => {
@@ -200,7 +226,15 @@ export default function PosPage() {
     mode === "DELIVERY" ? Number(areas.find((a) => a.id === areaId)?.deliveryCharge || 0) : 0;
   const deliveryFee =
     mode === "DELIVERY" && freeDeliveryAbove != null && subtotal >= freeDeliveryAbove ? 0 : rawDeliveryFee;
-  const total = subtotal + deliveryFee;
+  const pct = Number(discountPercent) || 0;
+  const discountPreview = pct > 0 ? ((subtotal + deliveryFee) * pct) / 100 : 0;
+  const total = Math.max(0, subtotal + deliveryFee - discountPreview);
+  const hasPriceOverride = lines.some(
+    (l) => l.catalogPrice != null && Math.abs(l.price - l.catalogPrice) > 0.009
+  );
+  const needsCheckoutApproval =
+    !isManager &&
+    ((pct > 0 && pct > maxCashierDiscountPercent) || hasPriceOverride);
 
   function tapItem(item: MenuItem) {
     if (itemHasConfigurableOptions(item) || (item.optionGroups?.length ?? 0) > 0) {
@@ -211,7 +245,7 @@ export default function PosPage() {
     addItem({ item, price: cfg.price, optionIds: cfg.optionIds, optionsLabel: cfg.optionsLabel });
   }
 
-  async function placeOrder() {
+  async function placeOrder(approval?: { approverId: string; pin: string }) {
     setError("");
     if (!lines.length) {
       setError("Add items to the cart first.");
@@ -224,6 +258,18 @@ export default function PosPage() {
     if (mode === "DINE_IN" && !tableSessionId) {
       setError("Select an open table session for dine-in.");
       setShowTablePicker(true);
+      return;
+    }
+    if (pct > 0 && !discountReasonCode.trim()) {
+      setError("Select a discount reason.");
+      return;
+    }
+    if (needsCheckoutApproval && !approval) {
+      setApprovalFlow("checkout");
+      return;
+    }
+    if (payment === "CASH" && !shiftOpen) {
+      setError("Open a cash shift before taking cash payments.");
       return;
     }
     setBusy(true);
@@ -245,15 +291,62 @@ export default function PosPage() {
           notes,
           paymentMethod: payment,
           paymentStatus: "PAID",
+          discountPercent: pct > 0 ? pct : undefined,
+          discountReasonCode: pct > 0 ? discountReasonCode : undefined,
+          discountReasonNote: pct > 0 ? discountReasonNote : undefined,
+          approval,
         }),
       });
       setLastOrder(order);
       clear();
       setNotes("");
+      setDiscountPercent("");
+      setDiscountReasonCode("");
+      setDiscountReasonNote("");
+      setApprovalFlow(null);
       setMobileView("menu");
       printReceipt(order, store, { cashier: user?.name });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not place order.");
+      if (err instanceof ApiError && err.code === "APPROVAL_REQUIRED") {
+        setApprovalFlow("checkout");
+      } else {
+        setError(err instanceof Error ? err.message : "Could not place order.");
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function voidLastOrder(approval?: { approverId: string; pin: string }) {
+    if (!lastOrder || lastOrder.status === "CANCELLED") return;
+    if (!voidReasonCode.trim()) {
+      setError("Select a void reason.");
+      return;
+    }
+    if (!isManager && !approval) {
+      setApprovalFlow("void");
+      return;
+    }
+    setBusy(true);
+    try {
+      const order = await api<Order>(`/pos/${lastOrder.id}/void`, {
+        method: "POST",
+        body: JSON.stringify({
+          voidReasonCode,
+          voidReasonNote,
+          approval,
+        }),
+      });
+      setLastOrder(order);
+      setApprovalFlow(null);
+      setVoidReasonCode("");
+      setVoidReasonNote("");
+    } catch (err) {
+      if (err instanceof ApiError && err.code === "APPROVAL_REQUIRED") {
+        setApprovalFlow("void");
+      } else {
+        setError(err instanceof Error ? err.message : "Could not void order.");
+      }
     } finally {
       setBusy(false);
     }
@@ -301,6 +394,10 @@ export default function PosPage() {
             {showDetails ? "Hide" : "Customer"}
           </button>
         </div>
+      </div>
+
+      <div className="shrink-0 border-b border-orange-100/80 px-3 py-2 dark:border-stone-700">
+        <CashShiftPanel paymentMethod={payment} onShiftChange={setShiftOpen} />
       </div>
 
       {showDetails && (
@@ -357,8 +454,19 @@ export default function PosPage() {
                   <p className="mt-0.5 text-[10px] text-stone-500">{l.optionsLabel}</p>
                 )}
                 <p className="mt-1 text-xs font-bold text-brand-700">{pkr(l.price * l.quantity)}</p>
+                {l.catalogPrice != null && Math.abs(l.price - l.catalogPrice) > 0.009 && (
+                  <p className="text-[10px] text-amber-700">Price override</p>
+                )}
               </div>
               <div className="flex shrink-0 items-center gap-0.5">
+                <button
+                  type="button"
+                  className="grid h-9 w-9 place-items-center rounded-lg border border-amber-200 bg-white text-[10px] font-bold text-amber-800"
+                  onClick={() => setPriceEditLine({ id: l.id, price: l.price })}
+                  title="Override price"
+                >
+                  Rs
+                </button>
                 <button type="button" className="grid h-9 w-9 place-items-center rounded-lg border border-stone-200 bg-white" onClick={() => setQty(l.id, l.quantity - 1)}>
                   <Minus size={14} />
                 </button>
@@ -394,6 +502,33 @@ export default function PosPage() {
                 <span className="font-medium tabular-nums">{pkr(deliveryFee)}</span>
               </div>
             )}
+            <div className="grid gap-2 pt-1 sm:grid-cols-2">
+              <input
+                className="input h-9 text-sm"
+                type="number"
+                min={0}
+                max={100}
+                placeholder={`Discount % (max ${maxCashierDiscountPercent} w/o PIN)`}
+                value={discountPercent}
+                onChange={(e) => setDiscountPercent(e.target.value)}
+              />
+              <select
+                className="input h-9 text-sm"
+                value={discountReasonCode}
+                onChange={(e) => setDiscountReasonCode(e.target.value)}
+              >
+                <option value="">Discount reason…</option>
+                {discountReasons.map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+            </div>
+            {discountPreview > 0 && (
+              <div className="flex justify-between text-emerald-700">
+                <span>Discount</span>
+                <span className="font-medium tabular-nums">−{pkr(discountPreview)}</span>
+              </div>
+            )}
             <div className="flex items-end justify-between border-t border-orange-100 pt-2 dark:border-stone-600">
               <span className="text-xs font-bold uppercase tracking-wider text-stone-500 dark:text-stone-300">Total due</span>
               <span className="text-2xl font-black tabular-nums text-brand-700 dark:text-brand-300">{pkr(total)}</span>
@@ -425,7 +560,7 @@ export default function PosPage() {
         <button
           type="button"
           disabled={busy || !lines.length}
-          onClick={placeOrder}
+          onClick={() => void placeOrder()}
           className="btn-primary mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-2xl text-sm font-bold disabled:opacity-40 sm:h-14 sm:text-base"
         >
           {busy ? "Processing…" : (
@@ -437,13 +572,37 @@ export default function PosPage() {
         </button>
 
         {lastOrder && (
-          <button
-            type="button"
-            onClick={reprintLast}
-            className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-stone-200 text-xs font-semibold text-stone-600"
-          >
-            <Printer size={14} /> Reprint {lastOrder.orderNumber}
-          </button>
+          <div className="mt-2 space-y-2">
+            <button
+              type="button"
+              onClick={reprintLast}
+              className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-stone-200 text-xs font-semibold text-stone-600"
+            >
+              <Printer size={14} /> Reprint {lastOrder.orderNumber}
+            </button>
+            {lastOrder.status !== "CANCELLED" && (
+              <>
+                <select
+                  className="input h-9 w-full text-sm"
+                  value={voidReasonCode}
+                  onChange={(e) => setVoidReasonCode(e.target.value)}
+                >
+                  <option value="">Void reason…</option>
+                  {voidReasons.map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void voidLastOrder()}
+                  className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 text-xs font-semibold text-rose-700"
+                >
+                  <Trash2 size={14} /> Void {lastOrder.orderNumber}
+                </button>
+              </>
+            )}
+          </div>
         )}
       </div>
     </>
@@ -766,6 +925,47 @@ export default function PosPage() {
             </p>
           </div>
         </div>
+      )}
+
+      <InputSheet
+        open={Boolean(priceEditLine)}
+        title="Override line price"
+        label="Unit price (Rs)"
+        initialValue={priceEditLine ? String(priceEditLine.price) : ""}
+        saving={false}
+        onClose={() => setPriceEditLine(null)}
+        onConfirm={(v) => {
+          if (priceEditLine) setLinePrice(priceEditLine.id, Number(v));
+          setPriceEditLine(null);
+        }}
+      />
+
+      {approvalFlow === "checkout" && (
+        <ManagerApprovalModal
+          open
+          title="Manager approval required"
+          reasonOptions={discountReasons}
+          reasonCode={discountReasonCode}
+          reasonNote={discountReasonNote}
+          onReasonCodeChange={setDiscountReasonCode}
+          onReasonNoteChange={setDiscountReasonNote}
+          onCancel={() => setApprovalFlow(null)}
+          onApproved={(r) => void placeOrder({ approverId: r.approverId, pin: r.pin })}
+        />
+      )}
+
+      {approvalFlow === "void" && (
+        <ManagerApprovalModal
+          open
+          title="Manager approval to void"
+          reasonOptions={voidReasons}
+          reasonCode={voidReasonCode}
+          reasonNote={voidReasonNote}
+          onReasonCodeChange={setVoidReasonCode}
+          onReasonNoteChange={setVoidReasonNote}
+          onCancel={() => setApprovalFlow(null)}
+          onApproved={(r) => void voidLastOrder({ approverId: r.approverId, pin: r.pin })}
+        />
       )}
 
       <PosItemSheet item={configItem} onClose={() => setConfigItem(null)} />
