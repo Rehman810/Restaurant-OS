@@ -19,7 +19,9 @@ export function AdminThemeToggle({
     <button
       type="button"
       onClick={onToggle}
-      className={`inline-flex items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm font-semibold text-stone-600 shadow-sm transition hover:border-brand-200 hover:text-brand-700 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-200 dark:hover:border-stone-500 dark:hover:text-white ${className}`}
+      className={`inline-flex shrink-0 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-600 shadow-sm transition hover:border-brand-200 hover:text-brand-700 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-200 dark:hover:border-stone-500 dark:hover:text-white ${
+        showLabel ? "gap-2 px-3 py-2 text-sm font-semibold" : "h-9 w-9"
+      } ${className}`}
       aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}
       title={dark ? "Light mode" : "Dark mode"}
     >

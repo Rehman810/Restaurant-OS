@@ -21,6 +21,7 @@ import { OrderDateFilter } from "@/components/admin/OrderDateFilter";
 import { OrderDetailSheet } from "@/components/admin/OrderDetailSheet";
 import { OrderPanel } from "@/components/admin/OrderPanel";
 import { OrderTable } from "@/components/admin/OrderTable";
+import { AdminEmptyState, AdminPage, AdminPageHeader } from "@/components/admin/ui";
 
 type OrderView = "grid" | "table";
 const VIEW_KEY = "uff-orders-view";
@@ -145,37 +146,28 @@ export default function AdminOrders() {
   const periodLabel = formatDateSpanLabel(dateFrom, dateTo);
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="rounded-2xl border border-stone-200/80 bg-white p-5 shadow-sm sm:p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-600 ring-1 ring-brand-100">
-              <ClipboardList size={20} />
-            </div>
-            <div>
-              <h1 className="text-2xl font-semibold text-stone-900">Orders</h1>
-              <p className="mt-0.5 text-sm text-stone-500">
-                {periodLabel} · refreshes every 10s · click a row for IP & location
-              </p>
-            </div>
-          </div>
+    <AdminPage className="space-y-6">
+      <AdminPageHeader
+        title="Orders"
+        description={`${periodLabel} · refreshes every 10s · click a row for IP & location`}
+        icon={ClipboardList}
+        actions={
           <div className="grid grid-cols-3 gap-2 sm:gap-3">
-            <div className="rounded-xl bg-amber-50 px-3 py-2 ring-1 ring-amber-100">
-              <p className="text-[11px] font-medium text-stone-500">Active</p>
-              <p className="text-lg font-semibold text-amber-800">{activeCount}</p>
+            <div className="rounded-xl bg-amber-50 px-3 py-2 ring-1 ring-amber-100 dark:bg-amber-950/40 dark:ring-amber-900/50">
+              <p className="text-[11px] font-medium text-stone-500 dark:text-stone-400">Active</p>
+              <p className="text-lg font-semibold text-amber-800 dark:text-amber-200">{activeCount}</p>
             </div>
-            <div className="rounded-xl bg-stone-50 px-3 py-2 ring-1 ring-stone-200">
-              <p className="text-[11px] font-medium text-stone-500">Showing</p>
-              <p className="text-lg font-semibold text-stone-900">{total}</p>
+            <div className="rounded-xl bg-stone-50 px-3 py-2 ring-1 ring-stone-200 dark:bg-stone-800 dark:ring-stone-700">
+              <p className="text-[11px] font-medium text-stone-500 dark:text-stone-400">Showing</p>
+              <p className="text-lg font-semibold text-stone-900 dark:text-stone-50">{total}</p>
             </div>
-            <div className="rounded-xl bg-brand-50 px-3 py-2 ring-1 ring-brand-100">
-              <p className="text-[11px] font-medium text-stone-500">Value</p>
-              <p className="text-lg font-semibold text-brand-800">{pkr(filteredRevenue)}</p>
+            <div className="rounded-xl bg-brand-50 px-3 py-2 ring-1 ring-brand-100 dark:bg-brand-950/40 dark:ring-brand-900/50">
+              <p className="text-[11px] font-medium text-stone-500 dark:text-stone-400">Value</p>
+              <p className="text-lg font-semibold text-brand-800 dark:text-brand-200">{pkr(filteredRevenue)}</p>
             </div>
           </div>
-        </div>
-      </div>
+        }
+      />
 
       <OrderDateFilter
         from={dateFrom}
@@ -258,15 +250,11 @@ export default function AdminOrders() {
         ))}
 
       {!showSkeleton && total === 0 && (
-        <div className="rounded-3xl border border-dashed border-stone-300 bg-white px-6 py-20 text-center shadow-sm">
-          <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-stone-100 text-stone-400">
-            <Sparkles size={24} />
-          </div>
-          <p className="mt-4 text-lg font-semibold text-stone-800">No orders match</p>
-          <p className="mt-1 text-sm text-stone-500">
-            Try a different date range, status filter, or place a test order from the storefront.
-          </p>
-        </div>
+        <AdminEmptyState
+          icon={Sparkles}
+          title="No orders match"
+          description="Try a different date range, status filter, or place a test order from the storefront."
+        />
       )}
 
       {!showSkeleton && total > 0 && view === "table" && (
@@ -319,6 +307,6 @@ export default function AdminOrders() {
         />
         </>
       )}
-    </div>
+    </AdminPage>
   );
 }

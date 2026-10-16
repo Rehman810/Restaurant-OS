@@ -1,6 +1,7 @@
 "use client";
 
-import { Bike, Download, Phone } from "lucide-react";
+import { Bike, ClipboardList, Download, Phone } from "lucide-react";
+import { AdminEmptyState } from "@/components/admin/ui";
 import { downloadInvoice } from "@/lib/api";
 import { formatWhen, pkr } from "@/lib/format";
 import { Rider } from "@/lib/admin-types";
@@ -34,6 +35,16 @@ export function OrderTable({
   onConfirm?: (id: string) => void;
   onSelect?: (order: Order) => void;
 }) {
+  if (orders.length === 0) {
+    return (
+      <AdminEmptyState
+        icon={ClipboardList}
+        title="No orders to show"
+        description="Adjust filters or wait for new orders from the storefront or POS."
+      />
+    );
+  }
+
   return (
     <div className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-sm">
       <div className="overflow-x-auto">

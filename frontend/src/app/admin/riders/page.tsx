@@ -8,7 +8,6 @@ import {
   MapPin,
   Package,
   Phone,
-  Search,
   Truck,
   Users,
 } from "lucide-react";
@@ -21,6 +20,17 @@ import { RefreshButton } from "@/components/admin/RefreshButton";
 import { FulfillmentBadge } from "@/components/FulfillmentBadge";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { AdminScopeBanner } from "@/components/admin/AdminScopeBanner";
+import {
+  AdminAlert,
+  AdminEmptyState,
+  AdminFilterBar,
+  AdminKpiCard,
+  AdminKpiGrid,
+  AdminPage,
+  AdminPageHeader,
+  AdminSurface,
+  SearchField,
+} from "@/components/admin/ui";
 
 const AVATAR_GRADIENTS = [
   "from-violet-500 to-purple-600",
@@ -42,42 +52,6 @@ function initials(name: string) {
     .map((p) => p[0])
     .join("")
     .toUpperCase();
-}
-
-function KpiCard({
-  label,
-  value,
-  hint,
-  icon: Icon,
-  accent,
-}: {
-  label: string;
-  value: string | number;
-  hint?: string;
-  icon: typeof Bike;
-  accent: "violet" | "emerald" | "sky" | "brand";
-}) {
-  const styles = {
-    violet: "bg-violet-50 text-violet-700 ring-violet-100",
-    emerald: "bg-emerald-50 text-emerald-700 ring-emerald-100",
-    sky: "bg-sky-50 text-sky-700 ring-sky-100",
-    brand: "bg-brand-50 text-brand-700 ring-brand-100",
-  };
-
-  return (
-    <div className="rounded-2xl border border-stone-200/80 bg-white p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-medium text-stone-500">{label}</p>
-          <p className="mt-1 text-2xl font-bold text-stone-900">{value}</p>
-          {hint && <p className="mt-0.5 text-xs text-stone-400">{hint}</p>}
-        </div>
-        <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ring-1 ${styles[accent]}`}>
-          <Icon size={18} />
-        </span>
-      </div>
-    </div>
-  );
 }
 
 export default function RidersPage() {
@@ -115,76 +89,65 @@ export default function RidersPage() {
   const rangeEnd = Math.min(page * PAGE_SIZE.grid, total);
 
   return (
-    <div className="w-full space-y-5">
+    <AdminPage>
       <AdminScopeBanner variant="branch" />
-      <div className="rounded-2xl border border-stone-200/80 bg-white p-4 shadow-sm sm:p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 text-white shadow-md">
-              <Bike size={22} />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-stone-900 sm:text-2xl">Riders</h1>
-              <p className="mt-0.5 text-sm text-stone-500">
-                Fleet overview — live assignments and delivery stats
-              </p>
-            </div>
-          </div>
-          <RefreshButton busy={loading || refreshing} onClick={refresh} />
-        </div>
-      </div>
+      <AdminPageHeader
+        title="Riders"
+        description="Fleet overview — live assignments and delivery stats"
+        icon={Bike}
+        iconAccent="violet"
+        actions={<RefreshButton busy={loading || refreshing} onClick={refresh} />}
+      />
 
-      <p className="rounded-xl border border-violet-100 bg-violet-50/80 px-4 py-3 text-sm text-violet-900 dark:border-violet-800/50 dark:bg-violet-950/35 dark:text-violet-200">
+      <AdminAlert variant="info">
         New rider accounts are created on{" "}
-        <Link href="/admin/staff" className="font-semibold underline hover:text-violet-700">
+        <Link href="/admin/staff" className="font-semibold underline">
           Staff → Add staff member (Rider role)
         </Link>
         . This page is for monitoring deliveries and assigning orders.
-      </p>
+      </AdminAlert>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label="Fleet size" value={stats.total} hint="Registered riders" icon={Users} accent="violet" />
-        <KpiCard
+      <AdminKpiGrid>
+        <AdminKpiCard label="Fleet size" value={stats.total} hint="Registered riders" icon={Users} accent="violet" />
+        <AdminKpiCard
           label="On delivery"
           value={stats.onRoad}
           hint={`${stats.activeDrops} active drop${stats.activeDrops === 1 ? "" : "s"}`}
           icon={Truck}
           accent="brand"
         />
-        <KpiCard
+        <AdminKpiCard
           label="Available"
           value={stats.available}
           hint="Ready for assignment"
           icon={CheckCircle2}
           accent="emerald"
         />
-        <KpiCard
+        <AdminKpiCard
           label="Total delivered"
           value={stats.delivered}
           hint="All-time completions"
           icon={Package}
           accent="sky"
         />
-      </div>
+      </AdminKpiGrid>
 
-      {error && (
-        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p>
-      )}
+      {error && <AdminAlert variant="error">{error}</AdminAlert>}
 
-      <div className="rounded-2xl border border-stone-200/80 bg-white p-4 shadow-sm">
-        <div className="relative">
-          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
-          <input
-            className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pl-10 pr-4 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
-            placeholder="Search riders by name, email or phone…"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-          />
-        </div>
-        <p className="mt-3 text-xs text-stone-400">
-          Assign riders from the <Link href="/admin/orders" className="font-semibold text-violet-700 hover:underline">Orders</Link> page when an order is ready to go out.
+      <AdminSurface>
+        <SearchField
+          value={searchInput}
+          onChange={setSearchInput}
+          placeholder="Search riders by name, email or phone…"
+        />
+        <p className="mt-3 text-xs text-stone-400 dark:text-stone-500">
+          Assign riders from the{" "}
+          <Link href="/admin/orders" className="font-semibold text-brand-600 hover:underline dark:text-brand-400">
+            Orders
+          </Link>{" "}
+          page when an order is ready to go out.
         </p>
-      </div>
+      </AdminSurface>
 
       {showSkeleton ? (
         <div className="grid w-full gap-4">
@@ -193,17 +156,17 @@ export default function RidersPage() {
           ))}
         </div>
       ) : total === 0 ? (
-        <div className="rounded-2xl border border-dashed border-stone-200 bg-white py-16 text-center">
-          <Bike size={36} className="mx-auto text-stone-300" />
-          <p className="mt-3 font-medium text-stone-600">
-            {search ? "No riders match your search" : "No riders yet"}
-          </p>
-          {!search && (
-            <Link href="/admin/staff" className="btn-primary mt-4 inline-flex">
-              Add rider via Staff
-            </Link>
-          )}
-        </div>
+        <AdminEmptyState
+          icon={Bike}
+          title={search ? "No riders match your search" : "No riders yet"}
+          action={
+            !search ? (
+              <Link href="/admin/staff" className="btn-primary inline-flex">
+                Add rider via Staff
+              </Link>
+            ) : undefined
+          }
+        />
       ) : (
         <>
           <div className="grid w-full gap-4">
@@ -304,6 +267,6 @@ export default function RidersPage() {
           />
         </>
       )}
-    </div>
+    </AdminPage>
   );
 }

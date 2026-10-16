@@ -35,6 +35,7 @@ import {
 } from "./components/primitives";
 import { AdminScopeBanner } from "@/components/admin/AdminScopeBanner";
 import { RefreshButton } from "@/components/admin/RefreshButton";
+import { AdminAlert, AdminEmptyState, AdminPage, AdminPageHeader } from "@/components/admin/ui";
 import { ConfirmSheet } from "@/components/admin/ConfirmSheet";
 import { useBranch } from "@/modules/branches/BranchContext";
 import { pkr } from "@/lib/format";
@@ -446,35 +447,27 @@ export function InventoryModule() {
   }, [wasteData]);
 
   return (
-    <div className="min-w-0 space-y-5">
+    <AdminPage>
       <AdminScopeBanner variant="branch" />
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 font-display text-2xl font-bold text-stone-900 dark:text-stone-50">
-            Inventory
-            {!branchRequired && (
-              <TabHelp title={INVENTORY_TAB_HELP[tab].title} bullets={INVENTORY_TAB_HELP[tab].bullets} />
-            )}
-          </h1>
-          <p className="text-sm text-stone-500 dark:text-stone-400">
-            Stock, purchases, recipes, waste, and branch transfers.
-          </p>
-        </div>
-        <RefreshButton busy={loading} onClick={() => load()} />
-      </div>
+      <AdminPageHeader
+        title="Inventory"
+        description="Stock, purchases, recipes, waste, and branch transfers."
+        trailing={
+          !branchRequired ? (
+            <TabHelp title={INVENTORY_TAB_HELP[tab].title} bullets={INVENTORY_TAB_HELP[tab].bullets} />
+          ) : undefined
+        }
+        actions={<RefreshButton busy={loading} onClick={() => load()} />}
+      />
 
       {branchRequired && (
-        <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+        <AdminAlert variant="warning">
           Select <strong>one branch</strong> in the header — stock is tracked per branch.
-        </p>
+        </AdminAlert>
       )}
 
-      {error && (
-        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40">{error}</p>
-      )}
-      {msg && (
-        <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40">{msg}</p>
-      )}
+      {error && <AdminAlert variant="error">{error}</AdminAlert>}
+      {msg && <AdminAlert variant="success">{msg}</AdminAlert>}
 
       {!branchRequired && (
         <>
@@ -846,17 +839,25 @@ export function InventoryModule() {
                   <div className="rounded-xl bg-stone-50 p-2 dark:bg-stone-800/50"><p className="text-xs text-stone-500">Week</p><p className="font-bold">{pkr(wasteData?.totals.week ?? 0)}</p></div>
                   <div className="rounded-xl bg-stone-50 p-2 dark:bg-stone-800/50"><p className="text-xs text-stone-500">Month</p><p className="font-bold">{pkr(wasteData?.totals.month ?? 0)}</p></div>
                 </div>
-                {wasteChart.length > 0 && (
+                {wasteChart.length > 0 ? (
                   <div className="mt-4 h-[200px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={wasteChart} dataKey="value" nameKey="name" innerRadius={48} outerRadius={72} paddingAngle={2}>
-                        {wasteChart.map((_, i) => (<Cell key={i} fill={["#ea580c", "#f97316", "#fb923c", "#fdba74", "#fed7aa"][i % 5]} />))}
-                      </Pie>
-                      <Tooltip formatter={(v: number) => pkr(v)} />
-                    </PieChart>
-                  </ResponsiveContainer>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={wasteChart} dataKey="value" nameKey="name" innerRadius={48} outerRadius={72} paddingAngle={2}>
+                          {wasteChart.map((_, i) => (<Cell key={i} fill={["#ea580c", "#f97316", "#fb923c", "#fdba74", "#fed7aa"][i % 5]} />))}
+                        </Pie>
+                        <Tooltip formatter={(v: number) => pkr(v)} />
+                      </PieChart>
+                    </ResponsiveContainer>
                   </div>
+                ) : (
+                  <AdminEmptyState
+                    compact
+                    className="mt-4"
+                    icon={Trash2}
+                    title="No waste logged yet"
+                    description="Reason breakdown appears after you record waste."
+                  />
                 )}
               </InventoryPanel>
             </div>
@@ -1070,6 +1071,6 @@ export function InventoryModule() {
           await load();
         }}
       />
-    </div>
+    </AdminPage>
   );
 }

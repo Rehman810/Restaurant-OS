@@ -31,6 +31,7 @@ import { StatCard } from "@/components/admin/StatCard";
 import { RefreshButton } from "@/components/admin/RefreshButton";
 import { PipelineFlow } from "@/components/admin/PipelineFlow";
 import { RecentOrderRow } from "@/components/admin/RecentOrderRow";
+import { AdminEmptyState } from "@/components/admin/ui";
 import { OrderStatus } from "@/lib/types";
 
 function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: { name: string; value: number; dataKey: string }[]; label?: string }) {
@@ -93,6 +94,7 @@ export default function AdminDashboard() {
   const active =
     stats.awaitingConfirmation + stats.pending + stats.preparing + stats.outForDelivery;
   const maxTop = stats.topItems[0]?.qty || 1;
+  const hasChartActivity = stats.chart.some((d) => d.orders > 0 || d.revenue > 0);
 
   const needsName = !store?.settings.storeName?.trim();
   const showTwoFa = user?.role === "ADMIN" && !user.totpEnabled && !twoFaHidden;
@@ -187,7 +189,18 @@ export default function AdminDashboard() {
             </span>
           </div>
         </div>
-        <div className="mt-6 h-80 min-h-[320px] w-full">
+        <div className="relative mt-6 h-80 min-h-[320px] w-full">
+          {!hasChartActivity && (
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-white/80 dark:bg-stone-900/80">
+              <AdminEmptyState
+                compact
+                className="pointer-events-auto max-w-sm border-none bg-transparent dark:bg-transparent"
+                icon={TrendingUp}
+                title="No sales data yet"
+                description="Orders and revenue for the last 7 days will appear here."
+              />
+            </div>
+          )}
           <ResponsiveContainer width="100%" height="100%" minHeight={320}>
             <ComposedChart data={stats.chart} barGap={4} margin={{ top: 12, right: 12, left: 4, bottom: 8 }}>
               <defs>
@@ -243,34 +256,62 @@ export default function AdminDashboard() {
               All orders →
             </Link>
           </div>
-          <div className="space-y-2">
-            {stats.recentOrders.slice(0, 6).map((o) => (
-              <RecentOrderRow key={o.id} order={o} riders={stats.riders} onStatus={setStatus} onAssign={assign} />
-            ))}
-          </div>
+          {stats.recentOrders.length === 0 ? (
+            <AdminEmptyState
+              icon={ClipboardList}
+              title="No incoming orders"
+              description="When customers place orders, they appear here for quick status updates."
+              action={
+                <Link href="/admin/orders" className="text-sm font-bold text-brand-700 hover:underline dark:text-brand-400">
+                  View order history →
+                </Link>
+              }
+            />
+          ) : (
+            <div className="space-y-2">
+              {stats.recentOrders.slice(0, 6).map((o) => (
+                <RecentOrderRow key={o.id} order={o} riders={stats.riders} onStatus={setStatus} onAssign={assign} />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Sidebar widgets */}
         <div className="space-y-5 xl:col-span-2">
           <div className="rounded-2xl border border-stone-200/80 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900">
             <h2 className="font-display text-lg text-stone-900 dark:text-stone-50">Top sellers</h2>
-            <ul className="mt-4 space-y-4">
-              {stats.topItems.map((item, i) => (
-                <li key={item.name}>
-                  <div className="flex items-center justify-between gap-2 text-sm">
-                    <span className="truncate font-semibold text-stone-800">{item.name}</span>
-                    <span className="shrink-0 font-bold text-brand-700">{item.qty}</span>
-                  </div>
-                  <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-stone-100 dark:bg-stone-800">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-brand-600 to-orange-400 transition-all duration-700"
-                      style={{ width: `${(item.qty / maxTop) * 100}%` }}
-                    />
-                  </div>
-                  <p className="mt-1 text-xs font-medium text-stone-600">{pkr(item.revenue)} revenue</p>
-                </li>
-              ))}
-            </ul>
+            {stats.topItems.length === 0 ? (
+              <AdminEmptyState
+                compact
+                className="mt-4 border-stone-200/80 bg-white dark:border-stone-700 dark:bg-stone-900"
+                icon={PackageCheck}
+                title="No top sellers yet"
+                description="Best-selling dishes show up after your first orders."
+                action={
+                  <Link href="/admin/menu" className="text-xs font-bold text-brand-700 hover:underline dark:text-brand-400">
+                    Manage menu →
+                  </Link>
+                }
+              />
+            ) : (
+              <ul className="mt-4 space-y-4">
+                {stats.topItems.map((item) => (
+                  <li key={item.name}>
+                    <div className="flex items-center justify-between gap-2 text-sm">
+                      <span className="truncate font-semibold text-stone-800 dark:text-stone-200">{item.name}</span>
+                      <span className="shrink-0 font-bold text-brand-700 dark:text-brand-400">{item.qty}</span>
+                    </div>
+                    <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-stone-100 dark:bg-stone-800">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-brand-600 to-orange-400 transition-all duration-700"
+                        style={{ width: `${(item.qty / maxTop) * 100}%` }}
+                      />
+                    </div>
+                    <p className="mt-1 text-xs font-medium text-stone-600 dark:text-stone-400">{pkr(item.revenue)} revenue</p>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">

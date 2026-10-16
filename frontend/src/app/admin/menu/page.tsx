@@ -25,6 +25,7 @@ import { usePagination } from "@/hooks/usePagination";
 import { Pagination } from "@/components/Pagination";
 import { RefreshButton } from "@/components/admin/RefreshButton";
 import { AdminScopeBanner } from "@/components/admin/AdminScopeBanner";
+import { AdminPage, AdminPageHeader, AdminSurface, Segment } from "@/components/admin/ui";
 import { ConfirmSheet } from "@/components/admin/ConfirmSheet";
 import { CATEGORIES as DEFAULT_CATEGORIES, Category, Deal, MenuItem } from "@/lib/types";
 import { MenuFormSheet, MenuFormData } from "@/components/admin/MenuFormSheet";
@@ -468,50 +469,39 @@ export default function AdminMenu() {
   }
 
   return (
-    <div className="w-full space-y-5">
+    <AdminPage>
       <AdminScopeBanner variant="shared" />
-      <div className="rounded-2xl border border-stone-200/80 bg-white p-4 shadow-sm sm:p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-orange-600 text-white shadow-md">
-              <UtensilsCrossed size={22} />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-stone-900 sm:text-2xl">Menu management</h1>
-              <p className="mt-0.5 text-sm text-stone-500">Dishes, deals, and categories</p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
+      <AdminPageHeader
+        title="Menu management"
+        description="Dishes, deals, and categories"
+        icon={UtensilsCrossed}
+        actions={
+          <>
             <RefreshButton busy={loading || refreshing} onClick={() => load(true)} />
-            <div className="rounded-xl bg-stone-100 px-4 py-2.5 text-center">
-              <p className="text-[11px] text-stone-500">Dishes</p>
-              <p className="text-lg font-bold">{stats.total}</p>
+            <div className="rounded-xl bg-stone-100 px-4 py-2.5 text-center dark:bg-stone-800">
+              <p className="text-[11px] text-stone-500 dark:text-stone-400">Dishes</p>
+              <p className="text-lg font-bold text-stone-900 dark:text-stone-50">{stats.total}</p>
             </div>
-            <div className="rounded-xl bg-violet-50 px-4 py-2.5 text-center ring-1 ring-violet-100">
-              <p className="text-[11px] text-violet-600">Deals</p>
-              <p className="text-lg font-bold text-violet-800">{stats.activeDeals}/{stats.deals}</p>
+            <div className="rounded-xl bg-violet-50 px-4 py-2.5 text-center ring-1 ring-violet-100 dark:bg-violet-950/40 dark:ring-violet-900/50">
+              <p className="text-[11px] text-violet-600 dark:text-violet-300">Deals</p>
+              <p className="text-lg font-bold text-violet-800 dark:text-violet-200">{stats.activeDeals}/{stats.deals}</p>
             </div>
-          </div>
-        </div>
+          </>
+        }
+      />
 
-        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-stone-100 pt-4">
-          {[
-            { id: "dishes" as Tab, label: "Dishes", icon: UtensilsCrossed },
-            { id: "deals" as Tab, label: "Deals", icon: Sparkles },
-            { id: "categories" as Tab, label: "Categories", icon: Layers },
-          ].map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setTab(t.id)}
-              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${
-                tab === t.id ? "bg-stone-900 text-white" : "bg-stone-50 text-stone-600 ring-1 ring-stone-200 hover:bg-white"
-              }`}
-            >
-              <t.icon size={16} /> {t.label}
-            </button>
-          ))}
-          <div className="ml-auto flex gap-2">
+      <AdminSurface>
+        <div className="flex flex-wrap items-center gap-2">
+          <Segment
+            value={tab}
+            onChange={setTab}
+            options={[
+              { id: "dishes", label: "Dishes" },
+              { id: "deals", label: "Deals" },
+              { id: "categories", label: "Categories" },
+            ]}
+          />
+          <div className="ml-auto flex flex-wrap gap-2">
             {tab === "dishes" && (
               <button type="button" onClick={openAddDish} className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-500">
                 <Plus size={16} /> Add dish
@@ -529,7 +519,7 @@ export default function AdminMenu() {
             )}
           </div>
         </div>
-      </div>
+      </AdminSurface>
 
       {loadError && (
         <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{loadError}</p>
@@ -820,6 +810,6 @@ export default function AdminMenu() {
         }}
         onConfirm={confirmDelete}
       />
-    </div>
+    </AdminPage>
   );
 }

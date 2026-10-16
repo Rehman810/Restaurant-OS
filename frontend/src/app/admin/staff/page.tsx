@@ -5,7 +5,6 @@ import {
   Bike,
   ChefHat,
   Plus,
-  Search,
   ShieldCheck,
   UserCog,
   Users,
@@ -21,39 +20,17 @@ import { StaffRow, StaffTable } from "@/components/admin/StaffTable";
 import { StaffFormData, StaffFormSheet } from "@/components/admin/StaffFormSheet";
 import { usePoll } from "@/hooks/usePoll";
 import { AdminScopeBanner } from "@/components/admin/AdminScopeBanner";
+import {
+  AdminAlert,
+  AdminEmptyState,
+  AdminFilterBar,
+  AdminKpiCard,
+  AdminKpiGrid,
+  AdminPage,
+  AdminPageHeader,
+  SearchField,
+} from "@/components/admin/ui";
 import { useBranch } from "@/modules/branches/BranchContext";
-
-function KpiCard({
-  label,
-  value,
-  icon: Icon,
-  accent,
-}: {
-  label: string;
-  value: number;
-  icon: typeof Users;
-  accent: "brand" | "orange" | "sky" | "emerald";
-}) {
-  const styles = {
-    brand: "bg-brand-50 text-brand-700 ring-brand-100",
-    orange: "bg-orange-50 text-orange-700 ring-orange-100",
-    sky: "bg-sky-50 text-sky-700 ring-sky-100",
-    emerald: "bg-emerald-50 text-emerald-700 ring-emerald-100",
-  };
-  return (
-    <div className="rounded-2xl border border-stone-200/80 bg-white p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-medium text-stone-500">{label}</p>
-          <p className="mt-1 text-2xl font-bold text-stone-900">{value}</p>
-        </div>
-        <span className={`grid h-10 w-10 place-items-center rounded-xl ring-1 ${styles[accent]}`}>
-          <Icon size={18} />
-        </span>
-      </div>
-    </div>
-  );
-}
 
 function defaultBranchIds(selection: string, branches: { id: string; isDefault?: boolean }[]) {
   if (selection !== "all") return [selection];
@@ -177,22 +154,14 @@ export default function StaffPage() {
   const rangeEnd = Math.min(page * PAGE_SIZE.table, total);
 
   return (
-    <div className="w-full space-y-6">
+    <AdminPage>
       <AdminScopeBanner variant="branch" />
-      <div className="rounded-2xl border border-stone-200/80 bg-white p-4 shadow-sm sm:p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-orange-600 text-white shadow-md">
-              <UserCog size={22} />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-stone-900 sm:text-2xl">Staff</h1>
-              <p className="mt-0.5 text-sm text-stone-500">
-                Create chefs, riders, and cashiers. Assign branches in the table or when adding staff.
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
+      <AdminPageHeader
+        title="Staff"
+        description="Create chefs, riders, and cashiers. Assign branches in the table or when adding staff."
+        icon={UserCog}
+        actions={
+          <>
             <RefreshButton busy={loading || refreshing} onClick={refresh} />
             <button
               type="button"
@@ -200,63 +169,48 @@ export default function StaffPage() {
                 setForm({ ...emptyForm, branchIds: defaultBranchIds(selection, branches) });
                 setFormOpen(true);
               }}
-              className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-500"
+              className="btn-primary"
             >
               <Plus size={16} /> Add staff
             </button>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label="Total staff" value={stats.total} icon={Users} accent="brand" />
-        <KpiCard label="Chefs" value={stats.chefs} icon={ChefHat} accent="orange" />
-        <KpiCard label="Riders" value={stats.riders} icon={Bike} accent="sky" />
-        <KpiCard label="Active" value={stats.active} icon={ShieldCheck} accent="emerald" />
-      </div>
+      <AdminKpiGrid>
+        <AdminKpiCard label="Total staff" value={stats.total} icon={Users} accent="brand" />
+        <AdminKpiCard label="Chefs" value={stats.chefs} icon={ChefHat} accent="orange" />
+        <AdminKpiCard label="Riders" value={stats.riders} icon={Bike} accent="sky" />
+        <AdminKpiCard label="Active" value={stats.active} icon={ShieldCheck} accent="emerald" />
+      </AdminKpiGrid>
 
-      {error && (
-        <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p>
-      )}
-
+      {error && <AdminAlert variant="error">{error}</AdminAlert>}
       {msg && !(formOpen && msgTone === "err") && (
-        <p
-          className={`rounded-2xl border px-4 py-3 text-sm ${
-            msgTone === "ok"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-              : "border-red-200 bg-red-50 text-red-800"
-          }`}
-        >
-          {msg}
-        </p>
+        <AdminAlert variant={msgTone === "ok" ? "success" : "error"}>{msg}</AdminAlert>
       )}
 
-      <div className="rounded-2xl border border-stone-200/80 bg-white p-4 shadow-sm">
-        <div className="relative">
-          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
-          <input
-            className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pl-10 pr-4 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
-            placeholder="Search staff by name, email or phone…"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-          />
-        </div>
-      </div>
+      <AdminFilterBar>
+        <SearchField
+          value={searchInput}
+          onChange={setSearchInput}
+          placeholder="Search staff by name, email or phone…"
+        />
+      </AdminFilterBar>
 
       {showSkeleton ? (
         <div className="skeleton h-80 rounded-2xl" />
       ) : total === 0 ? (
-        <div className="rounded-2xl border border-dashed border-stone-200 bg-white py-16 text-center">
-          <Users size={36} className="mx-auto text-stone-300" />
-          <p className="mt-3 font-medium text-stone-600">
-            {search ? "No staff match your search" : "No staff yet"}
-          </p>
-          {!search && (
-            <button type="button" onClick={() => setFormOpen(true)} className="btn-primary mt-4">
-              Add first staff member
-            </button>
-          )}
-        </div>
+        <AdminEmptyState
+          icon={Users}
+          title={search ? "No staff match your search" : "No staff yet"}
+          action={
+            !search ? (
+              <button type="button" onClick={() => setFormOpen(true)} className="btn-primary">
+                Add first staff member
+              </button>
+            ) : undefined
+          }
+        />
       ) : (
         <>
           <StaffTable
@@ -303,6 +257,6 @@ export default function StaffPage() {
           patch(deactivateTarget.id, { isActive: false }).finally(() => setDeactivateTarget(null));
         }}
       />
-    </div>
+    </AdminPage>
   );
 }

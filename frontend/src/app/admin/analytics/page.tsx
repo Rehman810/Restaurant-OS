@@ -15,7 +15,6 @@ import {
 import {
   ArrowUpRight,
   BarChart3,
-  CalendarDays,
   ClipboardList,
   PackageCheck,
   ShoppingBag,
@@ -28,6 +27,8 @@ import { STATUS_LABEL, OrderStatus } from "@/lib/types";
 import { STATUS_THEME } from "@/lib/admin-status";
 import { usePoll } from "@/hooks/usePoll";
 import { RefreshButton } from "@/components/admin/RefreshButton";
+import { AdminAlert, AdminEmptyState, AdminPage, AdminPageHeader } from "@/components/admin/ui";
+import { Layers } from "lucide-react";
 import { formatDateSpanLabel } from "@/lib/order-dates";
 
 const PERIODS: { id: AnalyticsPeriod; label: string; short: string }[] = [
@@ -170,25 +171,18 @@ export default function AnalyticsPage() {
   const maxTopQty = data?.topItems[0]?.qty || 1;
 
   return (
-    <div className="w-full space-y-5">
-      {/* Toolbar */}
-      <div className="rounded-2xl border border-stone-200/80 bg-white p-4 shadow-sm sm:p-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-orange-600 text-white shadow-md shadow-brand-500/25">
-              <BarChart3 size={22} />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-stone-900 sm:text-2xl">Analytics</h1>
-              <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-sm text-stone-500">
-                <CalendarDays size={14} className="text-stone-400" />
-                {data ? formatDateSpanLabel(data.range.from, data.range.to) : "Loading…"}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="grid grid-cols-4 gap-1 rounded-xl bg-stone-100 p-1">
+    <AdminPage>
+      <AdminPageHeader
+        title="Analytics"
+        description={
+          data
+            ? formatDateSpanLabel(data.range.from, data.range.to)
+            : "Loading date range…"
+        }
+        icon={BarChart3}
+        actions={
+          <>
+            <div className="grid grid-cols-4 gap-1 rounded-xl border border-stone-200/80 bg-stone-50 p-1 dark:border-stone-700 dark:bg-stone-800/50">
               {PERIODS.map((p) => (
                 <button
                   key={p.id}
@@ -196,8 +190,8 @@ export default function AnalyticsPage() {
                   onClick={() => setPeriod(p.id)}
                   className={`rounded-lg px-2 py-2 text-center text-xs font-semibold transition sm:px-4 sm:text-sm ${
                     period === p.id
-                      ? "bg-white text-stone-900 shadow-sm ring-1 ring-stone-200/80"
-                      : "text-stone-500 hover:text-stone-800"
+                      ? "bg-white text-stone-900 shadow-sm dark:bg-stone-900 dark:text-stone-50"
+                      : "text-stone-500 hover:text-stone-800 dark:text-stone-400"
                   }`}
                 >
                   <span className="hidden sm:inline">{p.label}</span>
@@ -205,14 +199,12 @@ export default function AnalyticsPage() {
                 </button>
               ))}
             </div>
-            <RefreshButton busy={loading || refreshing} onClick={refresh} className="!bg-stone-900 !text-white hover:!bg-stone-800" />
-          </div>
-        </div>
-      </div>
+            <RefreshButton busy={loading || refreshing} onClick={refresh} />
+          </>
+        }
+      />
 
-      {error && (
-        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p>
-      )}
+      {error && <AdminAlert variant="error">{error}</AdminAlert>}
 
       {showSkeleton || !data ? (
         <div className="space-y-4">
@@ -349,11 +341,13 @@ export default function AnalyticsPage() {
                     </ComposedChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="flex h-full flex-col items-center justify-center rounded-xl bg-stone-50 text-center">
-                    <ShoppingBag size={36} className="text-stone-300" />
-                    <p className="mt-3 font-medium text-stone-600">No sales in this period</p>
-                    <p className="mt-1 text-sm text-stone-400">Pick another date range above</p>
-                  </div>
+                  <AdminEmptyState
+                    compact
+                    className="h-full border-none bg-stone-50 dark:bg-stone-800/30"
+                    icon={ShoppingBag}
+                    title="No sales in this period"
+                    description="Try another date range above."
+                  />
                 )}
               </div>
             </Panel>
@@ -415,7 +409,12 @@ export default function AnalyticsPage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="py-6 text-center text-sm text-stone-500">No orders yet</p>
+                  <AdminEmptyState
+                    compact
+                    icon={ClipboardList}
+                    title="No orders in this period"
+                    description="Status breakdown appears when orders are placed."
+                  />
                 )}
               </Panel>
             </div>
@@ -472,7 +471,12 @@ export default function AnalyticsPage() {
                   </table>
                 </div>
               ) : (
-                <p className="py-8 text-center text-sm text-stone-500">No items sold</p>
+                <AdminEmptyState
+                  compact
+                  icon={PackageCheck}
+                  title="No items sold"
+                  description="Best sellers rank by quantity in the selected period."
+                />
               )}
             </Panel>
 
@@ -502,12 +506,17 @@ export default function AnalyticsPage() {
                   })}
                 </ul>
               ) : (
-                <p className="py-8 text-center text-sm text-stone-500">No category data</p>
+                <AdminEmptyState
+                  compact
+                  icon={Layers}
+                  title="No category data"
+                  description="Revenue by menu section shows after sales."
+                />
               )}
             </Panel>
           </div>
         </>
       )}
-    </div>
+    </AdminPage>
   );
 }

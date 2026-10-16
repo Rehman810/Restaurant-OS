@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Check, MapPin, Plus, RefreshCw, Search, Truck, X } from "lucide-react";
+import { Check, MapPin, Plus, RefreshCw, Truck, X } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { pkr } from "@/lib/format";
 import { PAGE_SIZE } from "@/lib/pagination";
@@ -10,6 +10,14 @@ import { Pagination } from "@/components/Pagination";
 import { RefreshButton } from "@/components/admin/RefreshButton";
 import { DeliveryArea } from "@/lib/types";
 import { AdminScopeBanner } from "@/components/admin/AdminScopeBanner";
+import {
+  AdminEmptyState,
+  AdminFilterBar,
+  AdminPage,
+  AdminPageHeader,
+  SearchField,
+  Segment,
+} from "@/components/admin/ui";
 
 export default function AdminAreasPage() {
   const [areas, setAreas] = useState<DeliveryArea[]>([]);
@@ -120,23 +128,22 @@ export default function AdminAreasPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <AdminPage>
       <AdminScopeBanner variant="shared" />
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-brand-600">Delivery zones</p>
-          <h1 className="font-display text-3xl text-stone-900">Delivery areas</h1>
-          <p className="mt-1 text-sm text-stone-500">
-            {activeCount} of {areas.length} areas enabled for delivery
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => setShowAdd((v) => !v)} className="btn-primary">
-            <Plus size={15} /> Add area
-          </button>
-          <RefreshButton busy={showSkeleton} onClick={() => load(true)} />
-        </div>
-      </div>
+      <AdminPageHeader
+        title="Delivery areas"
+        description={`${activeCount} of ${areas.length} areas enabled for delivery`}
+        icon={MapPin}
+        iconAccent="emerald"
+        actions={
+          <>
+            <button type="button" onClick={() => setShowAdd((v) => !v)} className="btn-primary">
+              <Plus size={15} /> Add area
+            </button>
+            <RefreshButton busy={showSkeleton} onClick={() => load(true)} />
+          </>
+        }
+      />
 
       {showAdd && (
         <form
@@ -201,40 +208,39 @@ export default function AdminAreasPage() {
         </form>
       )}
 
-      <div className="flex flex-wrap gap-2">
-        <div className="relative min-w-[220px] flex-1">
-          <Search
-            className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-stone-400"
-            size={16}
-            strokeWidth={2}
-          />
-          <input
-            className="w-full rounded-2xl border border-stone-200 bg-white py-3 pl-11 pr-4 text-sm outline-none transition placeholder:text-stone-400 focus:border-brand-400 focus:ring-4 focus:ring-brand-100"
-            placeholder="Search area…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
-        <button
-          type="button"
-          onClick={() => setFilter("all")}
-          className={`rounded-full px-4 py-2 text-sm font-semibold ${filter === "all" ? "bg-stone-900 text-white" : "bg-white text-stone-600 shadow-card"}`}
-        >
-          All areas
-        </button>
-        <button
-          type="button"
-          onClick={() => setFilter("active")}
-          className={`rounded-full px-4 py-2 text-sm font-semibold ${filter === "active" ? "bg-brand-600 text-white" : "bg-white text-stone-600 shadow-card"}`}
-        >
-          Delivering only
-        </button>
-      </div>
+      <AdminFilterBar className="lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+        <SearchField value={query} onChange={setQuery} placeholder="Search area…" />
+        <Segment
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { id: "all", label: "All areas" },
+            { id: "active", label: "Delivering only" },
+          ]}
+        />
+      </AdminFilterBar>
 
       {showSkeleton ? (
         <div className="skeleton h-80 rounded-2xl" />
+      ) : filtered.length === 0 ? (
+        <AdminEmptyState
+          icon={MapPin}
+          title={areas.length === 0 ? "No delivery areas yet" : "No areas match your search"}
+          description={
+            areas.length === 0
+              ? "Add zones and delivery charges so customers can order to their neighborhood."
+              : "Try a different search or filter."
+          }
+          action={
+            areas.length === 0 ? (
+              <button type="button" onClick={() => setShowAdd(true)} className="btn-primary">
+                <Plus size={15} /> Add area
+              </button>
+            ) : undefined
+          }
+        />
       ) : (
-      <div className="overflow-x-auto rounded-2xl border border-stone-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-2xl border border-stone-200 bg-white shadow-sm dark:border-stone-700 dark:bg-stone-900">
         <table className="w-full min-w-[640px] table-fixed text-left text-sm">
           <colgroup>
             <col className="w-[46%]" />
@@ -295,9 +301,6 @@ export default function AdminAreasPage() {
             ))}
           </tbody>
         </table>
-        {filtered.length === 0 && (
-          <p className="px-5 py-12 text-center text-sm text-stone-500">No areas match your search.</p>
-        )}
       </div>
       )}
 
@@ -312,9 +315,9 @@ export default function AdminAreasPage() {
         />
       )}
 
-      <p className="text-xs text-stone-500">
+      <p className="text-xs text-stone-500 dark:text-stone-400">
         Customers only see areas marked <strong>On</strong>. Charge shown is added to their order total ({pkr(150)}–{pkr(250)} typical).
       </p>
-    </div>
+    </AdminPage>
   );
 }

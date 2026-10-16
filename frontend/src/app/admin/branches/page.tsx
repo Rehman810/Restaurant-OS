@@ -17,30 +17,16 @@ import { useBranch } from "@/modules/branches/BranchContext";
 import { RefreshButton } from "@/components/admin/RefreshButton";
 import { BranchFormSheet, type BranchFormData } from "@/components/admin/BranchFormSheet";
 import { ConfirmSheet } from "@/components/admin/ConfirmSheet";
+import {
+  AdminAlert,
+  AdminEmptyState,
+  AdminKpiCard,
+  AdminKpiGrid,
+  AdminPage,
+  AdminPageHeader,
+} from "@/components/admin/ui";
 
 const emptyForm: BranchFormData = { name: "", code: "", address: "", phone: "", isDefault: false };
-
-function KpiCard({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string;
-  value: string | number;
-  icon: typeof Building2;
-}) {
-  return (
-    <div className="rounded-2xl border border-stone-200/80 bg-white p-4 shadow-sm dark:border-stone-700 dark:bg-stone-900">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">{label}</p>
-        <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-950/50 dark:text-brand-400">
-          <Icon size={18} />
-        </span>
-      </div>
-      <p className="mt-2 text-2xl font-bold text-stone-900 dark:text-stone-50">{value}</p>
-    </div>
-  );
-}
 
 function branchToForm(b: Branch): BranchFormData {
   return {
@@ -190,39 +176,26 @@ export default function BranchesPage() {
   }
 
   return (
-    <div className="w-full space-y-6">
-      <div className="rounded-2xl border border-stone-200/80 bg-white p-4 shadow-sm sm:p-5 dark:border-stone-700 dark:bg-stone-900">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-orange-600 text-white shadow-md">
-              <Building2 size={22} />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-stone-900 sm:text-2xl dark:text-stone-50">Branches</h1>
-              <p className="mt-0.5 max-w-xl text-sm text-stone-500 dark:text-stone-400">
-                Each outlet has its own kitchen queue, POS, and orders. Use the header switcher to filter the admin
-                panel. Per-outlet contact details live here—not in global Settings.
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
+    <AdminPage>
+      <AdminPageHeader
+        title="Branches"
+        description="Each outlet has its own kitchen queue, POS, and orders. Use the header switcher to filter the admin panel."
+        icon={Building2}
+        actions={
+          <>
             <RefreshButton busy={loading || refreshing} onClick={() => load(true)} />
-            <button
-              type="button"
-              onClick={openCreate}
-              className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-500"
-            >
+            <button type="button" onClick={openCreate} className="btn-primary">
               <Plus size={16} /> Add branch
             </button>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <KpiCard label="Outlets" value={stats.total} icon={Building2} />
-        <KpiCard label="Active" value={stats.active} icon={Star} />
-        <KpiCard label="Staff assigned" value={stats.staff} icon={Users} />
-      </div>
+      <AdminKpiGrid className="sm:grid-cols-3 xl:grid-cols-3">
+        <AdminKpiCard label="Outlets" value={stats.total} icon={Building2} accent="brand" />
+        <AdminKpiCard label="Active" value={stats.active} icon={Star} accent="amber" />
+        <AdminKpiCard label="Staff assigned" value={stats.staff} icon={Users} accent="sky" />
+      </AdminKpiGrid>
 
       {msg && (
         <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
@@ -242,14 +215,16 @@ export default function BranchesPage() {
           <div className="skeleton h-44 rounded-2xl" />
         </div>
       ) : branches.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-stone-200 bg-white py-16 text-center dark:border-stone-700 dark:bg-stone-900">
-          <Building2 size={40} className="mx-auto text-stone-300 dark:text-stone-600" />
-          <p className="mt-3 font-medium text-stone-600 dark:text-stone-300">No branches yet</p>
-          <p className="mt-1 text-sm text-stone-500">Add your first outlet to run multi-location kitchen and POS.</p>
-          <button type="button" onClick={openCreate} className="btn-primary mt-5">
-            <Plus size={16} /> Add branch
-          </button>
-        </div>
+        <AdminEmptyState
+          icon={Building2}
+          title="No branches yet"
+          description="Add your first outlet to run multi-location kitchen and POS."
+          action={
+            <button type="button" onClick={openCreate} className="btn-primary">
+              <Plus size={16} /> Add branch
+            </button>
+          }
+        />
       ) : (
         <ul className="grid gap-4 lg:grid-cols-2">
           {branches.map((b) => (
@@ -381,6 +356,6 @@ export default function BranchesPage() {
         onClose={() => setDeactivateTarget(null)}
         onConfirm={() => void confirmDeactivate()}
       />
-    </div>
+    </AdminPage>
   );
 }

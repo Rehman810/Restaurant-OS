@@ -17,14 +17,14 @@ export function SettingsSection({
 }: SettingsSectionProps) {
   return (
     <section
-      className={`overflow-hidden rounded-3xl border border-stone-200/80 bg-white shadow-sm dark:border-stone-700 dark:bg-stone-900 ${className}`}
+      className={`overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-sm dark:border-stone-700 dark:bg-stone-900 ${className}`}
     >
       <div className="flex items-start gap-3 border-b border-stone-100 px-5 py-4 dark:border-stone-700 sm:px-6">
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-950/50 dark:text-brand-400">
           <Icon size={18} />
         </span>
         <div className="min-w-0">
-          <h2 className="font-display text-lg text-stone-900 dark:text-stone-50">{title}</h2>
+          <h2 className="font-display text-base font-bold text-stone-900 dark:text-stone-50">{title}</h2>
           {description && <p className="mt-0.5 text-sm text-stone-500 dark:text-stone-400">{description}</p>}
         </div>
       </div>

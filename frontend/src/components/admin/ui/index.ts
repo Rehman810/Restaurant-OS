@@ -1,0 +1,31 @@
+export {
+  AdminAlert,
+  AdminEmptyState,
+  AdminFilterBar,
+  AdminKpiCard,
+  AdminKpiGrid,
+  AdminPage,
+  AdminPageHeader,
+  AdminPanel,
+  AdminSurface,
+} from "./AdminPage";
+
+export {
+  DateInput,
+  EmptyRow,
+  Field,
+  InfoTooltip,
+  IngredientPicker,
+  InventoryPanel,
+  InventoryTable,
+  MetricCard,
+  Modal,
+  MovementTypePill,
+  PaymentPill,
+  SearchField,
+  Segment,
+  SelectField,
+  TabHelp,
+  TablePagination,
+  TextInput,
+} from "@/modules/inventory/components/primitives";

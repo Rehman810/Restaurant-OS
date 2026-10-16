@@ -11,6 +11,7 @@ import {
   Mail,
   Phone,
   Store,
+  Palette,
   Plus,
   Save,
   Settings,
@@ -29,6 +30,7 @@ import { isStoreOpen, generatedClosedMessage } from "@/lib/store-hours";
 import { validateSettingsInput } from "@/lib/settings-validate";
 import { PromoBanner, StoreSettings } from "@/lib/types";
 import { AdminScopeBanner } from "@/components/admin/AdminScopeBanner";
+import { applyBrandTheme, normalizeHexColor } from "@/lib/brand-theme";
 
 type SettingsPayload = { settings: StoreSettings; banners: PromoBanner[] };
 
@@ -74,6 +76,11 @@ export default function AdminSettingsPage() {
   useEffect(() => {
     load().catch(() => setMsg("Could not load settings."));
   }, []);
+
+  useEffect(() => {
+    if (!settings) return;
+    applyBrandTheme(settings.primaryColor, settings.accentColor);
+  }, [settings?.primaryColor, settings?.accentColor]);
 
   async function onSave(e?: FormEvent) {
     e?.preventDefault();
@@ -409,6 +416,69 @@ export default function AdminSettingsPage() {
                 onChange={(e) => setSettings({ ...settings, footerText: e.target.value })}
               />
             </SettingsField>
+          </div>
+        </SettingsSection>
+        )}
+
+        {tab === "store" && (
+        <SettingsSection
+          icon={Palette}
+          title="Theme colors"
+          description="Primary and accent colors for your storefront, checkout, and admin accents. Save to apply everywhere."
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <SettingsField label="Primary color" hint="Buttons, links, and highlights.">
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  aria-label="Primary color picker"
+                  className="h-11 w-14 shrink-0 cursor-pointer rounded-xl border border-stone-200 bg-white p-1"
+                  value={normalizeHexColor(settings.primaryColor, "#ea580c")}
+                  onChange={(e) => setSettings({ ...settings, primaryColor: e.target.value })}
+                />
+                <input
+                  className="input flex-1 font-mono text-sm"
+                  value={settings.primaryColor ?? "#ea580c"}
+                  onChange={(e) => setSettings({ ...settings, primaryColor: e.target.value })}
+                  placeholder="#ea580c"
+                />
+              </div>
+              {fieldErrors.primaryColor && <p className="mt-1 text-xs text-rose-700">{fieldErrors.primaryColor}</p>}
+            </SettingsField>
+            <SettingsField label="Accent color" hint="Hover states and darker gradients.">
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  aria-label="Accent color picker"
+                  className="h-11 w-14 shrink-0 cursor-pointer rounded-xl border border-stone-200 bg-white p-1"
+                  value={normalizeHexColor(settings.accentColor, "#c2410c")}
+                  onChange={(e) => setSettings({ ...settings, accentColor: e.target.value })}
+                />
+                <input
+                  className="input flex-1 font-mono text-sm"
+                  value={settings.accentColor ?? "#c2410c"}
+                  onChange={(e) => setSettings({ ...settings, accentColor: e.target.value })}
+                  placeholder="#c2410c"
+                />
+              </div>
+              {fieldErrors.accentColor && <p className="mt-1 text-xs text-rose-700">{fieldErrors.accentColor}</p>}
+            </SettingsField>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-stone-200 bg-stone-50 p-4 dark:border-stone-700 dark:bg-stone-800/40">
+            <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Preview</span>
+            <button type="button" className="btn-primary pointer-events-none">Order now</button>
+            <span
+              className="rounded-full px-3 py-1 text-xs font-bold text-white"
+              style={{ backgroundColor: normalizeHexColor(settings.primaryColor, "#ea580c") }}
+            >
+              Badge
+            </span>
+            <span
+              className="text-sm font-semibold"
+              style={{ color: normalizeHexColor(settings.accentColor, "#c2410c") }}
+            >
+              Accent text
+            </span>
           </div>
         </SettingsSection>
         )}

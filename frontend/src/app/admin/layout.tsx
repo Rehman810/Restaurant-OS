@@ -21,7 +21,7 @@ import { PublicStore } from "@/lib/types";
 const SIDEBAR_KEY = "uff-admin-sidebar-collapsed";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading, logout, logoutEverywhere } = useAuth();
+  const { user, loading, logout } = useAuth();
   const store = useStore();
   const storeName = storeDisplayName(store?.settings);
   const router = useRouter();
@@ -29,11 +29,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [kitchenOpen, setKitchenOpen] = useState<boolean | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [now, setNow] = useState(() => new Date());
   const [pendingDineIn, setPendingDineIn] = useState(0);
   const { theme, toggle: toggleTheme } = useAdminTheme();
 
   useEffect(() => {
     setCollapsed(localStorage.getItem(SIDEBAR_KEY) === "1");
+  }, []);
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 30_000);
+    return () => window.clearInterval(id);
   }, []);
 
   function toggleSidebar() {
@@ -235,48 +241,36 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             ))}
           </nav>
 
-          <div className={`relative hidden border-t border-orange-100/80 p-3 dark:border-stone-700 lg:block ${collapsed ? "px-2" : ""}`}>
-            <button
-              type="button"
-              onClick={() => setMenuOpen((open) => !open)}
-              className={`flex w-full items-center rounded-xl px-2 py-2 text-left hover:bg-stone-50 dark:hover:bg-stone-800 ${collapsed ? "justify-center" : "gap-2"}`}
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-            >
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-100 text-sm font-bold text-brand-800">
-                {user.name.slice(0, 1).toUpperCase()}
-              </span>
-              {!collapsed && (
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold text-stone-900 dark:text-stone-100">{user.name}</span>
-                  <span className="block truncate text-xs text-stone-400 dark:text-stone-500">{user.email}</span>
+          <div className={`hidden border-t border-orange-100/80 p-3 dark:border-stone-700 lg:block ${collapsed ? "px-2" : ""}`}>
+            <div className={`flex items-center gap-2 ${collapsed ? "flex-col" : ""}`}>
+              <div
+                className={`flex min-w-0 flex-1 items-center ${collapsed ? "justify-center" : "gap-2"}`}
+                title={user.email}
+              >
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-100 text-sm font-bold text-brand-800 dark:bg-brand-950 dark:text-brand-200">
+                  {user.name.slice(0, 1).toUpperCase()}
                 </span>
-              )}
-            </button>
-            {menuOpen && (
-              <div role="menu" className="absolute bottom-16 left-3 z-40 w-52 rounded-xl border border-stone-200 bg-white p-1 shadow-lg dark:border-stone-600 dark:bg-stone-800">
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50 dark:text-stone-200 dark:hover:bg-stone-700"
-                  onClick={() => { setMenuOpen(false); logout(); router.push("/"); }}
-                >
-                  <LogOut size={14} /> Sign out
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50 dark:text-stone-200 dark:hover:bg-stone-700"
-                  onClick={() => { setMenuOpen(false); void logoutEverywhere().then(() => router.push("/")); }}
-                >
-                  Sign out everywhere
-                </button>
+                {!collapsed && (
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-stone-900 dark:text-stone-100">{user.name}</span>
+                    <span className="block truncate text-xs text-stone-400 dark:text-stone-500">{user.role}</span>
+                  </span>
+                )}
               </div>
-            )}
+              <button
+                type="button"
+                onClick={() => { logout(); router.push("/"); }}
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-red-200 bg-red-50 text-red-600 shadow-sm transition hover:border-red-300 hover:bg-red-100 hover:text-red-700 dark:border-red-900/60 dark:bg-red-950/50 dark:text-red-400 dark:hover:bg-red-950 dark:hover:text-red-300"
+                aria-label="Log out"
+                title="Log out"
+              >
+                <LogOut size={17} />
+              </button>
+            </div>
             <div className={collapsed ? "mt-2 text-center" : "mt-3 border-t border-orange-100/80 pt-3 px-1 dark:border-stone-700"}>
               <PoweredBy
                 variant={collapsed ? "minimal" : "inline"}
-                className="[&_a]:text-brand-600 [&_a:hover]:text-brand-800"
+                className="[&_a]:font-bold [&_a]:text-violet-600 [&_a:hover]:text-violet-700 dark:[&_a]:text-violet-400 dark:[&_a:hover]:text-violet-300"
               />
             </div>
           </div>
@@ -302,36 +296,32 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             >
               {collapsed ? <PanelLeft size={16} /> : <PanelLeftClose size={16} />}
             </button>
-            <p className="text-sm font-bold text-stone-900 dark:text-stone-100">
-              <span className="mr-2">{storeName}</span>
-              <span className="font-medium text-stone-500 dark:text-stone-400">
-                {new Date().toLocaleDateString("en-US", { weekday: "long", day: "numeric", month: "long" })}
-              </span>
-            </p>
+            <div className="min-w-0 leading-tight">
+              <p className="font-display text-base font-semibold text-stone-800 dark:text-stone-100 sm:text-lg">
+                {now.toLocaleDateString("en-US", { weekday: "long" })}
+              </p>
+              <p className="text-sm font-medium text-stone-600 dark:text-stone-400 sm:text-base">
+                {now.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" })}
+                <span className="mx-1.5 text-stone-300 dark:text-stone-600">·</span>
+                {now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+              </p>
+            </div>
           </div>
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-2.5">
             <BranchSwitcher />
-            <AdminThemeToggle theme={theme} onToggle={toggleTheme} showLabel className="hidden sm:inline-flex" />
             <span
-              className={`hidden items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold sm:flex ${
-                kitchenOpen === false
-                  ? "bg-amber-50 text-amber-800"
-                  : "bg-emerald-50 text-emerald-700"
-              }`}
+              className="hidden h-9 items-center gap-1.5 border-l border-stone-200 pl-2.5 text-xs font-medium text-stone-600 dark:border-stone-700 dark:text-stone-400 sm:inline-flex"
+              title={kitchenOpen === false ? "Kitchen is closed to new orders" : "Kitchen accepting orders"}
             >
               <span
-                className={`h-1.5 w-1.5 rounded-full ${
-                  kitchenOpen === false ? "bg-amber-500" : "bg-emerald-500"
+                className={`h-2 w-2 shrink-0 rounded-full ${
+                  kitchenOpen === false ? "bg-amber-500" : kitchenOpen === null ? "bg-stone-300" : "bg-emerald-500"
                 }`}
+                aria-hidden
               />
-              {kitchenOpen === false ? "Kitchen offline" : "Kitchen online"}
+              {kitchenOpen === false ? "Closed" : kitchenOpen === null ? "Kitchen" : "Open"}
             </span>
-            <Link
-              href="/"
-              className="hidden rounded-full border border-brand-200 bg-white px-3 py-1.5 text-xs font-semibold text-brand-700 transition hover:bg-brand-50 dark:border-brand-800 dark:bg-stone-800 dark:text-brand-300 dark:hover:bg-stone-700 sm:inline"
-            >
-              View storefront →
-            </Link>
+            <AdminThemeToggle theme={theme} onToggle={toggleTheme} className="hidden sm:inline-flex" />
             <div className="relative">
               <button
                 type="button"
@@ -346,18 +336,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   <button
                     type="button"
                     role="menuitem"
-                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50 dark:text-stone-200 dark:hover:bg-stone-700"
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
                     onClick={() => { setMenuOpen(false); logout(); router.push("/"); }}
                   >
-                    <LogOut size={14} /> Sign out
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50 dark:text-stone-200 dark:hover:bg-stone-700"
-                    onClick={() => { setMenuOpen(false); void logoutEverywhere().then(() => router.push("/")); }}
-                  >
-                    Sign out everywhere
+                    <LogOut size={14} /> Log out
                   </button>
                 </div>
               )}

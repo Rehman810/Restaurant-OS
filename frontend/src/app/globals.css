@@ -198,23 +198,23 @@ h4 {
 
 .kanban-scroll {
   scrollbar-width: thin;
-  scrollbar-color: #fb923c #fff7ed;
+  scrollbar-color: #d6d3d1 transparent;
   scrollbar-gutter: stable;
 }
 .kanban-scroll::-webkit-scrollbar {
   width: 8px;
 }
 .kanban-scroll::-webkit-scrollbar-track {
-  background: #fff7ed;
+  background: transparent;
   margin: 4px 0;
   border-radius: 99px;
 }
 .kanban-scroll::-webkit-scrollbar-thumb {
-  background: #fdba74;
+  background: #d6d3d1;
   border-radius: 99px;
 }
 .kanban-scroll::-webkit-scrollbar-thumb:hover {
-  background: #fb923c;
+  background: #a8a29e;
 }
 
 /* Kanban — earlier columns look inactive while dragging forward */
@@ -232,12 +232,34 @@ h4 {
   will-change: transform;
 }
 
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d6d3d1 transparent;
+}
+
 ::-webkit-scrollbar {
-  width: 10px;
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #fdba74;
+  background: #d6d3d1;
   border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a29e;
+}
+
+[data-admin-theme="dark"] * {
+  scrollbar-color: #57534e transparent;
+}
+[data-admin-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: #57534e;
+}
+[data-admin-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: #78716c;
 }
 
 /* Inventory lists — subtle scrollbars in tight panels */
@@ -265,7 +287,7 @@ h4 {
 }
 
 [data-admin-theme="dark"] .input {
-  @apply border-stone-600 bg-stone-800/95 text-stone-100 placeholder:text-stone-500 focus:border-brand-500 focus:ring-brand-900/50;
+  @apply border-stone-600 bg-stone-800/95 text-stone-100 placeholder:text-stone-500 focus:border-brand-500 focus:ring-4 focus:ring-stone-700/40;
 }
 
 [data-admin-theme="dark"] .btn-ghost {
@@ -286,13 +308,7 @@ h4 {
 }
 
 [data-admin-theme="dark"] .kanban-scroll {
-  scrollbar-color: #ea580c #292524;
-}
-[data-admin-theme="dark"] .kanban-scroll::-webkit-scrollbar-track {
-  background: #292524;
-}
-[data-admin-theme="dark"] .kanban-scroll::-webkit-scrollbar-thumb {
-  background: #c2410c;
+  scrollbar-color: #57534e transparent;
 }
 
 [data-admin-theme="dark"] .drawer-backdrop {

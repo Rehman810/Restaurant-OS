@@ -4,6 +4,7 @@ export type SettingsErrors = Record<string, string>;
 
 const PHONE = /^[+0-9][0-9\s().-]{6,19}$/;
 const URL = /^https?:\/\/[^\s]+$/i;
+const HEX_COLOR = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
 function optionalText(value: unknown) {
   if (value === undefined || value === null) return "";
@@ -27,6 +28,14 @@ export function validateSettingsInput(body: Record<string, unknown>): SettingsEr
     if (body[key] === undefined) continue;
     const value = optionalText(body[key]);
     if (value && !URL.test(value)) errors[key] = "Enter a full http or https URL, or leave it blank.";
+  }
+
+  for (const key of ["primaryColor", "accentColor"] as const) {
+    if (body[key] === undefined) continue;
+    const value = optionalText(body[key]);
+    if (!value) continue;
+    const hex = value.startsWith("#") ? value : `#${value}`;
+    if (!HEX_COLOR.test(hex)) errors[key] = "Use a hex color like #ea580c.";
   }
 
   if (body.latitude !== undefined && body.latitude !== null && body.latitude !== "") {

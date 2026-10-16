@@ -34,12 +34,6 @@ export function BranchSwitcher({ className = "" }: { className?: string }) {
 
   const canPickAll = user.role === "ADMIN";
   const label = selection === "all" ? "All branches" : activeBranch?.name ?? "Branch";
-  const sublabel =
-    selection === "all"
-      ? `${branches.length} outlets`
-      : activeBranch?.code
-        ? activeBranch.code
-        : "Active outlet";
 
   function pick(id: BranchSelection) {
     setSelection(id);
@@ -53,23 +47,18 @@ export function BranchSwitcher({ className = "" }: { className?: string }) {
         aria-expanded={open}
         aria-haspopup="listbox"
         onClick={() => setOpen((v) => !v)}
-        className="group flex max-w-[10.5rem] items-center gap-2 rounded-2xl border border-stone-200/90 bg-white/95 py-2 pl-2.5 pr-2 shadow-sm ring-brand-500/0 transition hover:border-brand-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 dark:border-stone-600 dark:bg-stone-800/95 dark:hover:border-stone-500 sm:max-w-[15rem]"
+        className="group flex h-9 max-w-[11rem] items-center gap-1.5 rounded-xl border border-stone-200/90 bg-white/95 py-0 pl-2 pr-1.5 shadow-sm transition hover:border-brand-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 dark:border-stone-600 dark:bg-stone-800/95 dark:hover:border-stone-500 sm:max-w-[13rem]"
       >
         <span
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-inner"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 text-white"
         >
-          {selection === "all" ? <Layers size={16} strokeWidth={2.25} /> : <Building2 size={16} strokeWidth={2.25} />}
+          {selection === "all" ? <Layers size={14} strokeWidth={2.25} /> : <Building2 size={14} strokeWidth={2.25} />}
         </span>
-        <span className="min-w-0 flex-1 text-left">
-          <span className="block truncate text-xs font-bold leading-tight text-stone-900 dark:text-stone-50 sm:text-sm">
-            {label}
-          </span>
-          <span className="block truncate text-[10px] font-medium uppercase tracking-wide text-stone-400 dark:text-stone-500 sm:text-[11px]">
-            {sublabel}
-          </span>
+        <span className="min-w-0 flex-1 truncate text-left text-xs font-semibold text-stone-900 dark:text-stone-50">
+          {label}
         </span>
         <ChevronDown
-          size={16}
+          size={14}
           className={`shrink-0 text-stone-400 transition group-hover:text-stone-600 dark:group-hover:text-stone-300 ${open ? "rotate-180" : ""}`}
         />
       </button>
