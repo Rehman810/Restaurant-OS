@@ -23,12 +23,13 @@ export default defineConfig({
           reuseExistingServer: false,
           env: {
             ...process.env,
-            DATABASE_URL: process.env.DATABASE_URL!,
+            DATABASE_URL: process.env.DATABASE_URL,
             E2E_API_PORT: "4000",
+            E2E_SKIP_DB_SETUP: process.env.E2E_SKIP_DB_SETUP || "0",
           },
         },
         {
-          command: "npm run start",
+          command: "npx next start -H 127.0.0.1 -p 3000",
           cwd: __dirname,
           url: baseURL,
           timeout: 180_000,
@@ -36,7 +37,9 @@ export default defineConfig({
           env: {
             ...process.env,
             PORT: "3000",
+            HOSTNAME: "127.0.0.1",
             NEXT_PUBLIC_API_URL: "http://127.0.0.1:4000",
+            API_PROXY_TARGET: "http://127.0.0.1:4000",
           },
         },
       ]

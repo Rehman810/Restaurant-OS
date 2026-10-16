@@ -26,7 +26,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: package-lock.json
       - run: npm install
@@ -56,20 +56,29 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/restaurant_os_e2e?schema=public
       JWT_SECRET: e2e-ci-jwt-secret-with-at-least-32-characters
       E2E_CI: "1"
+      E2E_SKIP_DB_SETUP: "1"
       E2E_BASE_URL: http://127.0.0.1:3000
       E2E_API_URL: http://127.0.0.1:4000
       SEED_ADMIN_PASSWORD: admin
       E2E_CASHIER_PASSWORD: admin
       CLIENT_URL: http://127.0.0.1:3000
+      API_PROXY_TARGET: http://127.0.0.1:4000
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: package-lock.json
       - run: npm install
         working-directory: .
+      - name: Prepare E2E database
+        working-directory: backend
+        run: |
+          npx prisma migrate deploy
+          npx tsx prisma/seed.ts
+        env:
+          NODE_ENV: development
       - run: npm run build -w restaurant-os-web
         env:
           NEXT_PUBLIC_API_URL: http://127.0.0.1:4000

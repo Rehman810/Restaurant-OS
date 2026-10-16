@@ -2,16 +2,30 @@ import { test, expect } from "@playwright/test";
 
 const api = process.env.E2E_API_URL || "http://127.0.0.1:4000";
 
+function isAppNotFound(status: number, body: { error?: string }) {
+  return status === 404 && body.error === "Not found.";
+}
+
+test.describe.configure({ mode: "serial" });
+
 test.describe("CI smoke (production API entry)", () => {
-  test("coupons mount returns validation not 404", async ({ request }) => {
-    const res = await request.post(`${api}/coupons/validate`, {
+  test("API health and coupon mounts (R-001)", async ({ request }) => {
+    const health = await request.get(`${api}/health`);
+    expect(health.ok()).toBeTruthy();
+
+    const validate = await request.post(`${api}/coupons/validate`, {
       data: { code: "NOPE", subtotal: 1000 },
     });
-    expect(res.status()).not.toBe(404);
+    const validateBody = (await validate.json().catch(() => ({}))) as { error?: string };
+    expect(isAppNotFound(validate.status(), validateBody)).toBe(false);
+
+    const adminCoupons = await request.get(`${api}/admin/coupons`);
+    expect(adminCoupons.status()).toBe(401);
   });
 
   test("storefront checkout applies WELCOME10", async ({ page }) => {
     await page.goto("/menu");
+    await expect(page.getByRole("button", { name: /add/i }).first()).toBeVisible({ timeout: 30_000 });
     await page.getByRole("button", { name: /add/i }).first().click();
     await page.getByRole("link", { name: /checkout/i }).click();
     await page.waitForURL("**/checkout**");
@@ -31,9 +45,21 @@ test.describe("CI smoke (production API entry)", () => {
       headers: { Authorization: `Bearer ${token}` },
     });
     expect(board.ok()).toBeTruthy();
-    const { orders } = (await board.json()) as { orders: { id: string; status: string }[] };
+    const { orders } = (await board.json()) as {
+      orders: { id: string; status: string; fulfillmentType?: string }[];
+    };
     const target = orders.find((o) => o.status === "CONFIRMED" || o.status === "PREPARING");
     test.skip(!target, "No kitchen order in seed data");
+
+    const flow: Record<string, string[]> = {
+      DELIVERY: ["CONFIRMED", "PREPARING", "READY", "OUT_FOR_DELIVERY", "DELIVERED"],
+      PICKUP: ["CONFIRMED", "PREPARING", "READY", "COLLECTED"],
+      DINE_IN: ["CONFIRMED", "PREPARING", "READY", "SERVED"],
+    };
+    const fulfillment = (target!.fulfillmentType || "DELIVERY") as keyof typeof flow;
+    const steps = flow[fulfillment] || flow.DELIVERY;
+    const startIdx = steps.indexOf(target!.status);
+    const statusPath = startIdx >= 0 ? steps.slice(startIdx + 1) : [];
 
     await page.goto("/admin/login");
     await page.getByLabel(/email/i).fill("admin@admin.com");
@@ -44,22 +70,15 @@ test.describe("CI smoke (production API entry)", () => {
     await expect(page.getByRole("heading", { name: /kitchen/i })).toBeVisible();
 
     let status = target!.status;
-    const steps: string[] =
-      status === "CONFIRMED"
-        ? ["PREPARING", "READY", "DELIVERED"]
-        : status === "PREPARING"
-          ? ["READY", "DELIVERED"]
-          : ["DELIVERED"];
-
-    for (const next of steps) {
+    for (const next of statusPath) {
       const patch = await request.patch(`${api}/orders/${target!.id}/status`, {
         headers: { Authorization: `Bearer ${token}` },
         data: { status: next },
       });
-      expect(patch.ok()).toBeTruthy();
+      expect(patch.ok(), `transition ${status} -> ${next}`).toBeTruthy();
       status = next;
     }
-    expect(status).toBe("DELIVERED");
+    expect(["DELIVERED", "COLLECTED", "SERVED"]).toContain(status);
   });
 
   test("offline POS queues two orders and syncs once each", async ({ page, context }) => {

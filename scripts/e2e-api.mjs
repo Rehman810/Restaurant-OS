@@ -21,9 +21,13 @@ if (!env.DATABASE_URL) {
   process.exit(1);
 }
 
-console.log("[e2e-api] migrate + seed…");
-execSync("npx prisma migrate deploy", { cwd: backend, env, stdio: "inherit" });
-execSync("npx tsx prisma/seed.ts", { cwd: backend, env, stdio: "inherit" });
+if (process.env.E2E_SKIP_DB_SETUP !== "1") {
+  console.log("[e2e-api] migrate + seed…");
+  execSync("npx prisma migrate deploy", { cwd: backend, env, stdio: "inherit" });
+  execSync("npx tsx prisma/seed.ts", { cwd: backend, env, stdio: "inherit" });
+} else {
+  console.log("[e2e-api] skipping migrate/seed (E2E_SKIP_DB_SETUP=1)");
+}
 
 console.log("[e2e-api] starting production entry (index.ts)…");
 const child = spawn("npx", ["tsx", "src/index.ts"], {
