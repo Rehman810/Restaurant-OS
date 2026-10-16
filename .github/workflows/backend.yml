@@ -45,6 +45,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/restaurant_os_ci?schema=public
       JWT_SECRET: ci-test-jwt-secret-with-at-least-32-characters
+      SEED_ADMIN_PASSWORD: admin
       PORT: 4000
       CLIENT_URL: http://localhost:3000
 
@@ -68,6 +69,11 @@ jobs:
 
       - name: Apply migrations
         run: npx prisma migrate deploy
+
+      - name: Seed demo data for integration tests
+        run: npx tsx prisma/seed.ts
+        env:
+          NODE_ENV: development
 
       - name: Typecheck and build
         run: npm run build

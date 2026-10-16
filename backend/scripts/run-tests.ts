@@ -16,6 +16,18 @@ if (!process.env.DATABASE_URL) {
     stdio: "inherit",
     env: process.env,
   });
+
+  if (process.env.GITHUB_ACTIONS === "true" || process.env.SEED_TEST_DB === "1") {
+    execSync("npx tsx prisma/seed.ts", {
+      cwd: backendRoot,
+      stdio: "inherit",
+      env: {
+        ...process.env,
+        NODE_ENV: "development",
+        SEED_ADMIN_PASSWORD: process.env.SEED_ADMIN_PASSWORD || "admin",
+      },
+    });
+  }
 }
 
 const vitestArgs = process.argv.slice(2);

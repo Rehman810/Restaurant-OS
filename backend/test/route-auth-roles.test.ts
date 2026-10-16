@@ -1,10 +1,12 @@
 import { describe, expect, it, beforeAll } from "vitest";
+import { randomUUID } from "crypto";
 import { Role } from "@prisma/client";
 import { createApp } from "../src/app";
-import { prisma } from "../src/lib/prisma";
+import { ensureDefaultBranch } from "../src/lib/branch-scope";
 import { ROUTE_ROLE_MATRIX } from "./fixtures/route-role-expectations";
 import { appRequest } from "./helpers/app-request";
 import { authHeader, createTestUser } from "./helpers/auth";
+import { ensureBranchMember } from "./helpers/branch-member";
 import { loginToken, SEEDED_ACCOUNTS } from "./helpers/login";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
@@ -22,44 +24,42 @@ const PROBE_ROLES: Role[] = [
 
 describe.skipIf(!hasDb)("route auth matrix (roles)", () => {
   const tokens: Partial<Record<Role, string>> = {};
-  const ephemeral: string[] = [];
 
   beforeAll(async () => {
     const password = process.env.E2E_PASSWORD || process.env.SEED_ADMIN_PASSWORD || "admin";
+    const suffix = randomUUID().slice(0, 8);
+
     for (const role of PROBE_ROLES) {
       const email = SEEDED_ACCOUNTS[role];
-      if (email) {
-        try {
-          tokens[role] = await loginToken(app, email, password);
-        } catch {
-          /* seed user missing — fall through */
-        }
+      if (!email) continue;
+      try {
+        tokens[role] = await loginToken(app, email, password);
+      } catch {
+        /* seeded user missing */
       }
     }
 
-    const branch = await prisma.branch.findFirst({ where: { isActive: true } });
-    if (!branch) return;
+    if (!tokens[Role.ADMIN]) {
+      throw new Error(
+        "route-auth-roles requires demo seed (admin@admin.com). Run seed:demo or enable CI seed step."
+      );
+    }
 
-    if (!tokens[Role.MANAGER]) {
-      const m = await createTestUser({
-        email: `matrix-mgr-${Date.now()}@test.local`,
-        role: Role.MANAGER,
+    const branchId = await ensureDefaultBranch();
+
+    async function ensureEphemeralRole(role: Role) {
+      if (tokens[role]) return;
+      const created = await createTestUser({
+        email: `matrix-${role.toLowerCase()}-${suffix}@test.local`,
+        role,
         password,
       });
-      await prisma.branchMember.create({ data: { branchId: branch.id, userId: m.user.id } });
-      tokens[Role.MANAGER] = m.token;
-      ephemeral.push(m.user.id);
+      await ensureBranchMember(created.user.id, branchId);
+      tokens[role] = created.token;
     }
-    if (!tokens[Role.WAITER]) {
-      const w = await createTestUser({
-        email: `matrix-waiter-${Date.now()}@test.local`,
-        role: Role.WAITER,
-        password,
-      });
-      await prisma.branchMember.create({ data: { branchId: branch.id, userId: w.user.id } });
-      tokens[Role.WAITER] = w.token;
-      ephemeral.push(w.user.id);
-    }
+
+    await ensureEphemeralRole(Role.MANAGER);
+    await ensureEphemeralRole(Role.WAITER);
   });
 
   for (const route of ROUTE_ROLE_MATRIX) {
@@ -68,9 +68,9 @@ describe.skipIf(!hasDb)("route auth matrix (roles)", () => {
         if (route.allowed.includes(role)) continue;
         it(`returns 403 for ${role}`, async () => {
           const token = tokens[role];
-          if (!token) return;
+          expect(token, `missing token for ${role}`).toBeTruthy();
           const res = await appRequest(app, route.method, route.path, {
-            headers: authHeader(token),
+            headers: authHeader(token!),
             body: route.body,
           });
           expect(res.status).toBe(403);
@@ -80,9 +80,9 @@ describe.skipIf(!hasDb)("route auth matrix (roles)", () => {
       it(`allows ${route.allowed[0]}`, async () => {
         const role = route.allowed[0];
         const token = tokens[role];
-        if (!token) return;
+        expect(token, `missing token for ${role}`).toBeTruthy();
         const res = await appRequest(app, route.method, route.path, {
-          headers: authHeader(token),
+          headers: authHeader(token!),
           body: route.body,
         });
         expect([401, 403]).not.toContain(res.status);
