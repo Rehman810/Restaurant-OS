@@ -83,7 +83,7 @@ Customers browse the menu, check out with name/phone/address. Orders appear on t
 | Document | Claim | Code truth |
 | --- | --- | --- |
 | `RECON.md` | No automated tests | Vitest: 92 tests (`backend/package.json`) |
-| `RECON.md` | Package names `ubaidfastfoodz-*` | `restaurant-os-api` / `restaurant-os-web` |
+| `RECON.md` | Stale workspace package names in docs | `restaurant-os-api` / `restaurant-os-web` |
 | `RECON.md` | Hardcoded JWT demo secret | `lib/jwt-secret.ts` — env or ephemeral random |
 | `RECON.md` | Roles omit MANAGER/WAITER | `Role` enum in `schema.prisma` |
 | Earlier “33 pages” | 33 admin/store pages | **45** `page.tsx` files |

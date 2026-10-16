@@ -10,6 +10,8 @@
     "dev:frontend": "npm run dev -w restaurant-os-web",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
+    "test:db:up": "docker compose up -d db_test",
+    "test:db:down": "docker compose stop db_test",
     "prisma:migrate": "npm run prisma:migrate -w restaurant-os-api",
     "prisma:seed": "npm run prisma:seed -w restaurant-os-api",
     "seed:demo": "npm run prisma:seed -w restaurant-os-api --",

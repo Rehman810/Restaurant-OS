@@ -1,5 +1,8 @@
 # Phase 1 — Recon
 
+> **Archive + errata (2026-10):** This doc is a historical snapshot. Current runbooks: [README.md](../README.md), [docs/audit/README.md](./audit/README.md), [RESTAURANT-OS-AUDIT.md](./RESTAURANT-OS-AUDIT.md).  
+> **Now:** packages `restaurant-os-api` / `restaurant-os-web`; roles include `MANAGER`, `WAITER`; Vitest **246** tests; production `start` = migrate + server (no seed); JWT via `lib/jwt-secret.ts` (no hardcoded demo secret in prod); ~45 App Router pages.
+
 Snapshot of the repo before white-label and lifecycle work. Line numbers refer to the tree at the start of this change.
 
 ## Stack

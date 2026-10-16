@@ -22,7 +22,7 @@ npm run prisma:migrate
 npm run seed:demo -- --name "Pizza Hub" --city "Lahore" --currency PKR --timezone Asia/Karachi
 ```
 
-The seeded admin is `admin@admin.com` / `admin`. A second run updates the name and city and does not reset that password.
+The seeded admin is `admin@admin.com` with a random password printed once (or set `SEED_ADMIN_PASSWORD` for local dev). Re-running `seed:demo` does **not** reset passwords or overwrite existing store settings.
 
 5. Start the app:
 
@@ -50,9 +50,20 @@ Customer sign-in: http://localhost:3000/login
 
 ```bash
 npm run dev          # Docker, migrate, seed, API, and web
-npm test             # backend Vitest (from repo root)
+npm run test:db:up   # Postgres for integration tests (port 5433)
+cp backend/env.test.example backend/.env.test
+npm test             # migrate test DB + backend Vitest
 npm run typecheck    # API build + frontend tsc
 ```
+
+**Production API start** (no demo seed): `cd backend && npm run start` → `prisma migrate deploy` then `index.ts`. Run `npm run seed:demo` only on empty dev DBs (`ALLOW_DEMO_SEED=true` required if `NODE_ENV=production`).
+
+### Deploy one restaurant (checklist)
+
+1. Set `DATABASE_URL`, `JWT_SECRET` (32+ chars), `CLIENT_URL`, `RESTAURANT_ID` (default from migration).
+2. `npm run start` in `backend/` (migrations only — create admin via your own onboarding, not demo seed).
+3. Frontend: `NEXT_PUBLIC_API_URL` → API origin; never enable `NEXT_PUBLIC_ENABLE_DEMO_LOGIN` in production.
+4. Optional: VAPID keys for storefront push; tax fields in Settings after go-live.
 
 ### E2E (Playwright)
 

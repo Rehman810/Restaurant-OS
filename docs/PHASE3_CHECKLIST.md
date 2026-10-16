@@ -20,7 +20,7 @@ Use this after migrations and `npm run seed:demo`. Payment gateways are **out of
 | Cash movement queue | Paid in/out offline syncs via `/pos/sync/cash-movement` |
 | Logout guard | Pending queue warns before leaving POS |
 
-**Automated:** `E2E_RUN=1 npm run test:e2e -- e2e/phase3-offline-pos.spec.ts` (cashier `cashier@demo.restaurant` / `demo1234`, open shift first).
+**Automated:** `E2E_RUN=1 npm run test:e2e -- e2e/phase3-offline-pos.spec.ts` or CI `e2e/ci-smoke.spec.ts` (cashier `cashier@demo.restaurant` / same password as `SEED_ADMIN_PASSWORD`, default `admin` after `seed:demo`).
 
 ## Task 3 — Reports & inventory
 
@@ -87,7 +87,7 @@ npm test
 | Role | Email | Password |
 | --- | --- | --- |
 | Admin | `admin@admin.com` | `admin` (or `SEED_ADMIN_PASSWORD`) |
-| Cashier | `cashier@demo.restaurant` | `demo1234` |
+| Cashier | `cashier@demo.restaurant` | same as admin seed password (`SEED_ADMIN_PASSWORD` or printed once) |
 | Chef | `chef@demo.restaurant` | `demo1234` |
 
 Promo: **WELCOME10** (Phase 2).

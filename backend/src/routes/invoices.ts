@@ -15,7 +15,7 @@ invoicesRouter.get("/:orderId/download", optionalAuth, async (req, res) => {
     include: { invoice: true },
   });
   if (!order) return res.status(404).json({ error: "Order not found" });
-  if (!canAccessOrder(order, req.user, token)) {
+  if (!(await canAccessOrder(order, req.user, token))) {
     return res.status(403).json({ error: "You do not have access to this invoice." });
   }
   if (order.status !== "DELIVERED" && !order.invoice) {

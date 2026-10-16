@@ -16,7 +16,7 @@ WhatsApp message formatting is unchanged. Messaging providers are out of scope.
 
 ## Seed password
 
-The seeded admin is `admin@admin.com` with password `admin`. If that user already exists, the password is not reset. Branding fields (name, city, currency, timezone) are updated. Other demo staff still get a random shared password printed once.
+Demo seed (`npm run seed:demo`) is **manual only** — not run on production `start`. In production, `ALLOW_DEMO_SEED=true` is required. If `admin@admin.com` already exists, passwords and existing `StoreSettings` are not overwritten; inventory/coupon refresh may still run.
 
 Karachi neighbourhoods are seeded only when `--city` is Karachi. Any other city gets a short generic area list.
 

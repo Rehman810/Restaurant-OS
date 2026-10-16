@@ -119,10 +119,20 @@ async function sendFollowUps(now: Date) {
   }
 }
 
+let schedulerHandle: ReturnType<typeof setInterval> | null = null;
+
 export function startDineInJobScheduler() {
+  if (schedulerHandle) return;
   const intervalMs = 60_000;
-  setInterval(() => {
+  schedulerHandle = setInterval(() => {
     void runDineInJobs();
   }, intervalMs);
   void runDineInJobs();
+}
+
+export function stopDineInJobScheduler() {
+  if (schedulerHandle) {
+    clearInterval(schedulerHandle);
+    schedulerHandle = null;
+  }
 }

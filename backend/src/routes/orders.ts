@@ -28,7 +28,12 @@ import { clientIp, parseCoord } from "../lib/client-ip";
 import { deliveryNeedsRider, pickLeastBusyRider } from "../lib/rider-assign";
 import { staffOrderAlertEmails, storeNameFrom } from "../lib/branding";
 import { getStoreSettings } from "../lib/settings-data";
-import { branchScopeError, getDefaultBranchId, resolveBranchScope } from "../lib/branch-scope";
+import {
+  branchScopeError,
+  getDefaultBranchId,
+  isOrderOutsideUserBranch,
+  resolveBranchScope,
+} from "../lib/branch-scope";
 import { buildOrderLines, nextOrderNumber } from "../lib/order-lines";
 import {
   canTransitionStatus,
@@ -693,7 +698,7 @@ ordersRouter.post("/:id/feedback", optionalAuth, async (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : null;
   const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: { feedback: true } });
   if (!order) return res.status(404).json({ error: "Order not found." });
-  if (!canAccessOrder(order, req.user, token)) {
+  if (!(await canAccessOrder(order, req.user, token))) {
     return res.status(403).json({ error: "You do not have access to this order." });
   }
   if (!FEEDBACK_STATUSES.includes(order.status)) {
@@ -742,7 +747,7 @@ ordersRouter.get("/:id", optionalAuth, async (req, res) => {
     include: { ...include, customer: { select: { id: true, name: true, email: true } } },
   });
   if (!order) return res.status(404).json({ error: "Order not found" });
-  if (!canAccessOrder(order, req.user, token)) {
+  if (!(await canAccessOrder(order, req.user, token))) {
     return res.status(403).json({ error: "You do not have access to this order." });
   }
   res.json(stripGuestToken(order));
@@ -752,7 +757,7 @@ ordersRouter.patch("/:id/cancel", optionalAuth, async (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : null;
   const existing = await prisma.order.findUnique({ where: { id: req.params.id }, include });
   if (!existing) return res.status(404).json({ error: "Order not found." });
-  if (!canAccessOrder(existing, req.user, token)) {
+  if (!(await canAccessOrder(existing, req.user, token))) {
     return res.status(403).json({ error: "You do not have access to this order." });
   }
   if (!canTransitionStatus(existing.status, OrderStatus.CANCELLED, existing.fulfillmentType)) {
@@ -822,6 +827,9 @@ ordersRouter.patch("/:id/cancel", optionalAuth, async (req, res) => {
 ordersRouter.patch("/:id/confirm", requireAuth, requireRole(...ADMIN_LIKE), async (req, res) => {
   const existing = await prisma.order.findUnique({ where: { id: req.params.id }, include });
   if (!existing) return res.status(404).json({ error: "Order not found." });
+  if (await isOrderOutsideUserBranch(req.user!, existing)) {
+    return res.status(403).json({ error: "You do not have access to this order." });
+  }
   if (existing.status !== OrderStatus.PENDING_CONFIRMATION) {
     return res.status(400).json({ error: "Only unconfirmed orders can be confirmed." });
   }
@@ -857,6 +865,9 @@ ordersRouter.patch("/:id/status", requireAuth, requireRole(...ORDER_OPS), async 
   }
   const existing = await prisma.order.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: "Order not found." });
+  if (await isOrderOutsideUserBranch(req.user!, existing)) {
+    return res.status(403).json({ error: "You do not have access to this order." });
+  }
 
   const storeSettings = await getStoreSettings();
   let voidMeta: { reasonCode: string; reasonNote: string | null; approverId: string | null } | null = null;
@@ -1089,6 +1100,9 @@ ordersRouter.patch("/:id/assign", requireAuth, requireRole(...ADMIN_LIKE), async
   if (!rider) return res.status(400).json({ error: "Rider not found" });
   const existing = await prisma.order.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: "Order not found." });
+  if (await isOrderOutsideUserBranch(req.user!, existing)) {
+    return res.status(403).json({ error: "You do not have access to this order." });
+  }
   if (existing.status === OrderStatus.PENDING_CONFIRMATION) {
     return res.status(400).json({ error: "Confirm the order before assigning a rider." });
   }

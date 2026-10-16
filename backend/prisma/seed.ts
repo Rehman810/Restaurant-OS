@@ -393,7 +393,17 @@ async function seedDemoCoupons() {
   });
 }
 
+function assertDemoSeedAllowed() {
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_DEMO_SEED !== "true") {
+    throw new Error(
+      "Demo seed is blocked when NODE_ENV=production. Set ALLOW_DEMO_SEED=true to run intentionally."
+    );
+  }
+}
+
 async function main() {
+  assertDemoSeedAllowed();
+
   await prisma.restaurant.upsert({
     where: { id: "11111111-1111-4111-8111-111111111111" },
     create: { id: "11111111-1111-4111-8111-111111111111" },
@@ -405,24 +415,19 @@ async function main() {
     where: { email: "admin@admin.com" },
   });
   if (already && process.env.FORCE_SEED !== "1") {
-    await prisma.storeSettings.upsert({
-      where: { id: "default" },
-      create: {
-        id: "default",
-        storeName: BRAND_NAME,
-        city: CITY,
-        currencyCode: CURRENCY,
-        currencySymbol: CURRENCY === "PKR" ? "Rs" : CURRENCY,
-        timezone: TIMEZONE,
-      },
-      update: {
-        storeName: BRAND_NAME,
-        city: CITY,
-        currencyCode: CURRENCY,
-        currencySymbol: CURRENCY === "PKR" ? "Rs" : CURRENCY,
-        timezone: TIMEZONE,
-      },
-    });
+    const existingSettings = await prisma.storeSettings.findUnique({ where: { id: "default" } });
+    if (!existingSettings) {
+      await prisma.storeSettings.create({
+        data: {
+          id: "default",
+          storeName: BRAND_NAME,
+          city: CITY,
+          currencyCode: CURRENCY,
+          currencySymbol: CURRENCY === "PKR" ? "Rs" : CURRENCY,
+          timezone: TIMEZONE,
+        },
+      });
+    }
     const mainBranch = await prisma.branch.findFirst({
       where: { restaurantId: "11111111-1111-4111-8111-111111111111", isActive: true },
       orderBy: [{ isDefault: "desc" }, { sortOrder: "asc" }],
@@ -433,7 +438,7 @@ async function main() {
       console.log(`Inventory demo refreshed: ${inv.ingredients} ingredients, ${inv.recipes} menu recipes.`);
     }
     await seedDemoCoupons();
-    console.log("Demo data already present. Branding updated. Admin password was not reset.");
+    console.log("Demo data already present. Passwords and existing store settings were not changed.");
     return;
   }
 

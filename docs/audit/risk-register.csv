@@ -1,0 +1,13 @@
+id,title,severity,status,notes
+R-001,Production index.ts missing route mounts,High,FIXED,index.ts uses createApp(); production-entry-routes.test.ts
+R-002,DB integration tests without Postgres,High,FIXED,docker db_test + run-tests.ts migrate; CI had Postgres
+R-003,npm audit high (sharp source-map-js),Medium,OPEN,run npm audit fix where compatible
+R-004,Server auth matrix / IDOR coverage,Medium,FIXED,anon matrix + route-auth-roles (ROUTE_ROLE_MATRIX) + idor-scope
+R-005,No frontend CI,Medium,FIXED,frontend.yml build + e2e-smoke job (Playwright + index.ts)
+R-006,Seed on production start,High,FIXED,start script migrate+server only; seed guards
+R-007,Notification failures silent,Medium,PARTIAL,structured logging not fully added
+R-008,Next images unoptimized,Low,OPEN,review next.config images
+R-009,Stale RECON.md,Low,PARTIAL,README updated; RECON refresh in progress
+R-010,Branch scope leaks,Medium,FIXED,canAccessOrder branch checks + branch-manager-scope.test.ts
+R-011,Test app != production app,High,FIXED,Single createApp mount
+R-012,No graceful shutdown,Medium,FIXED,SIGTERM/SIGINT in index.ts

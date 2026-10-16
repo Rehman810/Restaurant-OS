@@ -1,6 +1,8 @@
 import jwt from "jsonwebtoken";
 import { Role } from "@prisma/client";
 import { AuthUser } from "../middleware/auth";
+import { userCanAccessBranch } from "./branch-scope";
+import { ORDER_OPS } from "./roles";
 
 import { jwtSecret } from "./jwt-secret";
 
@@ -8,6 +10,7 @@ const JWT_SECRET = jwtSecret();
 
 type OrderAccess = {
   id?: string;
+  branchId?: string | null;
   customerId: string | null;
   riderId: string | null;
   guestAccessToken: string | null;
@@ -26,14 +29,15 @@ function verifyOrderViewToken(token: string, orderId: string) {
   }
 }
 
-export function canAccessOrder(order: OrderAccess, user?: AuthUser, token?: string | null) {
-  if (user?.role === Role.ADMIN || user?.role === Role.CHEF || user?.role === Role.CASHIER) {
-    return true;
-  }
+export async function canAccessOrder(order: OrderAccess, user?: AuthUser, token?: string | null) {
+  if (user?.role === Role.ADMIN) return true;
   if (user && order.customerId && order.customerId === user.id) return true;
   if (user && order.riderId && order.riderId === user.id) return true;
   if (token && order.id && verifyOrderViewToken(token, order.id)) return true;
   if (token && order.guestAccessToken && token === order.guestAccessToken) return true;
+  if (user && order.branchId && ORDER_OPS.includes(user.role)) {
+    return userCanAccessBranch(user, order.branchId);
+  }
   return false;
 }
 

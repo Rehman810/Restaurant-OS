@@ -6,7 +6,9 @@ test.describe("Phase 3 — offline POS", () => {
   test("queues two offline orders and syncs once each to kitchen", async ({ page, context }) => {
     await page.goto("/login");
     await page.getByLabel(/email/i).fill(process.env.E2E_CASHIER_EMAIL || "cashier@demo.restaurant");
-    await page.getByLabel(/password/i).fill(process.env.E2E_CASHIER_PASSWORD || "demo1234");
+    await page.getByLabel(/password/i).fill(
+      process.env.E2E_CASHIER_PASSWORD || process.env.SEED_ADMIN_PASSWORD || "admin"
+    );
     await page.getByRole("button", { name: /sign in/i }).click();
     await page.waitForURL(/\/admin/);
 

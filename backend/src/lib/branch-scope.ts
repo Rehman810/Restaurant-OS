@@ -73,6 +73,16 @@ export async function userCanAccessBranch(user: AuthUser, branchId: string): Pro
   return Boolean(member);
 }
 
+/** True when a non-admin staff user must be blocked from this order's branch. */
+export async function isOrderOutsideUserBranch(
+  user: AuthUser,
+  order: { branchId: string | null }
+): Promise<boolean> {
+  if (user.role === Role.ADMIN) return false;
+  if (!order.branchId) return false;
+  return !(await userCanAccessBranch(user, order.branchId));
+}
+
 /** Resolve branch filter from `X-Branch-Id` header (`all` = no filter for admin). */
 export async function resolveBranchScope(req: Request): Promise<BranchScope> {
   const user = req.user!;

@@ -84,6 +84,18 @@ export function initRealtime(httpServer: HttpServer) {
   return io;
 }
 
+export function shutdownRealtime(): Promise<void> {
+  if (!io) return Promise.resolve();
+  const server = io;
+  io = null;
+  return new Promise((resolve, reject) => {
+    server.close((err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+}
+
 export function emitOrderChange(event: "order:created" | "order:updated", order: { id: string; riderId?: string | null; customerId?: string | null }) {
   if (!io) return;
   const payload = { event, orderId: order.id, at: Date.now() };

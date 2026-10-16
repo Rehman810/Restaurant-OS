@@ -1,0 +1,79 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - "backend/**"
+      - "scripts/e2e-api.mjs"
+      - ".github/workflows/frontend.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - "backend/**"
+      - "scripts/e2e-api.mjs"
+      - ".github/workflows/frontend.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm install
+        working-directory: .
+      - run: npm run typecheck -w restaurant-os-web
+      - run: npm run build -w restaurant-os-web
+        env:
+          NEXT_PUBLIC_API_URL: http://127.0.0.1:4000
+
+  e2e-smoke:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: restaurant_os_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d restaurant_os_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/restaurant_os_e2e?schema=public
+      JWT_SECRET: e2e-ci-jwt-secret-with-at-least-32-characters
+      E2E_CI: "1"
+      E2E_BASE_URL: http://127.0.0.1:3000
+      E2E_API_URL: http://127.0.0.1:4000
+      SEED_ADMIN_PASSWORD: admin
+      E2E_CASHIER_PASSWORD: admin
+      CLIENT_URL: http://127.0.0.1:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm install
+        working-directory: .
+      - run: npm run build -w restaurant-os-web
+        env:
+          NEXT_PUBLIC_API_URL: http://127.0.0.1:4000
+      - run: npx playwright install chromium
+        working-directory: frontend
+      - run: npx playwright test e2e/ci-smoke.spec.ts
+        working-directory: frontend
