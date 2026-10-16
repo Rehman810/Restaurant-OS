@@ -1,6 +1,6 @@
 import { Router } from "express";
 import crypto from "crypto";
-import { FulfillmentType, OrderSource, OrderStatus, Role } from "@prisma/client";
+import { FulfillmentType, OrderSource, OrderStatus, PaymentMethod, Prisma, Role } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { findOrderBlock } from "../lib/blocklist";
 import { canAccessOrder, phonesMatch, stripGuestToken } from "../lib/order-access";
@@ -21,6 +21,9 @@ import { formatMoney } from "../lib/money";
 import { emitOrderChange } from "../lib/realtime";
 import { sendNewOrderStaffWhatsApp, sendOrderReceivedWhatsApp } from "../lib/whatsapp";
 import { generateInvoicePdf } from "../lib/invoice";
+import { enrichLinesWithTax } from "../lib/tax/apply";
+import { issueCreditNoteForOrder } from "../lib/tax/invoicing";
+import { getVapidPublicKey } from "../lib/web-push";
 import { clientIp, parseCoord } from "../lib/client-ip";
 import { deliveryNeedsRider, pickLeastBusyRider } from "../lib/rider-assign";
 import { staffOrderAlertEmails, storeNameFrom } from "../lib/branding";
@@ -81,12 +84,15 @@ const include = {
   items: true,
   rider: { select: { id: true, name: true, phone: true } },
   invoice: true,
+  feedback: true,
   deliveryArea: { select: { id: true, name: true, deliveryCharge: true } },
   adjustmentRequestedBy: { select: { id: true, name: true } },
   adjustmentApprovedBy: { select: { id: true, name: true } },
   voidApprovedBy: { select: { id: true, name: true } },
   refundApprovedBy: { select: { id: true, name: true } },
 };
+
+type OrderWithRelations = Prisma.OrderGetPayload<{ include: typeof include }>;
 
 function normalizePhone(phone: string) {
   const cleaned = phone.replace(/[^\d+]/g, "").trim();
@@ -374,7 +380,9 @@ ordersRouter.post("/", optionalAuth, async (req, res) => {
     return res.status(400).json({ error: "Cash on delivery is not available right now." });
   }
 
-  const quoted = quoteCharges(subtotal, deliveryCharge, storeSettings);
+  const taxCtx = { fulfillmentType: mode, paymentMethod: PaymentMethod.CASH };
+  const enriched = enrichLinesWithTax(lines, storeSettings, taxCtx);
+  const quoted = quoteCharges(subtotal, deliveryCharge, storeSettings, taxCtx);
   let couponDiscount = 0;
   let couponId: string | null = null;
   let couponCodeSnap: string | null = null;
@@ -416,7 +424,7 @@ ordersRouter.post("/", optionalAuth, async (req, res) => {
   const locAccuracy = parseCoord(customerLocationAccuracy, 0, 50_000);
   const ip = clientIp(req);
 
-  let order;
+  let order: OrderWithRelations;
   try {
     order = await prisma.$transaction(async (tx) => {
       if (couponId) {
@@ -448,6 +456,10 @@ ordersRouter.post("/", optionalAuth, async (req, res) => {
           subtotal,
           deliveryCharge,
           taxAmount: quoted.tax,
+          taxableAmount: enriched.orderTax.taxableAmount,
+          taxRatePercentSnap: enriched.orderTax.taxRatePercentSnap,
+          taxInclusiveSnap: enriched.orderTax.taxInclusiveSnap,
+          taxSnapshotJson: enriched.orderTax.taxSnapshotJson,
           serviceAmount: quoted.service,
           discountAmount,
           total: orderTotal,
@@ -465,11 +477,23 @@ ordersRouter.post("/", optionalAuth, async (req, res) => {
           customerLocationAccuracy: locAccuracy,
           status: initialStatus,
           checkoutIdempotencyKey: checkoutKey || null,
-          items: { create: lines },
+          items: {
+            create: enriched.lines.map((l) => ({
+              menuItemId: l.menuItemId,
+              quantity: l.quantity,
+              priceAtOrder: l.priceAtOrder,
+              nameAtOrder: l.nameAtOrder,
+              optionsLabel: l.optionsLabel,
+              instructions: l.instructions,
+              lineTaxableAmount: l.lineTaxableAmount,
+              lineTaxAmount: l.lineTaxAmount,
+              lineTaxRatePercent: l.lineTaxRatePercent,
+            })),
+          },
         },
         include,
       });
-    });
+    }) as OrderWithRelations;
   } catch (err) {
     const e = err as Error & { status?: number };
     return res.status(e.status || 500).json({ error: e.message });
@@ -624,6 +648,69 @@ ordersRouter.get("/", requireAuth, requireRole(...ORDER_OPS), async (req, res) =
     statusCounts,
     filteredTotal: Number(revenue._sum.total ?? 0),
   });
+});
+
+ordersRouter.get("/push/vapid-public", (_req, res) => {
+  const key = getVapidPublicKey();
+  if (!key) return res.status(404).json({ error: "Push notifications are not configured." });
+  res.json({ publicKey: key });
+});
+
+ordersRouter.post("/push-subscribe", optionalAuth, async (req, res) => {
+  const settings = await getStoreSettings();
+  if (!settings.storefrontPushEnabled) {
+    return res.status(403).json({ error: "Push notifications are disabled for this store." });
+  }
+  const body = req.body as {
+    endpoint?: string;
+    keys?: { p256dh?: string; auth?: string };
+    orderId?: string;
+  };
+  const { upsertPushSubscription } = await import("../lib/web-push");
+  try {
+    const sub = await upsertPushSubscription({
+      endpoint: String(body.endpoint || ""),
+      p256dh: String(body.keys?.p256dh || ""),
+      auth: String(body.keys?.auth || ""),
+      userId: req.user?.id,
+      orderId: body.orderId?.trim() || null,
+    });
+    res.status(201).json({ id: sub.id });
+  } catch (err) {
+    const status = typeof err === "object" && err && "status" in err ? Number((err as { status: number }).status) : 400;
+    const message = err instanceof Error ? err.message : "Could not save subscription.";
+    res.status(status).json({ error: message });
+  }
+});
+
+const FEEDBACK_STATUSES: OrderStatus[] = [
+  OrderStatus.DELIVERED,
+  OrderStatus.COLLECTED,
+  OrderStatus.SERVED,
+];
+
+ordersRouter.post("/:id/feedback", optionalAuth, async (req, res) => {
+  const token = typeof req.query.token === "string" ? req.query.token : null;
+  const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: { feedback: true } });
+  if (!order) return res.status(404).json({ error: "Order not found." });
+  if (!canAccessOrder(order, req.user, token)) {
+    return res.status(403).json({ error: "You do not have access to this order." });
+  }
+  if (!FEEDBACK_STATUSES.includes(order.status)) {
+    return res.status(400).json({ error: "Feedback is only available after your order is complete." });
+  }
+  if (order.feedback) {
+    return res.status(400).json({ error: "You already left feedback for this order." });
+  }
+  const rating = Math.floor(Number((req.body as { rating?: number }).rating));
+  const comment = String((req.body as { comment?: string }).comment || "").trim().slice(0, 500);
+  if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+    return res.status(400).json({ error: "Rating must be between 1 and 5." });
+  }
+  const feedback = await prisma.orderFeedback.create({
+    data: { orderId: order.id, rating, comment },
+  });
+  res.status(201).json(feedback);
 });
 
 ordersRouter.post("/track", trackLimiter, async (req, res) => {
@@ -908,10 +995,15 @@ ordersRouter.patch("/:id/status", requireAuth, requireRole(...ORDER_OPS), async 
     void sendOrderCancelledEmail(order);
     const { reverseInventoryForOrder } = await import("../lib/inventory/stock");
     void reverseInventoryForOrder(order.id, req.user!.id).catch(() => null);
+    void issueCreditNoteForOrder(order.id).catch(() => null);
   }
   if (status === OrderStatus.DELIVERED) {
     await generateInvoicePdf(order.id);
     void sendOrderDeliveredEmail(order);
+  }
+  if (status !== existing.status) {
+    const { notifyOrderStatusPush } = await import("../lib/web-push");
+    void notifyOrderStatusPush(order.id, status, order.fulfillmentType).catch(() => null);
   }
 
   emitOrderChange("order:updated", order);

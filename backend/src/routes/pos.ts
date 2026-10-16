@@ -11,10 +11,13 @@ import {
 } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { findOrderBlock } from "../lib/blocklist";
-import { buildOrderLines, nextOrderNumber } from "../lib/order-lines";
+import { buildOrderLines } from "../lib/order-lines";
+import { nextPosOrderNumber } from "../lib/pos-order-number";
 import { emitOrderChange } from "../lib/realtime";
 import { storeNameFrom } from "../lib/branding";
 import { applyOrderDiscount, quoteCharges } from "../lib/charges";
+import { enrichLinesWithTax } from "../lib/tax/apply";
+import { issueCreditNoteForOrder, issueTaxInvoiceForOrder } from "../lib/tax/invoicing";
 import {
   discountNeedsManagerApproval,
   parseReasonList,
@@ -37,6 +40,13 @@ import {
   type CashDb,
 } from "../lib/cash-shift";
 import { posShiftRouter } from "./pos-shift";
+import {
+  syncPosCashMovementFromOffline,
+  syncPosOrderFromOffline,
+  validateOfflineSyncPayload,
+  type PosCashMovementSyncInput,
+  type PosSyncInput,
+} from "../lib/pos-offline-sync";
 
 export const posRouter = Router();
 posRouter.use("/shift", posShiftRouter);
@@ -219,7 +229,9 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
 
   const name = cleanText(customerName, 80) || "Walk-in";
   const phone = normalizePhone(String(customerPhone || ""));
-  const quoted = quoteCharges(built.subtotal, deliveryCharge, storeSettings);
+  const taxCtx = { fulfillmentType: mode, paymentMethod: payMethod };
+  const enriched = enrichLinesWithTax(built.lines, storeSettings, taxCtx);
+  const quoted = quoteCharges(built.subtotal, deliveryCharge, storeSettings, taxCtx);
   const pct = Number(discountPercent ?? 0);
   const maxCashierPct = Number(storeSettings.maxCashierDiscountPercent ?? 10);
   const needsDiscountApproval = discountNeedsManagerApproval(req.user!.role, pct, storeSettings);
@@ -256,10 +268,10 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
     discountApproverId = req.user!.id;
   }
 
-  const orderNumber = await nextOrderNumber();
   let order;
   try {
     order = await prisma.$transaction(async (tx) => {
+      const orderNumber = await nextPosOrderNumber(tx, resolvedBranchId);
       const db = tx as unknown as CashDb & { order: typeof prisma.order };
       if (payMethod === PaymentMethod.CASH && payStatus === "PAID") {
         const shift = await tx.cashShift.findFirst({
@@ -287,6 +299,10 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
           subtotal: built.subtotal,
           deliveryCharge,
           taxAmount: quoted.tax,
+          taxableAmount: enriched.orderTax.taxableAmount,
+          taxRatePercentSnap: enriched.orderTax.taxRatePercentSnap,
+          taxInclusiveSnap: enriched.orderTax.taxInclusiveSnap,
+          taxSnapshotJson: enriched.orderTax.taxSnapshotJson,
           serviceAmount: quoted.service,
           discountAmount: discounted.discountAmount,
           discountPercent: pct > 0 ? pct : null,
@@ -306,7 +322,19 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
           paymentMethod: payMethod,
           paymentStatus: payStatus,
           status: OrderStatus.CONFIRMED,
-          items: { create: built.lines },
+          items: {
+            create: enriched.lines.map((l) => ({
+              menuItemId: l.menuItemId,
+              quantity: l.quantity,
+              priceAtOrder: l.priceAtOrder,
+              nameAtOrder: l.nameAtOrder,
+              optionsLabel: l.optionsLabel,
+              instructions: l.instructions,
+              lineTaxableAmount: l.lineTaxableAmount,
+              lineTaxAmount: l.lineTaxAmount,
+              lineTaxRatePercent: l.lineTaxRatePercent,
+            })),
+          },
         },
         include,
       });
@@ -354,6 +382,9 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
   emitOrderChange("order:created", order);
   const { deductInventoryForOrder } = await import("../lib/inventory/stock");
   void deductInventoryForOrder(order.id, req.user!.id).catch(() => null);
+  if (payStatus === "PAID") {
+    void issueTaxInvoiceForOrder(order.id).catch(() => null);
+  }
   res.status(201).json(order);
 });
 
@@ -441,6 +472,7 @@ posRouter.post(
     });
     const { reverseInventoryForOrder } = await import("../lib/inventory/stock");
     void reverseInventoryForOrder(order.id, req.user!.id).catch(() => null);
+    void issueCreditNoteForOrder(order.id).catch(() => null);
     emitOrderChange("order:updated", order);
     res.json(order);
   }
@@ -529,6 +561,198 @@ posRouter.post(
   }
 );
 
+posRouter.post(
+  "/sync",
+  posLimiter,
+  requireAuth,
+  requireRole(...ADMIN_LIKE, Role.CASHIER, Role.WAITER),
+  async (req, res) => {
+    const body = req.body as PosSyncInput;
+    const gate = validateOfflineSyncPayload(body);
+    if (!gate.ok) return res.status(gate.status).json({ error: gate.error });
+
+    const storeSettings = await getStoreSettings();
+    const storeAddress = `${storeNameFrom(storeSettings)} — ${storeSettings.address}`;
+
+    let scope;
+    try {
+      scope = await resolveBranchScope(req);
+    } catch (err) {
+      return branchScopeError(res, err);
+    }
+    const resolvedBranchId = scope.allBranches ? await getDefaultBranchId() : scope.branchId!;
+
+    try {
+      const result = await syncPosOrderFromOffline(
+        req.user!.id,
+        resolvedBranchId,
+        body,
+        storeAddress
+      );
+      const { order, created, conflict } = result;
+      if (created) {
+        await writeAudit(prisma, {
+          action: conflict ? AuditAction.POS_OFFLINE_SYNC_CONFLICT : AuditAction.POS_OFFLINE_SYNC_CREATED,
+          actorId: req.user!.id,
+          branchId: resolvedBranchId,
+          entityType: "Order",
+          entityId: order.id,
+          meta: {
+            posClientOrderId: body.clientOrderId,
+            offlineLabel: body.offlineLabel,
+            offlineClientCreatedAt: body.clientCreatedAt,
+            deviceLabel: body.deviceLabel,
+            needsReview: conflict,
+          },
+          ip: clientIp(req) ?? undefined,
+        });
+        emitOrderChange("order:created", order);
+      }
+      return res.json({
+        order,
+        created,
+        conflict,
+        offlineLabel: body.offlineLabel,
+      });
+    } catch (err) {
+      const status = (err as { status?: number }).status ?? 500;
+      const message = err instanceof Error ? err.message : "Sync failed.";
+      if (status >= 400 && status < 500) {
+        await writeAudit(prisma, {
+          action: AuditAction.POS_OFFLINE_SYNC_REJECTED,
+          actorId: req.user!.id,
+          branchId: resolvedBranchId,
+          entityType: "PosSync",
+          entityId: body.clientOrderId,
+          meta: {
+            offlineLabel: body.offlineLabel,
+            deviceLabel: body.deviceLabel,
+            error: message,
+          },
+          ip: clientIp(req) ?? undefined,
+        });
+      }
+      const code = (err as { code?: string }).code;
+      return res.status(status).json({ error: message, code });
+    }
+  }
+);
+
+posRouter.post(
+  "/sync/cash-movement",
+  posLimiter,
+  requireAuth,
+  requireRole(...ADMIN_LIKE, Role.CASHIER, Role.WAITER),
+  async (req, res) => {
+    const body = req.body as PosCashMovementSyncInput;
+    let scope;
+    try {
+      scope = await resolveBranchScope(req);
+    } catch (err) {
+      return branchScopeError(res, err);
+    }
+    const resolvedBranchId = scope.allBranches ? await getDefaultBranchId() : scope.branchId!;
+    try {
+      const result = await syncPosCashMovementFromOffline(req.user!.id, resolvedBranchId, body);
+      return res.json(result);
+    } catch (err) {
+      const status = (err as { status?: number }).status ?? 500;
+      const message = err instanceof Error ? err.message : "Sync failed.";
+      const code = (err as { code?: string }).code;
+      return res.status(status).json({ error: message, code });
+    }
+  }
+);
+
+posRouter.post(
+  "/offline-logout-override",
+  requireAuth,
+  requireRole(...ADMIN_LIKE, Role.MANAGER),
+  async (req, res) => {
+    const { pendingCount, deviceLabel } = req.body as { pendingCount?: number; deviceLabel?: string };
+    let scope;
+    try {
+      scope = await resolveBranchScope(req);
+    } catch (err) {
+      return branchScopeError(res, err);
+    }
+    const branchId = scope.allBranches ? await getDefaultBranchId() : scope.branchId!;
+    await writeAudit(prisma, {
+      action: AuditAction.POS_OFFLINE_LOGOUT_OVERRIDE,
+      actorId: req.user!.id,
+      actorRole: req.user!.role,
+      branchId,
+      entityType: "PosSync",
+      entityId: req.user!.id,
+      meta: { pendingCount, deviceLabel },
+      ip: clientIp(req) ?? undefined,
+    });
+    res.json({ ok: true });
+  }
+);
+
+posRouter.post(
+  "/offline-discard",
+  requireAuth,
+  requireRole(...ADMIN_LIKE, Role.MANAGER, Role.CASHIER),
+  async (req, res) => {
+    const { clientOrderId, offlineLabel, deviceLabel } = req.body as {
+      clientOrderId?: string;
+      offlineLabel?: string;
+      deviceLabel?: string;
+    };
+    if (!clientOrderId?.trim()) {
+      return res.status(400).json({ error: "clientOrderId is required." });
+    }
+    let scope;
+    try {
+      scope = await resolveBranchScope(req);
+    } catch (err) {
+      return branchScopeError(res, err);
+    }
+    const branchId = scope.allBranches ? await getDefaultBranchId() : scope.branchId!;
+    await writeAudit(prisma, {
+      action: AuditAction.POS_OFFLINE_QUEUE_DISCARDED,
+      actorId: req.user!.id,
+      actorRole: req.user!.role,
+      branchId,
+      entityType: "PosSync",
+      entityId: clientOrderId.trim(),
+      meta: { offlineLabel, deviceLabel },
+      ip: clientIp(req) ?? undefined,
+    });
+    res.json({ ok: true });
+  }
+);
+
+posRouter.get(
+  "/sync-conflicts",
+  requireAuth,
+  requireRole(...ADMIN_LIKE, Role.MANAGER),
+  async (req, res) => {
+    let scope;
+    try {
+      scope = await resolveBranchScope(req);
+    } catch (err) {
+      return branchScopeError(res, err);
+    }
+    const branchId = scope.allBranches ? undefined : scope.branchId!;
+    const orders = await prisma.order.findMany({
+      where: {
+        needsReview: true,
+        ...(branchId ? { branchId } : {}),
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      include: {
+        items: true,
+        createdBy: { select: { id: true, name: true } },
+      },
+    });
+    res.json({ orders });
+  }
+);
+
 posRouter.get(
   "/receipt/:orderId",
   requireAuth,
@@ -556,6 +780,8 @@ posRouter.get(
         whatsapp: settings.whatsapp,
         footer: settings.receiptFooter,
         taxNumber: settings.taxNumber,
+        taxStrn: settings.taxStrn,
+        taxLabel: settings.taxLabel,
       },
     });
   }

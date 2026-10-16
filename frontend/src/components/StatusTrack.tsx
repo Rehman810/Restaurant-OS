@@ -1,4 +1,7 @@
+"use client";
+
 import { FulfillmentType, OrderStatus, STATUS_FLOW, orderStatusLabel } from "@/lib/types";
+import { useStorefrontLocale } from "@/lib/i18n/storefront";
 
 export function StatusTrack({
   status,
@@ -7,10 +10,11 @@ export function StatusTrack({
   status: OrderStatus;
   fulfillmentType?: FulfillmentType | null;
 }) {
+  const { t } = useStorefrontLocale();
   if (status === "CANCELLED") {
     return (
       <div className="rounded-2xl bg-stone-100 px-4 py-3 text-sm font-medium text-stone-600">
-        This order was cancelled.
+        {t("order_cancelled")}
       </div>
     );
   }

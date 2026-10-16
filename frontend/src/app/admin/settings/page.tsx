@@ -729,19 +729,33 @@ export default function AdminSettingsPage() {
                   <span className="text-xs text-stone-500">Shown at checkout and in the FAQ.</span>
                 </span>
               </label>
-              <label className="flex items-start gap-3 rounded-2xl border border-stone-200 bg-stone-50 p-4">
-                <input
-                  type="checkbox"
-                  className="mt-1"
-                  checked={settings.acceptCard !== false}
-                  onChange={(e) => setSettings({ ...settings, acceptCard: e.target.checked })}
-                />
-                <span>
-                  <span className="block text-sm font-semibold text-stone-900">Card at the counter</span>
-                  <span className="text-xs text-stone-500">POS only. No online card gateway.</span>
+            <label className="flex items-start gap-3 rounded-2xl border border-stone-200 bg-stone-50 p-4">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={settings.acceptCard !== false}
+                onChange={(e) => setSettings({ ...settings, acceptCard: e.target.checked })}
+              />
+              <span>
+                <span className="block text-sm font-semibold text-stone-900">Card at the counter</span>
+                <span className="text-xs text-stone-500">POS only. No online card gateway.</span>
+              </span>
+            </label>
+            <label className="flex items-start gap-3 rounded-2xl border border-stone-200 bg-stone-50 p-4 sm:col-span-2">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={Boolean(settings.storefrontPushEnabled)}
+                onChange={(e) => setSettings({ ...settings, storefrontPushEnabled: e.target.checked })}
+              />
+              <span>
+                <span className="block text-sm font-semibold text-stone-900">Order status push (PWA)</span>
+                <span className="text-xs text-stone-500">
+                  Lets customers opt in on the order tracking page. Requires VAPID keys on the API server.
                 </span>
-              </label>
-            </div>
+              </span>
+            </label>
+          </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <SettingsField label={settings.taxLabel || "Tax"} hint="Percent. Leave 0 to hide.">
                 <input
@@ -798,8 +812,65 @@ export default function AdminSettingsPage() {
                 Service included in prices
               </label>
             </div>
+            <label className="flex items-start gap-3 rounded-2xl border border-stone-200 bg-stone-50 p-4">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={Boolean(settings.taxEnabled)}
+                onChange={(e) => setSettings({ ...settings, taxEnabled: e.target.checked })}
+              />
+              <span>
+                <span className="block text-sm font-semibold text-stone-900">Tax invoicing mode</span>
+                <span className="text-xs text-stone-500">
+                  Snapshots tax on orders, issues TAX-* invoice numbers, and enables tax reports. See docs/TAX_INVOICING_NOTES.md.
+                </span>
+              </span>
+            </label>
+            {settings.taxEnabled && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <SettingsField label="Legal business name">
+                  <input
+                    className="input"
+                    value={settings.taxLegalName ?? ""}
+                    onChange={(e) => setSettings({ ...settings, taxLegalName: e.target.value })}
+                  />
+                </SettingsField>
+                <SettingsField label="STRN">
+                  <input
+                    className="input"
+                    value={settings.taxStrn ?? ""}
+                    onChange={(e) => setSettings({ ...settings, taxStrn: e.target.value })}
+                  />
+                </SettingsField>
+                <SettingsField label="Business address" className="sm:col-span-2">
+                  <input
+                    className="input"
+                    value={settings.taxBusinessAddress ?? ""}
+                    onChange={(e) => setSettings({ ...settings, taxBusinessAddress: e.target.value })}
+                  />
+                </SettingsField>
+                <label className="flex items-center gap-2 text-sm font-medium text-stone-700 sm:col-span-2">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(settings.pricesIncludeTax ?? settings.taxIncluded)}
+                    onChange={(e) =>
+                      setSettings({ ...settings, pricesIncludeTax: e.target.checked, taxIncluded: e.target.checked })
+                    }
+                  />
+                  Menu prices include tax (when tax mode is on)
+                </label>
+                <label className="flex items-center gap-2 text-sm font-medium text-stone-700 sm:col-span-2">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(settings.taxFiscalYearEnabled)}
+                    onChange={(e) => setSettings({ ...settings, taxFiscalYearEnabled: e.target.checked })}
+                  />
+                  Fiscal-year invoice sequence (vs daily)
+                </label>
+              </div>
+            )}
             <div className="grid gap-4 sm:grid-cols-2">
-              <SettingsField label="Tax registration number" hint="Optional. Printed on receipts.">
+              <SettingsField label="Tax registration number (NTN)" hint="Optional. Printed on receipts.">
                 <input
                   className="input"
                   value={settings.taxNumber ?? ""}
@@ -841,6 +912,44 @@ export default function AdminSettingsPage() {
                 </p>
               </div>
             </label>
+            <label
+              className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition ${
+                settings.offlinePosEnabled !== false
+                  ? "border-amber-300 bg-amber-50"
+                  : "border-stone-200 bg-stone-50"
+              }`}
+            >
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 rounded border-stone-300 text-brand-600"
+                checked={settings.offlinePosEnabled !== false}
+                onChange={(e) => setSettings({ ...settings, offlinePosEnabled: e.target.checked })}
+              />
+              <div>
+                <p className="text-sm font-semibold text-stone-900">Offline POS</p>
+                <p className="mt-1 text-xs leading-relaxed text-stone-600">
+                  Allow cashiers to queue dine-in and takeaway orders on devices when the internet drops. Sync requires connectivity.
+                </p>
+              </div>
+            </label>
+            <SettingsField
+              label="Offline clock skew alert (minutes)"
+              hint="Orders synced from devices whose clock differs from the server by more than this are flagged for review."
+            >
+              <input
+                type="number"
+                min={1}
+                max={1440}
+                className="input w-full max-w-xs"
+                value={settings.offlineClockSkewThresholdMinutes ?? 10}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    offlineClockSkewThresholdMinutes: Number(e.target.value) || 10,
+                  })
+                }
+              />
+            </SettingsField>
             <label
               className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition ${
                 settings.autoPrintKitchenTickets

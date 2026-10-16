@@ -878,7 +878,20 @@ export function InventoryModule() {
           )}
 
           {tab === "movements" && (
-            <InventoryPanel title="Stock ledger" description="Append-only audit trail for this branch">
+            <InventoryPanel
+              title="Stock ledger"
+              description="Append-only audit trail for this branch"
+              action={
+                <a
+                  className="text-xs font-bold text-brand-600"
+                  href={`${typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL || "/api/proxy") : "/api/proxy"}/admin/inventory/movements/export.csv`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Export CSV
+                </a>
+              }
+            >
               <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <SelectField label="Movement type" value={movementType} onChange={setMovementType} options={[{ value: "", label: "All types" }, ...["PURCHASE", "SALE_DEDUCTION", "WASTE", "ADJUSTMENT", "COUNT_CORRECTION", "TRANSFER_IN", "TRANSFER_OUT", "REVERSAL"].map((t) => ({ value: t, label: t }))]} />
                 <SelectField label="Ingredient" value={movementItem} onChange={setMovementItem} options={[{ value: "", label: "All items" }, ...items.map((i) => ({ value: i.id, label: i.name }))]} />

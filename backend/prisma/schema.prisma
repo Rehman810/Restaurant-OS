@@ -65,9 +65,38 @@ model Branch {
   riderSettlements     RiderSettlement[]
   printStations        PrintStation[]
   branchCoupons        Coupon[]
+  posOrderDayCounters  BranchPosOrderDayCounter[]
+  taxInvoiceCounters   BranchTaxInvoiceCounter[]
 
   @@unique([restaurantId, code])
   @@index([restaurantId, isActive])
+}
+
+model BranchPosOrderDayCounter {
+  id       String @id @default(uuid())
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  dayKey   String
+  lastSeq  Int    @default(1000)
+
+  @@unique([branchId, dayKey])
+}
+
+model BranchTaxInvoiceCounter {
+  id         String @id @default(uuid())
+  branchId   String
+  branch     Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  fiscalYear Int    @default(0)
+  lastSeq    Int    @default(0)
+
+  @@unique([branchId, fiscalYear])
+}
+
+enum FiscalSubmissionStatus {
+  NOT_REQUIRED
+  PENDING
+  SUBMITTED
+  FAILED
 }
 
 model BranchMember {
@@ -265,6 +294,7 @@ model User {
   riderSettlementsReceived  RiderSettlement[] @relation("RiderSettlementsRider")
   riderSettlementsSettled   RiderSettlement[] @relation("RiderSettlementsSettledBy")
   loyaltyPoints             Int               @default(0)
+  pushSubscriptions         CustomerPushSubscription[]
 }
 
 model DiningFloor {
@@ -821,9 +851,18 @@ model StoreSettings {
   weeklySchedule      Json?
   closedMessage       String   @default("")
   forceClosed         Boolean  @default(false)
+  taxEnabled          Boolean  @default(false)
+  taxLegalName        String   @default("")
+  taxBusinessAddress  String   @default("")
+  taxStrn             String   @default("")
+  taxRatesByFulfillment Json   @default("{}")
+  taxRatesByPayment   Json     @default("{}")
+  taxFiscalYearEnabled Boolean @default(false)
+  taxRoundingRule     String   @default("HALF_UP")
   taxPercent          Decimal  @default(0) @db.Decimal(5, 2)
   taxLabel            String   @default("Tax")
   taxIncluded         Boolean  @default(false)
+  pricesIncludeTax    Boolean  @default(false)
   serviceChargePercent Decimal @default(0) @db.Decimal(5, 2)
   serviceChargeLabel  String   @default("Service charge")
   serviceIncluded     Boolean  @default(false)
@@ -859,6 +898,9 @@ model StoreSettings {
   loyaltyEarnPer100       Decimal @default(1) @db.Decimal(10, 2)
   loyaltyRedeemPerPoint   Decimal @default(1) @db.Decimal(10, 2)
   loyaltyMaxRedeemPercent Decimal @default(20) @db.Decimal(5, 2)
+  offlinePosEnabled       Boolean @default(true)
+  offlineClockSkewThresholdMinutes Int @default(10)
+  storefrontPushEnabled Boolean @default(false)
   updatedAt           DateTime @updatedAt
 }
 
@@ -984,6 +1026,9 @@ model CashMovement {
   createdAt DateTime         @default(now())
   createdById String?
   createdBy User?            @relation("CashMovementCreator", fields: [createdById], references: [id])
+  posClientMovementId String? @unique
+  offlineClientCreatedAt DateTime?
+  offlineDeviceLabel    String?
 
   @@index([shiftId, createdAt])
   @@index([orderId])
@@ -1071,6 +1116,10 @@ model Order {
   subtotal         Decimal         @db.Decimal(10, 2)
   deliveryCharge   Decimal         @default(0) @db.Decimal(10, 2)
   taxAmount        Decimal         @default(0) @db.Decimal(10, 2)
+  taxRatePercentSnap Decimal?      @db.Decimal(5, 2)
+  taxInclusiveSnap Boolean?
+  taxableAmount    Decimal?        @db.Decimal(10, 2)
+  taxSnapshotJson  Json?
   serviceAmount    Decimal         @default(0) @db.Decimal(10, 2)
   discountAmount   Decimal         @default(0) @db.Decimal(10, 2)
   discountPercent  Decimal?        @db.Decimal(5, 2)
@@ -1101,6 +1150,9 @@ model Order {
   customerLocationAccuracy Decimal? @db.Decimal(10, 2)
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
+  serverReceivedAt DateTime?
+  clientClockSkewMinutes Int?
+  clockSkewFlag    Boolean         @default(false)
   inventoryDeductedAt DateTime?
   items            OrderItem[]
   invoice          Invoice?
@@ -1112,6 +1164,37 @@ model Order {
   couponCode       String?
   loyaltyPointsRedeemed Int        @default(0)
   loyaltyPointsEarned   Int        @default(0)
+  posClientOrderId      String?    @unique
+  offlineLabel          String?
+  offlineClientCreatedAt DateTime?
+  offlineDeviceLabel    String?
+  clientClaimedTotal    Decimal?   @db.Decimal(10, 2)
+  needsReview           Boolean    @default(false)
+  needsReviewReason     String?
+  feedback              OrderFeedback?
+
+  @@index([branchId, needsReview])
+}
+
+model OrderFeedback {
+  id        String   @id @default(uuid())
+  orderId   String   @unique
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  rating    Int
+  comment   String   @default("")
+  createdAt DateTime @default(now())
+}
+
+model CustomerPushSubscription {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  orderIds  String[] @default([])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model OrderEvent {
@@ -1139,6 +1222,9 @@ model OrderItem {
   nameAtOrder   String
   optionsLabel  String   @default("")
   instructions  String   @default("")
+  lineTaxableAmount Decimal @default(0) @db.Decimal(10, 2)
+  lineTaxAmount     Decimal @default(0) @db.Decimal(10, 2)
+  lineTaxRatePercent Decimal? @db.Decimal(5, 2)
 }
 
 model OrderBlock {
@@ -1172,9 +1258,22 @@ model Testimonial {
 
 model Invoice {
   id            String   @id @default(uuid())
-  orderId       String   @unique
-  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId       String?  @unique
+  order         Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  branchId      String?
   invoiceNumber String   @unique
+  isCreditNote  Boolean  @default(false)
+  creditNoteForInvoiceId String?
+  creditNoteFor Invoice? @relation("CreditNoteLink", fields: [creditNoteForInvoiceId], references: [id], onDelete: SetNull)
+  creditNotes   Invoice[] @relation("CreditNoteLink")
+  fiscalYear    Int?
+  submissionStatus FiscalSubmissionStatus @default(NOT_REQUIRED)
+  legalNameSnap String?
+  ntnSnap       String?
+  strnSnap      String?
+  addressSnap   String?
+  taxSnapshot   Json?
   generatedAt   DateTime @default(now())
-  pdfPath       String
+  voidedAt      DateTime?
+  pdfPath       String   @default("")
 }

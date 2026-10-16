@@ -5,6 +5,8 @@ import { Banknote, DoorClosed, DoorOpen, Minus, Plus } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { pkr } from "@/lib/format";
 import { InputSheet } from "@/components/admin/InputSheet";
+import { enqueueCashMovement, saveShiftSnapshot } from "@/lib/offline/pos-db";
+import { getDeviceLabel } from "@/lib/offline/device-label";
 
 type ShiftReport = {
   expectedCash: number;
@@ -53,6 +55,9 @@ export function CashShiftPanel({
       setShift(data.shift);
       setReport(data.report ?? null);
       onShiftChange(Boolean(data.shift));
+      if (data.shift) {
+        void saveShiftSnapshot({ shift: data.shift, report: data.report ?? null });
+      }
     } catch {
       setShift(null);
       onShiftChange(false);
@@ -71,6 +76,10 @@ export function CashShiftPanel({
 
   async function openShift(openingCash: string) {
     setError("");
+    if (!navigator.onLine) {
+      setError("Opening a shift requires an internet connection.");
+      return;
+    }
     try {
       await api("/pos/shift/open", {
         method: "POST",
@@ -85,6 +94,10 @@ export function CashShiftPanel({
 
   async function closeShift() {
     setError("");
+    if (!navigator.onLine) {
+      setError("Closing a shift requires an internet connection.");
+      return;
+    }
     try {
       const body: Record<string, unknown> = {
         countedCash: denomTotal,
@@ -109,10 +122,27 @@ export function CashShiftPanel({
 
   async function movement(amount: string, reason: string) {
     if (!movementSheet) return;
+    const type = movementSheet === "in" ? "PAID_IN" : "PAID_OUT";
+    const amt = Number(amount);
+    const reasonText = reason.trim() || (type === "PAID_IN" ? "Paid in" : "Paid out");
+    if (!navigator.onLine) {
+      await enqueueCashMovement({
+        clientMovementId: crypto.randomUUID(),
+        type,
+        amount: amt,
+        reason: reasonText,
+        clientCreatedAt: new Date().toISOString(),
+        deviceLabel: getDeviceLabel(),
+        status: "pending",
+        attempts: 0,
+      });
+      setMovementSheet(null);
+      return;
+    }
     const path = movementSheet === "in" ? "/pos/shift/paid-in" : "/pos/shift/paid-out";
     await api(path, {
       method: "POST",
-      body: JSON.stringify({ amount: Number(amount), reason }),
+      body: JSON.stringify({ amount: amt, reason: reasonText }),
     });
     setMovementSheet(null);
     await load();

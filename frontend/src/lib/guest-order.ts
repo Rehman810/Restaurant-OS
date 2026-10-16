@@ -24,3 +24,8 @@ export function invoiceApiPath(orderId: string, token?: string | null) {
   if (!token) return `/invoices/${orderId}/download`;
   return `/invoices/${orderId}/download?token=${encodeURIComponent(token)}`;
 }
+
+export function orderFeedbackPath(orderId: string, token?: string | null) {
+  if (!token) return `/orders/${orderId}/feedback`;
+  return `/orders/${orderId}/feedback?token=${encodeURIComponent(token)}`;
+}

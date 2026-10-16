@@ -24,6 +24,7 @@ import { riderCashRouter } from "./routes/rider-cash";
 import { printStationsRouter } from "./routes/print-stations";
 import { kotRouter } from "./routes/kot";
 import { couponsAdminRouter, couponsPublicRouter } from "./routes/coupons";
+import { reportsRouter } from "./routes/reports";
 import { UPLOAD_DIR } from "./lib/uploads";
 import { resolveRestaurantId, runWithRestaurant } from "./lib/prisma";
 import {
@@ -87,6 +88,7 @@ export function createApp() {
   app.use("/admin/rider-cash", riderCashRouter);
   app.use("/admin/print-stations", printStationsRouter);
   app.use("/admin/kot", kotRouter);
+  app.use("/admin/reports", reportsRouter);
   app.use("/admin", adminRouter);
   app.use("/invoices", invoicesRouter);
 

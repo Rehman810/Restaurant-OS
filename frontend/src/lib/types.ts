@@ -101,6 +101,8 @@ export type StoreSettings = {
   shiftVarianceTolerance?: number | string;
   riderCashStaleHours?: number;
   autoPrintKitchenTickets?: boolean;
+  offlinePosEnabled?: boolean;
+  offlineClockSkewThresholdMinutes?: number;
   loyaltyEarnPer100?: number | string;
   loyaltyRedeemPerPoint?: number | string;
   loyaltyMaxRedeemPercent?: number | string;
@@ -139,6 +141,16 @@ export type StoreSettings = {
   acceptCash?: boolean;
   acceptCard?: boolean;
   taxNumber?: string;
+  taxEnabled?: boolean;
+  taxLegalName?: string;
+  taxBusinessAddress?: string;
+  taxStrn?: string;
+  taxRatesByFulfillment?: Record<string, number>;
+  taxRatesByPayment?: Record<string, number>;
+  taxFiscalYearEnabled?: boolean;
+  taxRoundingRule?: string;
+  pricesIncludeTax?: boolean;
+  storefrontPushEnabled?: boolean;
   receiptFooter?: string;
   confirmSlaMinutes?: number;
   deliverySlaMinutes?: number;
@@ -259,6 +271,9 @@ export type Order = {
   subtotal?: string | number;
   deliveryCharge?: string | number;
   taxAmount?: string | number;
+  taxableAmount?: string | number | null;
+  taxRatePercentSnap?: string | number | null;
+  taxInclusiveSnap?: boolean | null;
   serviceAmount?: string | number;
   discountAmount?: string | number;
   discountPercent?: string | number | null;
@@ -287,6 +302,12 @@ export type Order = {
   items: OrderItem[];
   rider?: { id: string; name: string; phone?: string | null } | null;
   invoice?: { id: string; invoiceNumber: string } | null;
+  feedback?: { id: string; rating: number; comment: string } | null;
+  offlineLabel?: string | null;
+  offlineDeviceLabel?: string | null;
+  offlineClientCreatedAt?: string | null;
+  needsReview?: boolean;
+  needsReviewReason?: string | null;
 };
 
 export const CATEGORIES = [

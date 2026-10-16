@@ -23,13 +23,21 @@ export type OrderLine = {
 };
 
 type BuildResult =
-  | { ok: true; lines: OrderLine[]; subtotal: number; hadPriceOverride: boolean }
+  | { ok: true; lines: OrderLine[]; subtotal: number; hadPriceOverride: boolean; warnings?: string[] }
   | { ok: false; error: string; status: number };
+
+export type BuildOrderLinesOptions = {
+  /** Skip unavailable items/deals and return warnings (offline POS sync). */
+  skipUnavailable?: boolean;
+};
 
 export async function buildOrderLines(
   cartItems: CartItemInput[],
-  cartDeals: CartDealInput[]
+  cartDeals: CartDealInput[],
+  options?: BuildOrderLinesOptions
 ): Promise<BuildResult> {
+  const skipUnavailable = options?.skipUnavailable === true;
+  const warnings: string[] = [];
   if (!cartItems.length && !cartDeals.length) {
     return { ok: false, error: "Cart is empty. Add items first.", status: 400 };
   }
@@ -51,7 +59,12 @@ export async function buildOrderLines(
   for (const row of cartItems) {
     const menu = byId.get(row.menuItemId);
     if (!menu || !menu.isAvailable) {
-      return { ok: false, error: `Item unavailable: ${menu?.name || row.menuItemId}`, status: 400 };
+      const label = menu?.name || row.menuItemId;
+      if (skipUnavailable) {
+        warnings.push(`Item unavailable: ${label}`);
+        continue;
+      }
+      return { ok: false, error: `Item unavailable: ${label}`, status: 400 };
     }
     const qty = Math.max(1, Number(row.quantity) || 1);
     const labels: string[] = [];
@@ -113,7 +126,20 @@ export async function buildOrderLines(
       include: { items: { include: { menuItem: true } } },
     });
     if (!deal || !deal.isActive) {
+      if (skipUnavailable) {
+        warnings.push("Deal unavailable.");
+        continue;
+      }
       return { ok: false, error: "Deal unavailable.", status: 400 };
+    }
+    if (skipUnavailable) {
+      const missing = deal.items.filter((item) => !item.menuItem.isAvailable);
+      if (missing.length) {
+        warnings.push(
+          `${missing.map((i) => i.menuItem.name).join(", ")} in deal ${deal.title} unavailable — deal skipped.`
+        );
+        continue;
+      }
     }
     const dealQty = Math.max(1, Number(row.quantity) || 1);
     const dealPrice = Number(deal.dealPrice) * dealQty;
@@ -145,7 +171,15 @@ export async function buildOrderLines(
     }
   }
 
-  return { ok: true, lines, subtotal, hadPriceOverride };
+  if (!lines.length) {
+    return {
+      ok: false,
+      error: warnings.length ? warnings.join(" ") : "Cart is empty. Add items first.",
+      status: 400,
+    };
+  }
+
+  return { ok: true, lines, subtotal, hadPriceOverride, warnings: warnings.length ? warnings : undefined };
 }
 
 export async function nextOrderNumber() {

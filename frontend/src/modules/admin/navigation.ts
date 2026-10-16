@@ -1,5 +1,8 @@
 import {
+  AlertTriangle,
   BarChart3,
+  PieChart,
+  Sun,
   Bike,
   Building2,
   ClipboardList,
@@ -29,6 +32,10 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
       { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
+      { href: "/admin/reports/dish-costing", label: "Dish costing", icon: UtensilsCrossed },
+      { href: "/admin/reports/menu-engineering", label: "Menu engineering", icon: PieChart },
+      { href: "/admin/daily-summary", label: "Daily summary", icon: Sun },
+      { href: "/admin/reports/tax", label: "Tax reports", icon: Receipt },
     ],
   },
   {
@@ -38,6 +45,7 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
       { href: "/admin/pos", label: "POS", icon: Receipt },
       { href: "/admin/orders", label: "Orders", icon: ClipboardList },
       { href: "/admin/shifts", label: "Shifts", icon: DoorClosed },
+      { href: "/admin/sync-conflicts", label: "Sync conflicts", icon: AlertTriangle },
       { href: "/admin/tracking", label: "Live tracking", icon: Map },
       { href: "/admin/dine-in", label: "Dine-in", icon: LayoutGrid },
     ],

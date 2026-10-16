@@ -26,6 +26,7 @@ import { posRouter } from "./routes/pos";
 import { branchesRouter } from "./routes/branches";
 import { dineInPublicRouter, dineInRouter } from "./routes/dine-in";
 import { inventoryRouter } from "./routes/inventory";
+import { reportsRouter } from "./routes/reports";
 import { startDineInJobScheduler } from "./lib/dine-in/jobs";
 import { databaseHelpText, verifyDatabaseConnection } from "./lib/db-health";
 import { UPLOAD_DIR } from "./lib/uploads";
@@ -98,6 +99,7 @@ app.use("/admin/blocks", blocklistRouter);
 app.use("/admin/audit-logs", auditLogsRouter);
 app.use("/admin/approval", approvalRouter);
 app.use("/admin/shifts", shiftsRouter);
+app.use("/admin/reports", reportsRouter);
 app.use("/admin", adminRouter);
 app.use("/invoices", invoicesRouter);
 

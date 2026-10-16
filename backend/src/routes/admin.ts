@@ -27,6 +27,8 @@ import { AuditAction } from "../lib/audit-actions";
 import { clientIp } from "../lib/client-ip";
 import { sendStaffWelcomeEmail } from "../lib/email";
 import { getStoreSettings } from "../lib/settings-data";
+import { branchDayRangeUtc } from "../lib/dine-in/branch-time";
+import { storeTodayUtcRange } from "../lib/reports/time-range";
 
 export const adminRouter = Router();
 
@@ -56,10 +58,22 @@ function parsePeriod(raw: unknown): AnalyticsPeriod {
   return "today";
 }
 
-function periodRange(period: AnalyticsPeriod) {
+async function resolveStoreTimezone(scope: { allBranches: boolean; branchId?: string | null }) {
+  const settings = await getStoreSettings();
+  if (!scope.allBranches && scope.branchId) {
+    const branch = await prisma.branch.findUnique({
+      where: { id: scope.branchId },
+      select: { timezone: true },
+    });
+    return branch?.timezone || settings.timezone || "Asia/Karachi";
+  }
+  return settings.timezone || "Asia/Karachi";
+}
+
+function periodRange(period: AnalyticsPeriod, todayStart?: Date, todayEnd?: Date) {
   const now = new Date();
-  const end = dayEnd(now);
-  const start = dayStart(now);
+  const end = todayEnd ?? dayEnd(now);
+  const start = todayStart ?? dayStart(now);
 
   if (period === "week") {
     const day = start.getDay();
@@ -195,7 +209,8 @@ adminRouter.get("/stats", requireAuth, requireRole(...ADMIN_LIKE), async (req, r
   }
   const bw = scope.where;
 
-  const start = dayStart();
+  const timezone = await resolveStoreTimezone(scope);
+  const { start, end: todayEnd } = storeTodayUtcRange(timezone);
   const monthStart = new Date(start.getFullYear(), start.getMonth(), 1);
 
   const [
@@ -220,11 +235,11 @@ adminRouter.get("/stats", requireAuth, requireRole(...ADMIN_LIKE), async (req, r
     posTodayRevenueAgg,
   ] = await Promise.all([
     prisma.order.count({
-      where: { ...bw, createdAt: { gte: start }, status: { not: OrderStatus.CANCELLED } },
+      where: { ...bw, createdAt: { gte: start, lte: todayEnd }, status: { not: OrderStatus.CANCELLED } },
     }),
     prisma.order.aggregate({
       _sum: { total: true },
-      where: { ...bw, createdAt: { gte: start }, status: { not: OrderStatus.CANCELLED } },
+      where: { ...bw, createdAt: { gte: start, lte: todayEnd }, status: { not: OrderStatus.CANCELLED } },
     }),
     prisma.order.aggregate({
       _sum: { total: true },
@@ -237,8 +252,12 @@ adminRouter.get("/stats", requireAuth, requireRole(...ADMIN_LIKE), async (req, r
     prisma.order.count({ where: { ...bw, status: OrderStatus.CONFIRMED } }),
     prisma.order.count({ where: { ...bw, status: OrderStatus.PREPARING } }),
     prisma.order.count({ where: { ...bw, status: OrderStatus.OUT_FOR_DELIVERY } }),
-    prisma.order.count({ where: { ...bw, createdAt: { gte: start }, status: OrderStatus.DELIVERED } }),
-    prisma.order.count({ where: { ...bw, createdAt: { gte: start }, status: OrderStatus.CANCELLED } }),
+    prisma.order.count({
+      where: { ...bw, createdAt: { gte: start, lte: todayEnd }, status: OrderStatus.DELIVERED },
+    }),
+    prisma.order.count({
+      where: { ...bw, createdAt: { gte: start, lte: todayEnd }, status: OrderStatus.CANCELLED },
+    }),
     prisma.menuItem.count(),
     prisma.user.count({ where: { role: Role.CUSTOMER } }),
     prisma.order.count({ where: { ...bw, status: { not: OrderStatus.CANCELLED } } }),
@@ -263,7 +282,7 @@ adminRouter.get("/stats", requireAuth, requireRole(...ADMIN_LIKE), async (req, r
     prisma.order.count({
       where: {
         ...bw,
-        createdAt: { gte: start },
+        createdAt: { gte: start, lte: todayEnd },
         status: { not: OrderStatus.CANCELLED },
         orderSource: OrderSource.POS,
       },
@@ -272,7 +291,7 @@ adminRouter.get("/stats", requireAuth, requireRole(...ADMIN_LIKE), async (req, r
       _sum: { total: true },
       where: {
         ...bw,
-        createdAt: { gte: start },
+        createdAt: { gte: start, lte: todayEnd },
         status: { not: OrderStatus.CANCELLED },
         orderSource: OrderSource.POS,
       },
@@ -398,7 +417,10 @@ adminRouter.get("/analytics", requireAuth, requireRole(...ADMIN_LIKE), async (re
   const bw = scope.where;
 
   const period = parsePeriod(req.query.period);
-  const { start, end } = periodRange(period);
+  const timezone = await resolveStoreTimezone(scope);
+  const today = storeTodayUtcRange(timezone);
+  const { start, end } =
+    period === "today" ? { start: today.start, end: today.end } : periodRange(period);
   const rangeWhere = { ...bw, createdAt: { gte: start, lte: end } };
   const orderWhere = { ...rangeWhere, status: { not: OrderStatus.CANCELLED } };
 

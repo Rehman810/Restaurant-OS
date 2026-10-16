@@ -8,12 +8,16 @@ export type ReceiptStore = {
   whatsapp?: string;
   footer?: string;
   taxNumber?: string;
+  taxStrn?: string;
+  taxLabel?: string;
 };
 
 export type PrintReceiptOptions = {
   cashier?: string;
   /** Default: both customer receipt and kitchen ticket */
   copies?: "both" | "customer" | "kitchen";
+  /** Offline receipt — shows temp number until synced */
+  offlinePending?: boolean;
 };
 
 const PLACEHOLDER_PHONES = new Set(["03000000000", "0300000000", "0000000000", ""]);
@@ -110,7 +114,7 @@ function printScript() {
   return `<script>window.onload = function() { window.print(); };</script>`;
 }
 
-export function customerReceiptHtml(order: Order, store: ReceiptStore, cashier?: string) {
+export function customerReceiptHtml(order: Order, store: ReceiptStore, cashier?: string, offlinePending?: boolean) {
   const date = new Date(order.createdAt).toLocaleString("en-PK", {
     dateStyle: "medium",
     timeStyle: "short",
@@ -145,6 +149,7 @@ export function customerReceiptHtml(order: Order, store: ReceiptStore, cashier?:
   <hr class="rule-bold" />
   <div class="center">
     <div class="order-no">${esc(order.orderNumber)}</div>
+    ${offlinePending ? `<div class="meta" style="color:#b45309;font-weight:700">OFFLINE — NOT FINAL · Sync pending</div>` : ""}
     <div class="meta">${date}</div>
     <span class="badge">${fulfillmentLabel(order.fulfillmentType)}</span>
     ${order.tableNumber ? `<div class="meta">Table ${esc(order.tableNumber)}</div>` : ""}
@@ -157,7 +162,8 @@ export function customerReceiptHtml(order: Order, store: ReceiptStore, cashier?:
   <hr class="rule" />
   <div class="totals">
     ${order.subtotal != null ? `<div><span>Subtotal</span><span>${formatPkr(order.subtotal)}</span></div>` : ""}
-    ${Number(order.taxAmount || 0) > 0 ? `<div><span>Tax</span><span>${formatPkr(order.taxAmount!)}</span></div>` : ""}
+    ${order.taxableAmount != null && Number(order.taxableAmount) > 0 ? `<div><span>Taxable</span><span>${formatPkr(order.taxableAmount)}</span></div>` : ""}
+    ${Number(order.taxAmount || 0) > 0 ? `<div><span>${esc(store.taxLabel || "Tax")}${order.taxRatePercentSnap != null ? ` (${order.taxRatePercentSnap}%)` : ""}</span><span>${formatPkr(order.taxAmount!)}</span></div>` : ""}
     ${Number(order.serviceAmount || 0) > 0 ? `<div><span>Service</span><span>${formatPkr(order.serviceAmount!)}</span></div>` : ""}
     ${Number(order.deliveryCharge || 0) > 0 ? `<div><span>Delivery</span><span>${formatPkr(order.deliveryCharge!)}</span></div>` : ""}
     <div class="grand"><span>TOTAL</span><span>${formatPkr(order.total)}</span></div>
@@ -166,7 +172,8 @@ export function customerReceiptHtml(order: Order, store: ReceiptStore, cashier?:
   <p class="thanks">Thank you — enjoy your meal!</p>
   <div class="copy-label">Customer copy</div>
   <div class="footer">
-    ${store.taxNumber ? `Tax no. ${esc(store.taxNumber)}<br/>` : ""}
+    ${store.taxNumber ? `NTN ${esc(store.taxNumber)}<br/>` : ""}
+    ${store.taxStrn ? `STRN ${esc(store.taxStrn)}<br/>` : ""}
     ${store.footer ? `${esc(store.footer)}<br/>` : ""}
     ${cashier ? `Served by ${esc(cashier)} · ` : ""}${esc(order.orderNumber)}
   </div>
@@ -239,7 +246,10 @@ export function printReceipt(order: Order, store: ReceiptStore, options?: PrintR
   const cashier = options?.cashier;
 
   if (copies === "customer" || copies === "both") {
-    openPrintWindow(customerReceiptHtml(order, store, cashier), `Receipt ${order.orderNumber}`);
+    openPrintWindow(
+      customerReceiptHtml(order, store, cashier, options?.offlinePending),
+      `Receipt ${order.orderNumber}`
+    );
   }
 
   if (copies === "kitchen" || copies === "both") {

@@ -6,8 +6,10 @@ import { PackageSearch, Phone } from "lucide-react";
 import { api } from "@/lib/api";
 import { saveGuestOrderToken } from "@/lib/guest-order";
 import { Order } from "@/lib/types";
+import { useStorefrontLocale } from "@/lib/i18n/storefront";
 
 export function OrderTrackForm({ compact }: { compact?: boolean }) {
+  const { t } = useStorefrontLocale();
   const router = useRouter();
   const [orderNumber, setOrderNumber] = useState("");
   const [phone, setPhone] = useState("");
@@ -49,10 +51,8 @@ export function OrderTrackForm({ compact }: { compact?: boolean }) {
           <PackageSearch size={20} />
         </span>
         <div>
-          <h2 className="font-display text-xl text-stone-900">Track your order</h2>
-          <p className="mt-1 text-sm text-stone-500">
-            Enter your order number and phone — no account needed.
-          </p>
+          <h2 className="font-display text-xl text-stone-900">{t("track_title")}</h2>
+          <p className="mt-1 text-sm text-stone-500">{t("track_subtitle")}</p>
         </div>
       </div>
 

@@ -79,6 +79,13 @@ export function validateSettingsInput(body: Record<string, unknown>): SettingsEr
     }
   }
 
+  if (body.offlineClockSkewThresholdMinutes !== undefined && body.offlineClockSkewThresholdMinutes !== "") {
+    const n = Number(body.offlineClockSkewThresholdMinutes);
+    if (!Number.isInteger(n) || n < 1 || n > 24 * 60) {
+      errors.offlineClockSkewThresholdMinutes = "Enter whole minutes between 1 and 1440.";
+    }
+  }
+
   if (body.maxCashierDiscountPercent !== undefined && body.maxCashierDiscountPercent !== "") {
     const n = Number(body.maxCashierDiscountPercent);
     if (!Number.isFinite(n) || n < 0 || n > 100) {

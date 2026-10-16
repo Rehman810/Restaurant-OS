@@ -131,6 +131,15 @@ settingsRouter.patch("/", requireAuth, requireRole(Role.ADMIN), async (req, res)
       ...(body.riderCashStaleHours !== undefined
         ? { riderCashStaleHours: Number(body.riderCashStaleHours) || 24 }
         : {}),
+      ...(body.offlinePosEnabled !== undefined
+        ? { offlinePosEnabled: Boolean(body.offlinePosEnabled) }
+        : {}),
+      ...(body.offlineClockSkewThresholdMinutes !== undefined
+        ? { offlineClockSkewThresholdMinutes: Math.max(1, Math.floor(Number(body.offlineClockSkewThresholdMinutes) || 10)) }
+        : {}),
+      ...(body.storefrontPushEnabled !== undefined
+        ? { storefrontPushEnabled: Boolean(body.storefrontPushEnabled) }
+        : {}),
       ...(body.autoPrintKitchenTickets !== undefined
         ? { autoPrintKitchenTickets: Boolean(body.autoPrintKitchenTickets) }
         : {}),
@@ -181,6 +190,27 @@ settingsRouter.patch("/", requireAuth, requireRole(Role.ADMIN), async (req, res)
       ...(body.acceptCash !== undefined ? { acceptCash: Boolean(body.acceptCash) } : {}),
       ...(body.acceptCard !== undefined ? { acceptCard: Boolean(body.acceptCard) } : {}),
       ...(body.taxNumber !== undefined ? { taxNumber: String(body.taxNumber).trim() } : {}),
+      ...(body.taxEnabled !== undefined ? { taxEnabled: Boolean(body.taxEnabled) } : {}),
+      ...(body.taxLegalName !== undefined ? { taxLegalName: String(body.taxLegalName).trim() } : {}),
+      ...(body.taxBusinessAddress !== undefined
+        ? { taxBusinessAddress: String(body.taxBusinessAddress).trim() }
+        : {}),
+      ...(body.taxStrn !== undefined ? { taxStrn: String(body.taxStrn).trim() } : {}),
+      ...(body.taxRatesByFulfillment !== undefined
+        ? { taxRatesByFulfillment: body.taxRatesByFulfillment as object }
+        : {}),
+      ...(body.taxRatesByPayment !== undefined
+        ? { taxRatesByPayment: body.taxRatesByPayment as object }
+        : {}),
+      ...(body.taxFiscalYearEnabled !== undefined
+        ? { taxFiscalYearEnabled: Boolean(body.taxFiscalYearEnabled) }
+        : {}),
+      ...(body.taxRoundingRule !== undefined
+        ? { taxRoundingRule: String(body.taxRoundingRule).trim() || "HALF_UP" }
+        : {}),
+      ...(body.pricesIncludeTax !== undefined
+        ? { pricesIncludeTax: Boolean(body.pricesIncludeTax) }
+        : {}),
       ...(body.receiptFooter !== undefined ? { receiptFooter: String(body.receiptFooter) } : {}),
       ...(body.confirmSlaMinutes !== undefined
         ? { confirmSlaMinutes: Number(body.confirmSlaMinutes) || 15 }

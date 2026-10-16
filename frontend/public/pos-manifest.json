@@ -1,0 +1,18 @@
+{
+  "name": "Restaurant OS POS",
+  "short_name": "POS",
+  "description": "Point of sale — works offline for dine-in and takeaway",
+  "start_url": "/admin/pos",
+  "scope": "/admin/pos",
+  "display": "standalone",
+  "background_color": "#1c1917",
+  "theme_color": "#ea580c",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

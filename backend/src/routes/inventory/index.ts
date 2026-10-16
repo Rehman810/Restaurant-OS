@@ -626,6 +626,101 @@ inventoryRouter.post("/receive", requireAuth, requireRole(...WRITE_ROLES), async
   }
 });
 
+inventoryRouter.post("/purchases/:id/void", requireAuth, requireRole(...WRITE_ROLES), async (req, res) => {
+  try {
+    const branchId = await resolveBranchId(req);
+    const body = req.body as { managerOverride?: boolean; reason?: string };
+    const purchase = await prisma.inventoryPurchase.findFirst({
+      where: { id: req.params.id, branchId },
+      include: { lines: true },
+    });
+    if (!purchase) return res.status(404).json({ error: "Purchase not found." });
+    if (purchase.status === PurchaseStatus.VOIDED) {
+      return res.status(400).json({ error: "Purchase is already voided." });
+    }
+
+    const { writeAudit } = await import("../../lib/audit");
+    const { AuditAction } = await import("../../lib/audit-actions");
+
+    await prisma.$transaction(async (tx) => {
+      for (const line of purchase.lines) {
+        const qty = Number(line.quantity);
+        try {
+          await applyStockChange({
+            branchId,
+            itemId: line.itemId,
+            type: StockMovementType.ADJUSTMENT,
+            quantityDelta: -qty,
+            unitCost: Number(line.unitCost),
+            reason: body.reason?.trim() || `Void purchase ${purchase.invoiceRef || purchase.id}`,
+            referenceType: StockReferenceType.PURCHASE,
+            referenceId: purchase.id,
+            actorId: req.user!.id,
+            allowNegative: Boolean(body.managerOverride),
+          });
+        } catch (err) {
+          const code = (err as { code?: string }).code;
+          if (code === "INSUFFICIENT_STOCK" && !body.managerOverride) {
+            throw Object.assign(new Error("Void would make stock negative. Manager override required."), {
+              status: 409,
+              code: "NEGATIVE_STOCK",
+            });
+          }
+          throw err;
+        }
+      }
+      await tx.inventoryPurchase.update({
+        where: { id: purchase.id },
+        data: { status: PurchaseStatus.VOIDED, voidedAt: new Date() },
+      });
+    });
+
+    await writeAudit(prisma, {
+      action: AuditAction.PURCHASE_VOIDED,
+      actorId: req.user!.id,
+      branchId,
+      entityType: "inventory_purchase",
+      entityId: purchase.id,
+      reason: body.reason?.trim() || null,
+    });
+
+    res.json({ ok: true });
+  } catch (err) {
+    return handleErr(res, err);
+  }
+});
+
+inventoryRouter.get("/movements/export.csv", requireAuth, requireRole(...READ_ROLES), async (req, res) => {
+  try {
+    const branchId = await resolveBranchId(req);
+    const rows = await prisma.stockMovement.findMany({
+      where: { branchId },
+      orderBy: { createdAt: "desc" },
+      take: 5000,
+      include: { item: { select: { name: true, unit: true } } },
+    });
+    const header = "date,type,item,quantityDelta,quantityAfter,reason,reference\n";
+    const body = rows
+      .map((m) =>
+        [
+          m.createdAt.toISOString(),
+          m.type,
+          `"${m.item.name.replace(/"/g, '""')}"`,
+          Number(m.quantityDelta),
+          Number(m.quantityAfter),
+          `"${(m.reason || "").replace(/"/g, '""')}"`,
+          m.reference || "",
+        ].join(",")
+      )
+      .join("\n");
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="stock-movements.csv"');
+    res.send(header + body);
+  } catch (err) {
+    return branchScopeError(res, err);
+  }
+});
+
 inventoryRouter.post("/purchases/:id/payment", requireAuth, requireRole(...WRITE_ROLES), async (req, res) => {
   const amount = Number((req.body as { amount?: number }).amount ?? 0);
   const purchase = await prisma.inventoryPurchase.findUnique({ where: { id: req.params.id } });

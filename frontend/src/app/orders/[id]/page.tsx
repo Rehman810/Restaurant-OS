@@ -18,6 +18,8 @@ import { usePoll } from "@/hooks/usePoll";
 import { useLiveOrders } from "@/hooks/useLiveOrders";
 import { FulfillmentBadge } from "@/components/FulfillmentBadge";
 import { Order, orderStatusLabel } from "@/lib/types";
+import { OrderFeedbackForm } from "@/components/OrderFeedbackForm";
+import { OrderPushPrompt } from "@/components/OrderPushPrompt";
 
 export default function OrderDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -56,6 +58,11 @@ export default function OrderDetailPage() {
   const canCancel =
     order &&
     (order.status === "PENDING_CONFIRMATION" || order.status === "CONFIRMED");
+
+  const terminal =
+    order &&
+    (order.status === "DELIVERED" || order.status === "COLLECTED" || order.status === "SERVED");
+  const showFeedback = terminal && !order.feedback;
 
   async function cancelOrder(reason?: string) {
     if (!order || !canCancel || !reason?.trim()) return;
@@ -135,6 +142,18 @@ export default function OrderDetailPage() {
             <div className="pt-2">
               <StatusTrack status={order.status} fulfillmentType={order.fulfillmentType} />
             </div>
+
+            {order.status !== "CANCELLED" && order.status !== "DELIVERED" && (
+              <OrderPushPrompt orderId={order.id} />
+            )}
+
+            {showFeedback && (
+              <OrderFeedbackForm
+                orderId={order.id}
+                guestToken={guestToken}
+                onSubmitted={refresh}
+              />
+            )}
 
             <div className="space-y-3 border-t border-orange-100 pt-6">
               <p className="text-sm font-semibold text-stone-800">Your bag</p>

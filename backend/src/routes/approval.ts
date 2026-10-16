@@ -12,6 +12,7 @@ approvalRouter.get("/controls", requireAuth, requireRole(...ORDER_OPS), async (_
   const { getStoreSettings } = await import("../lib/settings-data");
   const settings = await getStoreSettings();
   res.json({
+    offlinePosEnabled: settings.offlinePosEnabled !== false,
     maxCashierDiscountPercent: Number(settings.maxCashierDiscountPercent),
     requireApprovalForVoid: settings.requireApprovalForVoid,
     requireApprovalForRefund: settings.requireApprovalForRefund,

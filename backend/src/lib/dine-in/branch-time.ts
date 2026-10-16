@@ -58,6 +58,20 @@ function localInTimezoneToUtc(localIso: string, timezone: string): Date {
   return guess;
 }
 
+/** Compact YYYYMMDD in branch timezone (for POS order sequences). */
+export function branchDayKey(timezone: string, ref: Date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(ref);
+  const y = parts.find((p) => p.type === "year")?.value ?? "1970";
+  const m = parts.find((p) => p.type === "month")?.value ?? "01";
+  const d = parts.find((p) => p.type === "day")?.value ?? "01";
+  return `${y}${m}${d}`;
+}
+
 export function formatInBranchTz(iso: Date | string, timezone: string) {
   const d = typeof iso === "string" ? new Date(iso) : iso;
   return new Intl.DateTimeFormat("en-PK", {

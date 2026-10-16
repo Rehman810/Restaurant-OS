@@ -646,6 +646,12 @@ async function main() {
       facebookUrl: "",
       showLiveStats: false,
       closedMessage: "",
+      offlinePosEnabled: true,
+      offlineClockSkewThresholdMinutes: 10,
+      taxPercent: 5,
+      taxEnabled: false,
+      taxNumber: "1234567-8",
+      storefrontPushEnabled: false,
     },
   });
 

@@ -69,7 +69,13 @@ E2E_RUN=1 E2E_BASE_URL=http://localhost:3000 npm run test:e2e -w restaurant-os-w
 
 Optional dev login shortcuts: set `NEXT_PUBLIC_ENABLE_DEMO_LOGIN=true` in `frontend/.env.local` (never in production).
 
-Phase 2 feature notes and QA checklist: [docs/PHASE2.md](docs/PHASE2.md).
+Phase 2 feature notes and QA checklist: [docs/PHASE2.md](docs/PHASE2.md).  
+Phase 3 (offline POS, reports, tax, storefront PWA): [docs/PHASE3.md](docs/PHASE3.md) and [docs/PHASE3_CHECKLIST.md](docs/PHASE3_CHECKLIST.md).
+
+```bash
+# Phase 3 e2e (API + web running, DB seeded)
+cd frontend && E2E_RUN=1 npm run test:e2e -- e2e/phase3-storefront.spec.ts e2e/phase3-admin.spec.ts
+```
 
 Check dishes missing images:
 

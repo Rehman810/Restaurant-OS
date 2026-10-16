@@ -1,0 +1,96 @@
+import webpush from "web-push";
+import { prisma } from "./prisma";
+import { statusLabel } from "./order-machine";
+import type { FulfillmentType, OrderStatus } from "@prisma/client";
+
+let configured = false;
+
+function ensureVapid() {
+  if (configured) return true;
+  const pub = process.env.VAPID_PUBLIC_KEY?.trim();
+  const priv = process.env.VAPID_PRIVATE_KEY?.trim();
+  const subject = process.env.VAPID_SUBJECT?.trim() || "mailto:admin@localhost";
+  if (!pub || !priv) return false;
+  webpush.setVapidDetails(subject, pub, priv);
+  configured = true;
+  return true;
+}
+
+export function getVapidPublicKey() {
+  return process.env.VAPID_PUBLIC_KEY?.trim() || null;
+}
+
+export async function upsertPushSubscription(input: {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  userId?: string | null;
+  orderId?: string | null;
+}) {
+  const endpoint = input.endpoint.trim();
+  if (!endpoint || !input.p256dh || !input.auth) {
+    throw Object.assign(new Error("Invalid push subscription."), { status: 400 });
+  }
+
+  const existing = await prisma.customerPushSubscription.findUnique({ where: { endpoint } });
+  const orderIds = new Set(existing?.orderIds ?? []);
+  if (input.orderId) orderIds.add(input.orderId);
+
+  return prisma.customerPushSubscription.upsert({
+    where: { endpoint },
+    create: {
+      endpoint,
+      p256dh: input.p256dh,
+      auth: input.auth,
+      userId: input.userId || null,
+      orderIds: [...orderIds],
+    },
+    update: {
+      p256dh: input.p256dh,
+      auth: input.auth,
+      userId: input.userId || existing?.userId || null,
+      orderIds: [...orderIds],
+    },
+  });
+}
+
+export async function notifyOrderStatusPush(orderId: string, status: OrderStatus, fulfillment: FulfillmentType) {
+  if (!ensureVapid()) return;
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { id: true, orderNumber: true, customerId: true },
+  });
+  if (!order) return;
+
+  const subs = await prisma.customerPushSubscription.findMany({
+    where: {
+      OR: [{ orderIds: { has: orderId } }, ...(order.customerId ? [{ userId: order.customerId }] : [])],
+    },
+  });
+  if (!subs.length) return;
+
+  const label = statusLabel(status, fulfillment);
+  const payload = JSON.stringify({
+    title: `Order ${order.orderNumber}`,
+    body: label,
+    url: `/orders/${order.id}`,
+  });
+
+  for (const sub of subs) {
+    try {
+      await webpush.sendNotification(
+        {
+          endpoint: sub.endpoint,
+          keys: { p256dh: sub.p256dh, auth: sub.auth },
+        },
+        payload
+      );
+    } catch (err) {
+      const code = (err as { statusCode?: number }).statusCode;
+      if (code === 404 || code === 410) {
+        await prisma.customerPushSubscription.delete({ where: { id: sub.id } }).catch(() => null);
+      }
+    }
+  }
+}

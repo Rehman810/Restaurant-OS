@@ -31,6 +31,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [menuOpen, setMenuOpen] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const [pendingDineIn, setPendingDineIn] = useState(0);
+  const [lowStockCount, setLowStockCount] = useState(0);
   const { theme, toggle: toggleTheme } = useAdminTheme();
 
   useEffect(() => {
@@ -81,6 +82,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     };
   }, [user, path]);
 
+  useEffect(() => {
+    if (!user || (user.role !== "ADMIN" && user.role !== "MANAGER")) return;
+    const refresh = () => {
+      void api<{ lowStockCount: number }>("/admin/inventory/alerts")
+        .then((r) => setLowStockCount(r.lowStockCount))
+        .catch(() => setLowStockCount(0));
+    };
+    refresh();
+    const id = window.setInterval(refresh, 60_000);
+    return () => window.clearInterval(id);
+  }, [user, path]);
+
   const isStaffLogin = path === "/admin/login";
 
   useEffect(() => {
@@ -111,6 +124,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       const allowedPath = [
         "/admin",
         "/admin/analytics",
+        "/admin/reports",
+        "/admin/daily-summary",
+        "/admin/inventory",
+        "/admin/sync-conflicts",
+        "/admin/shifts",
         "/admin/kitchen",
         "/admin/pos",
         "/admin/orders",
@@ -225,6 +243,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     >
                       <Icon size={18} className={active ? "text-brand-600" : ""} />
                       <span className={collapsed ? "lg:hidden" : ""}>{n.label}</span>
+                      {n.href === "/admin/inventory" && lowStockCount > 0 && (
+                        <span
+                          className={`ml-auto grid min-w-[1.25rem] place-items-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold text-white ${
+                            collapsed ? "lg:absolute lg:right-1 lg:top-1 lg:ml-0" : ""
+                          }`}
+                        >
+                          {lowStockCount > 99 ? "99+" : lowStockCount}
+                        </span>
+                      )}
                       {n.href === "/admin/dine-in" && pendingDineIn > 0 && (
                         <span
                           className={`ml-auto grid min-w-[1.25rem] place-items-center rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold text-white ${

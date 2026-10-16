@@ -88,6 +88,9 @@ export async function recordCashMovement(
     orderId?: string | null;
     createdById?: string | null;
     allowClosed?: boolean;
+    posClientMovementId?: string | null;
+    offlineClientCreatedAt?: Date | null;
+    offlineDeviceLabel?: string | null;
   }
 ) {
   if (!Number.isFinite(input.amount) || input.amount <= 0) {
@@ -115,6 +118,9 @@ export async function recordCashMovement(
       reason,
       orderId: input.orderId ?? null,
       createdById: input.createdById ?? null,
+      posClientMovementId: input.posClientMovementId ?? null,
+      offlineClientCreatedAt: input.offlineClientCreatedAt ?? null,
+      offlineDeviceLabel: input.offlineDeviceLabel ?? null,
     },
   });
 }

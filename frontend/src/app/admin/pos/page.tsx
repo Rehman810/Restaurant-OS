@@ -32,6 +32,21 @@ import { PosItemSheet } from "@/components/admin/PosItemSheet";
 import { ManagerApprovalModal } from "@/components/admin/ManagerApprovalModal";
 import { InputSheet } from "@/components/admin/InputSheet";
 import { CashShiftPanel } from "@/components/admin/pos/CashShiftPanel";
+import { PosOfflineBar } from "@/components/admin/pos/PosOfflineBar";
+import { getDeviceLabel } from "@/lib/offline/device-label";
+import {
+  enqueuePosOrder,
+  isIndexedDbAvailable,
+  nextOfflineLabel,
+  saveDealsSnapshot,
+  saveMenuSnapshot,
+} from "@/lib/offline/pos-db";
+import { buildOfflinePrintOrder } from "@/lib/offline/offline-receipt";
+import { syncPosQueue } from "@/lib/offline/pos-sync";
+import { onPosOrderSynced } from "@/lib/offline/pos-sync-events";
+import { auditOfflineLogoutOverride, hasPendingOfflineQueue } from "@/lib/offline/logout-guard";
+import { pendingQueueCount } from "@/lib/offline/pos-db";
+import { ConfirmSheet } from "@/components/admin/ConfirmSheet";
 import { fetchFloor, openTableSession, seatReservation, type FloorTable } from "@/modules/dine-in/api";
 import { useBranch } from "@/modules/branches/BranchContext";
 
@@ -133,6 +148,12 @@ export default function PosPage() {
   const [voidReasonNote, setVoidReasonNote] = useState("");
   const [priceEditLine, setPriceEditLine] = useState<{ id: string; price: number } | null>(null);
   const [shiftOpen, setShiftOpen] = useState(true);
+  const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
+  const [conflictCount, setConflictCount] = useState(0);
+  const [offlinePosEnabled, setOfflinePosEnabled] = useState(true);
+  const [logoutQueueWarn, setLogoutQueueWarn] = useState(false);
+  const idbOk = isIndexedDbAvailable();
+  const offlineMode = !isOnline && idbOk && offlinePosEnabled;
 
   const loadFloor = useCallback(async () => {
     if (selection === "all") return;
@@ -158,16 +179,26 @@ export default function PosPage() {
   }, [mode, loadFloor]);
 
   const load = useCallback(async () => {
-    const [m, d, a, s] = await Promise.all([
-      fetchAllMenuItems(),
-      fetchAllDeals(),
-      api<DeliveryArea[]>("/delivery-areas"),
+    const { loadMenuSnapshot, loadDealsSnapshot } = await import("@/lib/offline/pos-db");
+    let m: MenuItem[];
+    let d: Deal[];
+    try {
+      [m, d] = await Promise.all([fetchAllMenuItems(), fetchAllDeals()]);
+    } catch {
+      m = (await loadMenuSnapshot()) ?? [];
+      d = (await loadDealsSnapshot()) ?? [];
+      if (!m.length) throw new Error("offline");
+    }
+    const [a, s] = await Promise.all([
+      api<DeliveryArea[]>("/delivery-areas").catch(() => [] as DeliveryArea[]),
       api<{ settings: { storeName?: string; phone: string; address: string; freeDeliveryAbove?: string | number | null } }>(
         "/settings/public"
       ).catch(() => null),
     ]);
     setMenu(m.filter((i) => i.isAvailable));
     setDeals(d.filter((x) => x.isActive));
+    void saveMenuSnapshot(m);
+    void saveDealsSnapshot(d);
     setAreas(a.filter((x) => x.isDelivering));
     if (a[0]) setAreaId(a[0].id);
     if (s?.settings) {
@@ -183,13 +214,78 @@ export default function PosPage() {
   }, []);
 
   useEffect(() => {
+    const unsub = onPosOrderSynced(({ order }) => {
+      printReceipt(order, store, { cashier: user?.name });
+      setLastOrder(order);
+    });
+    return () => {
+      unsub();
+    };
+  }, [store, user?.name]);
+
+  async function guardedLogout() {
+    if (await hasPendingOfflineQueue()) {
+      if (!isManager) {
+        setError("Sync or clear the offline queue before signing out.");
+        return;
+      }
+      setLogoutQueueWarn(true);
+      return;
+    }
+    logout();
+    router.replace("/login");
+  }
+
+  useEffect(() => {
+    const on = () => setIsOnline(true);
+    const off = () => setIsOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+    };
+  }, []);
+
+  useEffect(() => {
+    let pending = 0;
+    const refresh = () => {
+      void pendingQueueCount().then((n) => {
+        pending = n;
+      });
+    };
+    refresh();
+    const id = window.setInterval(refresh, 5000);
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (pending > 0) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isManager) return;
+    void api<{ orders: Order[] }>("/pos/sync-conflicts")
+      .then((r) => setConflictCount(r.orders.length))
+      .catch(() => setConflictCount(0));
+  }, [isManager, isOnline]);
+
+  useEffect(() => {
     load().catch(() => setError("Could not load menu."));
     void api<{
+      offlinePosEnabled?: boolean;
       maxCashierDiscountPercent: number;
       discountReasonOptions: string[];
       voidReasonOptions: string[];
     }>("/admin/approval/controls")
       .then((c) => {
+        setOfflinePosEnabled(c.offlinePosEnabled !== false);
         setMaxCashierDiscountPercent(Number(c.maxCashierDiscountPercent) || 10);
         setDiscountReasons(Array.isArray(c.discountReasonOptions) ? c.discountReasonOptions.map(String) : []);
         setVoidReasons(Array.isArray(c.voidReasonOptions) ? c.voidReasonOptions.map(String) : []);
@@ -251,6 +347,24 @@ export default function PosPage() {
       setError("Add items to the cart first.");
       return;
     }
+    if (offlineMode) {
+      if (mode === "DELIVERY") {
+        setError("Delivery is not available offline.");
+        return;
+      }
+      if (payment !== "CASH") {
+        setError("Only cash payments work offline.");
+        return;
+      }
+      if (pct > 0 || hasPriceOverride) {
+        setError("Discounts and price overrides require an online connection and manager approval.");
+        return;
+      }
+      if (!shiftOpen) {
+        setError("You need an open shift (synced while online) before taking cash offline.");
+        return;
+      }
+    }
     if (mode === "DELIVERY" && !areaId) {
       setError("Select a delivery area.");
       return;
@@ -265,6 +379,10 @@ export default function PosPage() {
       return;
     }
     if (needsCheckoutApproval && !approval) {
+      if (offlineMode) {
+        setError("Manager approval requires an online connection.");
+        return;
+      }
       setApprovalFlow("checkout");
       return;
     }
@@ -275,6 +393,52 @@ export default function PosPage() {
     setBusy(true);
     try {
       const payload = buildPosOrderPayload(lines);
+      if (offlineMode) {
+        const clientOrderId = crypto.randomUUID();
+        const offlineLabel = await nextOfflineLabel();
+        const deviceLabel = getDeviceLabel();
+        const clientCreatedAt = new Date().toISOString();
+        const body = {
+          ...payload,
+          fulfillmentType: mode,
+          customerName,
+          customerPhone: customerPhone || undefined,
+          tableNumber: mode === "DINE_IN" ? tableNumber : undefined,
+          tableSessionId: mode === "DINE_IN" ? tableSessionId : undefined,
+          diningTableId: mode === "DINE_IN" ? diningTableId : undefined,
+          waiterId: mode === "DINE_IN" ? waiterId || undefined : undefined,
+          notes,
+          paymentMethod: "CASH",
+          paymentStatus: "PAID",
+        };
+        await enqueuePosOrder({
+          clientOrderId,
+          offlineLabel,
+          clientCreatedAt,
+          deviceLabel,
+          clientClaimedTotal: total,
+          body,
+          status: "pending",
+          attempts: 0,
+        });
+        const pseudo = buildOfflinePrintOrder({
+          offlineLabel,
+          lines,
+          total,
+          subtotal,
+          fulfillmentType: mode,
+          customerName,
+          customerPhone,
+          tableNumber: mode === "DINE_IN" ? tableNumber : undefined,
+          notes,
+        });
+        setLastOrder(pseudo);
+        clear();
+        setNotes("");
+        setMobileView("menu");
+        printReceipt(pseudo, store, { cashier: user?.name, offlinePending: true });
+        return;
+      }
       const order = await api<Order>("/pos", {
         method: "POST",
         body: JSON.stringify({
@@ -306,6 +470,7 @@ export default function PosPage() {
       setApprovalFlow(null);
       setMobileView("menu");
       printReceipt(order, store, { cashier: user?.name });
+      void syncPosQueue();
     } catch (err) {
       if (err instanceof ApiError && err.code === "APPROVAL_REQUIRED") {
         setApprovalFlow("checkout");
@@ -318,7 +483,15 @@ export default function PosPage() {
   }
 
   async function voidLastOrder(approval?: { approverId: string; pin: string }) {
+    if (!isOnline) {
+      setError("Void requires an online connection and manager approval.");
+      return;
+    }
     if (!lastOrder || lastOrder.status === "CANCELLED") return;
+    if (lastOrder.id.startsWith("offline-")) {
+      setError("This receipt is offline-only — remove it from the sync queue if needed.");
+      return;
+    }
     if (!voidReasonCode.trim()) {
       setError("Select a void reason.");
       return;
@@ -644,7 +817,8 @@ export default function PosPage() {
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          <p className="hidden text-sm font-bold tabular-nums text-stone-700 sm:block">{clock}</p>
+          <PosOfflineBar conflictCount={conflictCount} />
+          <p className="hidden text-sm font-bold tabular-nums text-stone-700 dark:text-stone-300 sm:block">{clock}</p>
           <button
             type="button"
             onClick={() => setMobileView("cart")}
@@ -663,7 +837,7 @@ export default function PosPage() {
           </div>
           <button
             type="button"
-            onClick={() => { logout(); router.replace("/login"); }}
+            onClick={() => void guardedLogout()}
             className="grid h-9 w-9 place-items-center rounded-xl text-stone-500 ring-1 ring-stone-200 lg:hidden"
             title="Sign out"
           >
@@ -716,6 +890,16 @@ export default function PosPage() {
 
       {error && (
         <div className="shrink-0 border-b border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{error}</div>
+      )}
+      {!idbOk && (
+        <div className="shrink-0 border-b border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+          Offline storage unavailable — POS will not queue orders without internet.
+        </div>
+      )}
+      {offlineMode && (
+        <div className="shrink-0 border-b border-stone-700 bg-stone-900 px-3 py-2 text-sm font-medium text-amber-200">
+          Offline mode — cash only, no delivery, coupons, or manager PIN actions. Orders sync when back online.
+        </div>
       )}
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
@@ -969,6 +1153,22 @@ export default function PosPage() {
       )}
 
       <PosItemSheet item={configItem} onClose={() => setConfigItem(null)} />
+
+      <ConfirmSheet
+        open={logoutQueueWarn}
+        title="Sign out with pending offline queue?"
+        message="Unsynced orders remain on this device until someone syncs or discards them. Only continue if a manager accepts the risk."
+        confirmLabel="Sign out anyway"
+        danger
+        saving={false}
+        onClose={() => setLogoutQueueWarn(false)}
+        onConfirm={async () => {
+          await auditOfflineLogoutOverride();
+          setLogoutQueueWarn(false);
+          logout();
+          router.replace("/login");
+        }}
+      />
     </div>
   );
 }
