@@ -757,6 +757,7 @@ model StoreSettings {
   poweredByUrl        String   @default("")
   showPoweredBy       Boolean  @default(false)
   showLiveStats       Boolean  @default(false)
+  showReviewsSection  Boolean  @default(true)
   phone               String   @default("")
   whatsapp            String   @default("")
   address             String   @default("")
@@ -863,6 +864,7 @@ model Order {
   createdById      String?
   createdBy        User?           @relation("PosOrders", fields: [createdById], references: [id])
   guestAccessToken String?         @unique
+  checkoutIdempotencyKey String?   @unique
   riderId          String?
   rider            User?           @relation("RiderOrders", fields: [riderId], references: [id])
   diningTableId    String?

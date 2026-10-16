@@ -4,13 +4,13 @@
   "description": "Order food online — delivery and takeaway",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#fffaf5",
-  "theme_color": "#c2410c",
+  "background_color": "#fafaf9",
+  "theme_color": "#ea580c",
   "icons": [
     {
-      "src": "/carousel/carousel-zinger.png",
-      "sizes": "512x512",
-      "type": "image/png",
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
       "purpose": "any maskable"
     }
   ]

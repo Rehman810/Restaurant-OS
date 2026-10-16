@@ -8,6 +8,7 @@ import { StoreName } from "@/components/StoreName";
 import { homeFor, resolveLoginRedirect, useAuth } from "@/lib/auth";
 import { PRODUCT_NAME, storeDisplayName } from "@/lib/branding";
 import { useStore } from "@/lib/store";
+import { DEMO_LOGIN_ACCOUNTS, isDemoLoginEnabled } from "@/lib/demo-login";
 
 export default function LoginForm({ staff = false }: { staff?: boolean }) {
   const store = useStore();
@@ -226,6 +227,25 @@ export default function LoginForm({ staff = false }: { staff?: boolean }) {
                   {busy ? "Signing in…" : challenge ? "Verify code" : "Sign in"}
                 </button>
               </form>
+
+              {isDemoLoginEnabled() && !challenge && (
+                <div className="mt-4 rounded-2xl border border-dashed border-stone-200 bg-stone-50/80 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Dev quick sign-in</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {DEMO_LOGIN_ACCOUNTS.map((acct) => (
+                      <button
+                        key={acct.email}
+                        type="button"
+                        disabled={busy}
+                        className="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 hover:border-brand-300 hover:text-brand-800"
+                        onClick={() => void signIn(acct.email, acct.password, staff)}
+                      >
+                        {acct.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="mt-5 flex flex-wrap items-center justify-between gap-2 text-sm">
                 <Link href="/forgot-password" className="font-semibold text-brand-700 hover:underline">

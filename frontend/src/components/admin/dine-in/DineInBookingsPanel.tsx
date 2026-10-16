@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
+import { ConfirmSheet } from "@/components/admin/ConfirmSheet";
 import { AlertCircle, Check, Plus } from "lucide-react";
 import type { FloorTable, ReservationRow } from "@/modules/dine-in/api";
 import {
@@ -49,12 +51,39 @@ export function DineInBookingsPanel({
   onSeatNow: (r: ReservationRow) => void;
   onChangeSeat: (r: ReservationRow) => void;
 }) {
+  const [rejectId, setRejectId] = useState<string | null>(null);
+  const [rejectSaving, setRejectSaving] = useState(false);
+
+  const rejectSheet = (
+    <ConfirmSheet
+      open={rejectId !== null}
+      title="Reject booking?"
+      message="The guest will not be seated for this reservation."
+      confirmLabel="Reject"
+      danger
+      reasonLabel="Reason (optional)"
+      reasonPlaceholder="e.g. Fully booked"
+      saving={rejectSaving}
+      onClose={() => !rejectSaving && setRejectId(null)}
+      onConfirm={(reason) => {
+        if (!rejectId) return;
+        setRejectSaving(true);
+        Promise.resolve(onReject(rejectId, reason?.trim() || undefined))
+          .finally(() => {
+            setRejectSaving(false);
+            setRejectId(null);
+          });
+      }}
+    />
+  );
+
   const pending = reservations.filter((r) => r.status === "PENDING");
   const confirmed = reservations.filter((r) => r.status === "CONFIRMED" && isToday(r.startsAt || r.reservedAt));
   const history = reservations.filter((r) => !["PENDING", "CONFIRMED"].includes(r.status));
 
   if (historyView) {
     return (
+      <>
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm text-stone-500">Seated, completed, cancelled, no-show, and rejected.</p>
@@ -62,10 +91,13 @@ export function DineInBookingsPanel({
         </div>
         <BookingCardList rows={history} empty="No history in this range." />
       </div>
+      {rejectSheet}
+      </>
     );
   }
 
   return (
+    <>
     <div className="space-y-8">
       <div className="flex justify-end">
         <button type="button" onClick={onNewBooking} className="btn-primary text-sm">
@@ -125,11 +157,8 @@ export function DineInBookingsPanel({
                   </button>
                   <button
                     type="button"
-                    className="rounded-xl border border-stone-300 px-4 py-2 text-sm font-semibold"
-                    onClick={() => {
-                      const reason = window.prompt("Reason for decline (optional)") || undefined;
-                      onReject(r.id, reason);
-                    }}
+                    className="rounded-xl border border-stone-300 px-4 py-2 text-sm font-semibold dark:border-stone-600"
+                    onClick={() => setRejectId(r.id)}
                   >
                     Reject
                   </button>
@@ -249,6 +278,8 @@ export function DineInBookingsPanel({
         Public booking page: <Link href="/book" className="text-brand-600 underline">/book</Link>
       </p>
     </div>
+    {rejectSheet}
+    </>
   );
 }
 

@@ -6,6 +6,9 @@
 
 :root {
   --font-dm-sans: "DM Sans", system-ui, -apple-system, sans-serif;
+  --brand-surface: #fffaf5;
+  --brand-surface-border: #ffedd5;
+  --brand-navbar: #fffaf5;
 }
 
 html {
@@ -13,7 +16,8 @@ html {
 }
 
 body {
-  @apply bg-[#fffaf5] text-[15px] leading-relaxed text-ink antialiased;
+  @apply text-[15px] leading-relaxed text-ink antialiased;
+  background-color: var(--brand-surface);
 }
 
 h1,
@@ -33,7 +37,8 @@ h4 {
 }
 
 .card {
-  @apply rounded-3xl border border-orange-100/80 bg-white shadow-card;
+  @apply rounded-3xl border bg-white shadow-card;
+  border-color: color-mix(in srgb, var(--brand-200, #fed7aa) 80%, transparent);
 }
 
 .input {

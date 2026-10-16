@@ -72,6 +72,9 @@ jobs:
       - name: Typecheck and build
         run: npm run build
 
+      - name: Unit and integration tests
+        run: npm run test
+
       - name: Smoke test /health
         run: |
           npx tsx src/index.ts &

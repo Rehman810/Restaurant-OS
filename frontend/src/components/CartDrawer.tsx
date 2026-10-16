@@ -114,7 +114,7 @@ export function CartDrawer() {
                   <ShoppingBag />
                 </div>
                 <p className="font-display text-xl">Bag is empty</p>
-                <p className="mt-1 text-sm text-stone-500">Add a zinger, biryani or lava cake to get started.</p>
+                <p className="mt-1 text-sm text-stone-500">Browse the menu and add your first item.</p>
               </div>
             </div>
           ) : (

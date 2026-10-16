@@ -224,7 +224,7 @@ export function kitchenTicketHtml(order: Order, store: ReceiptStore) {
 function openPrintWindow(html: string, title: string) {
   const w = window.open("", "_blank", "width=400,height=720");
   if (!w) {
-    alert("Allow pop-ups to print receipts.");
+    console.warn("Allow pop-ups to print receipts.");
     return false;
   }
   w.document.open();

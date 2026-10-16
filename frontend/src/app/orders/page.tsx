@@ -77,7 +77,7 @@ export default function OrdersPage() {
               <div className="card grid place-items-center px-6 py-16 text-center">
                 <ClipboardList className="mb-3 text-brand-500" />
                 <p className="font-display text-2xl">No orders yet</p>
-                <p className="mt-1 text-sm text-stone-500">Your next biryani is one tap away.</p>
+                <p className="mt-1 text-sm text-stone-500">Your next order is one tap away.</p>
                 <Link href="/menu" className="btn-primary mt-5">
                   Browse menu
                 </Link>

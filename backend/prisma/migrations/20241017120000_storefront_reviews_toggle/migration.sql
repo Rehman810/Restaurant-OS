@@ -1,0 +1,1 @@
+ALTER TABLE "StoreSettings" ADD COLUMN IF NOT EXISTS "showReviewsSection" BOOLEAN NOT NULL DEFAULT true;

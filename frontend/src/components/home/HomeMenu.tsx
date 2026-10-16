@@ -127,7 +127,7 @@ export function HomeMenu() {
 
         {items && searchQuery && searchResults.length === 0 && (
           <p className="mt-10 rounded-2xl bg-white px-4 py-8 text-center text-sm text-stone-500 shadow-card">
-            No dishes found for “{searchQuery}”. Try biryani, zinger, or karahi.
+            No dishes found for “{searchQuery}”. Try another search or browse categories below.
           </p>
         )}
 

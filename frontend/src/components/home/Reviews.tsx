@@ -14,6 +14,7 @@ function initials(name: string) {
 
 export function Reviews() {
   const store = useStore();
+  if (store?.settings.showReviewsSection === false) return null;
   const testimonials = store?.testimonials ?? [];
   const highlights = store?.highlights;
   if (!testimonials.length && !highlights?.show) return null;
@@ -30,7 +31,10 @@ export function Reviews() {
             <h2 className="font-display mt-3 text-3xl text-stone-900 sm:text-5xl">Loved by locals</h2>
           </div>
           {rating != null && (
-            <div className="flex items-center gap-3 rounded-2xl border border-orange-100 bg-[#fffaf5] px-4 py-3">
+            <div
+              className="flex items-center gap-3 rounded-2xl border px-4 py-3"
+              style={{ borderColor: "var(--brand-surface-border)", backgroundColor: "var(--brand-surface)" }}
+            >
               <div className="flex gap-0.5 text-brand-500">
                 {Array.from({ length: 5 }).map((_, j) => (
                   <Star key={j} size={14} fill="currentColor" />
@@ -51,7 +55,8 @@ export function Reviews() {
             {testimonials.slice(0, 6).map((r) => (
               <blockquote
                 key={r.id}
-                className="relative flex h-full flex-col overflow-hidden rounded-3xl border border-orange-100/80 bg-gradient-to-b from-[#fffaf5] to-white p-6 shadow-sm"
+                className="relative flex h-full flex-col overflow-hidden rounded-3xl border bg-gradient-to-b from-[var(--brand-surface)] to-white p-6 shadow-sm"
+                style={{ borderColor: "var(--brand-surface-border)" }}
               >
                 <div className="flex gap-0.5 text-brand-500">
                   {Array.from({ length: r.rating }).map((_, j) => (
@@ -59,7 +64,7 @@ export function Reviews() {
                   ))}
                 </div>
                 <p className="mt-4 flex-1 text-[15px] leading-relaxed text-stone-700">{r.text}</p>
-                <div className="mt-6 flex items-center gap-3 border-t border-orange-100 pt-5">
+                <div className="mt-6 flex items-center gap-3 border-t pt-5" style={{ borderColor: "var(--brand-surface-border)" }}>
                   <span className="grid h-11 w-11 place-items-center rounded-full bg-brand-600 text-xs font-bold text-white">
                     {initials(r.name)}
                   </span>

@@ -7,13 +7,14 @@ import { ArrowRight, Bike, ChevronLeft, ChevronRight, Clock, Star } from "lucide
 import { isLocalPublicAsset, resolveMediaUrl } from "@/lib/media-url";
 import { storeStatusLabel } from "@/lib/store-hours";
 import { PromoBanner, PublicStore } from "@/lib/types";
+import { storeTagline } from "@/lib/branding";
+import { HERO_FALLBACK_SLIDES } from "@/lib/storefront-copy";
 import { HeroSearchInput } from "./HeroSearchInput";
 
-const FALLBACK_SLIDES: PromoBanner[] = [
-  { id: "zinger", title: "Zinger special", imageUrl: "/carousel/carousel-zinger.png", linkUrl: "/menu", sortOrder: 1, isActive: true },
-  { id: "biryani", title: "Biryani night", imageUrl: "/carousel/carousel-biryani.png", linkUrl: "/menu", sortOrder: 2, isActive: true },
-  { id: "broast", title: "BBQ broast", imageUrl: "/carousel/carousel-broast.png", linkUrl: "/menu", sortOrder: 3, isActive: true },
-];
+const FALLBACK_SLIDES: PromoBanner[] = HERO_FALLBACK_SLIDES.map((s) => ({
+  ...s,
+  isActive: true,
+}));
 
 function buildSlides(store: PublicStore | null): PromoBanner[] {
   const active = (store?.banners ?? [])
@@ -97,6 +98,10 @@ export function HeroCarousel({ store }: { store: PublicStore | null }) {
   const hoursStatus = store ? storeStatusLabel(store.settings) : "";
   const slide = slides[idx];
   const deliveryMin = store?.settings.deliveryEstimateMin ?? 45;
+  const tagline = storeTagline(store?.settings);
+  const heroSubtitle =
+    store?.settings.footerText?.trim() ||
+    `${tagline}. Browse the menu and order for delivery or takeaway.`;
 
   useEffect(() => {
     setIdx(0);
@@ -159,13 +164,13 @@ export function HeroCarousel({ store }: { store: PublicStore | null }) {
           <SlideControls slides={slides} idx={idx} setIdx={setIdx} count={count} />
         </div>
 
-        <div className="border-b border-orange-100 bg-white">
+        <div className="border-b border-brand-100 bg-white">
           <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3.5">
             <div className="min-w-0">
               <h1 className="font-display text-lg leading-tight text-stone-900">
-                Street food energy.{" "}
-                <span className="text-brand-600">Delivered hot.</span>
+                {store?.settings.storeName?.trim() || "Your Restaurant"}
               </h1>
+              <p className="mt-0.5 text-xs text-stone-600">{tagline}</p>
               {slide?.title && (
                 <p className="mt-0.5 text-xs font-semibold text-brand-700">
                   Tonight: {slide.title}
@@ -179,7 +184,7 @@ export function HeroCarousel({ store }: { store: PublicStore | null }) {
             {trustPills.map(({ icon: Icon, label }) => (
               <span
                 key={label}
-                className="inline-flex items-center gap-1 rounded-full bg-[#fffaf5] px-2.5 py-1 text-[11px] font-semibold text-stone-600 ring-1 ring-orange-100"
+                className="inline-flex items-center gap-1 rounded-full bg-[var(--brand-surface)] px-2.5 py-1 text-[11px] font-semibold text-stone-600 ring-1 ring-brand-100"
               >
                 <Icon size={12} className="text-brand-600" />
                 {label}
@@ -217,14 +222,12 @@ export function HeroCarousel({ store }: { store: PublicStore | null }) {
             </div>
 
             <h1 className="font-display text-4xl leading-[1.08] tracking-tight text-white sm:text-5xl lg:text-[3.75rem]">
-              Street food energy.
-              <br />
-              <span className="text-brand-400">Delivered hot.</span>
+              {store?.settings.storeName?.trim() || "Your Restaurant"}
             </h1>
 
             <p className="mt-4 max-w-md text-base leading-relaxed text-stone-300 sm:text-lg">
-              Charcoal tikka, crispy zinger, dum biryani and midnight broast — order in under a minute.
-              {store?.settings.acceptCash === false ? "" : " Cash on delivery."}
+              {heroSubtitle}
+              {store?.settings.acceptCash === false ? "" : " Cash on delivery available."}
             </p>
 
             {slide?.title && (

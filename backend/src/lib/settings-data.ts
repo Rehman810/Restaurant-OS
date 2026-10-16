@@ -34,17 +34,19 @@ export async function getPublicStorePayload() {
     ? testimonials.reduce((sum, t) => sum + t.rating, 0) / testimonials.length
     : null;
   const showLiveStats = Boolean(settings.showLiveStats) && orderCount >= MIN_ORDERS_FOR_LIVE_STATS;
+  const showReviews = Boolean(settings.showReviewsSection);
   const open = isStoreOpen(settings);
+  const visibleTestimonials = showReviews ? testimonials : [];
   return {
     settings,
     banners,
-    testimonials,
+    testimonials: visibleTestimonials,
     areaCount,
     highlights:
-      showLiveStats || testimonials.length > 0
+      showReviews && (showLiveStats || visibleTestimonials.length > 0)
         ? {
             show: true,
-            rating: avgRating,
+            rating: visibleTestimonials.length ? avgRating : null,
             orderCount: showLiveStats ? orderCount : null,
             areaCount,
           }

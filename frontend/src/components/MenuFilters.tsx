@@ -83,7 +83,7 @@ export function MenuFilters({
           onChange={(e) => onSearchChange(e.target.value)}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          placeholder="Search burgers, biryani, drinks…"
+          placeholder="Search menu…"
           aria-label="Search menu"
           className="min-w-0 flex-1 bg-transparent text-sm font-medium text-stone-900 outline-none placeholder:font-normal placeholder:text-stone-400"
         />

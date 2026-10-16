@@ -39,37 +39,36 @@ There is no `npm test`. CI (`.github/workflows/backend.yml`) builds the API, mig
 - Seed hashes the literal password `demo123` for every demo user (`backend/prisma/seed.ts`).
 - Customer and staff share `/login`. Footer links “Staff login” to `/login` (`frontend/src/components/StoreFooter.tsx`).
 
-### Order status model
+### Order status model (current)
 
-Prisma enum `OrderStatus` (`backend/prisma/schema.prisma`):
+**Source of truth:** `backend/src/lib/order-machine.ts` (re-exported via `order-status.ts` on the server and `canTransition` in `frontend/src/lib/types.ts` on the client).
 
-`AWAITING_CONFIRMATION` → `PENDING` → `PREPARING` → `OUT_FOR_DELIVERY` → `DELIVERED`, plus `CANCELLED`.
+Prisma enum `OrderStatus` includes terminal statuses per fulfillment:
 
-Fulfillment is a separate enum: `DELIVERY`, `PICKUP`, `DINE_IN`. There is no `ready`, `collected`, or `served` status. Pickup and dine-in reuse `OUT_FOR_DELIVERY` and `DELIVERED` with display labels only (`orderStatusLabel` in `frontend/src/lib/types.ts`).
-
-Transition rules live in two places that do not fully agree:
-
-- Server: `backend/src/lib/order-status.ts` — one step forward; cancel only from `AWAITING_CONFIRMATION` or `PENDING`.
-- Client kanban: `canMoveForward` in `frontend/src/lib/types.ts` allows any forward jump, not only +1.
-
-Where transitions happen:
-
-| Location | What it does |
+| Fulfillment | Flow |
 | --- | --- |
-| `backend/src/routes/orders.ts` `POST /orders` | New online order → `AWAITING_CONFIRMATION` or `PENDING` when `autoConfirmOrders` is on |
-| `POST /orders/:id/confirm` | `AWAITING_CONFIRMATION` → `PENDING` |
-| `POST /orders/:id/cancel` | Cancel only before preparing |
-| `PATCH /orders/:id/status` | Admin any legal step; chef only `chefNextStatus` |
-| `PATCH /orders/:id/rider` | Assign rider and force `OUT_FOR_DELIVERY` |
-| `backend/src/routes/pos.ts` | POS orders created as `PENDING` |
-| `backend/src/routes/rider.ts` | `PICKED_UP` → `OUT_FOR_DELIVERY`; `DELIVERED` → `DELIVERED` |
-| `backend/src/lib/rider-assign.ts` | Auto-assign when status becomes `OUT_FOR_DELIVERY` |
-| Kitchen UI `frontend/src/app/admin/kitchen/page.tsx` | Columns New=`PENDING`, Cooking=`PREPARING`, Ready=`OUT_FOR_DELIVERY`. “Start cooking” / ready buttons call the status API. Ready for pickup and dine-in also write `OUT_FOR_DELIVERY`. |
-| Live tracking `frontend/src/app/admin/tracking/page.tsx` | Columns follow `STATUS_FLOW`, so “Ready” in Kitchen is the same status as “Out for delivery” on the board. |
+| **DELIVERY** | `PENDING_CONFIRMATION` → `CONFIRMED` → `PREPARING` → `READY` → `OUT_FOR_DELIVERY` → `DELIVERED` |
+| **PICKUP** | Same through `READY`, then `COLLECTED` |
+| **DINE_IN** | Same through `READY`, then `SERVED` |
 
-No `order_events` table. No undo. No SLA age badges. Dashboard “today” is computed in `backend/src/routes/admin.ts` (separate from analytics and customers, which is why totals can diverge). Hours use a single open/close pair hardcoded to `Asia/Karachi` (`backend/src/lib/store-settings.ts`, `frontend/src/lib/store-hours.ts`).
+`CANCELLED` is allowed from any non-terminal status (one-way). Transitions are **exactly +1** along the flow (no skipping). `READY` and `OUT_FOR_DELIVERY` are distinct for delivery.
 
-Settings are a singleton row `StoreSettings.id = "default"`. There is no restaurant/tenant id. Queries are global.
+Kitchen UI (`frontend/src/app/admin/kitchen/page.tsx`) uses lanes `CONFIRMED`, `PREPARING`, `READY`. Live tracking kanban follows `STATUS_FLOW` in `frontend/src/lib/types.ts`, aligned with `canMoveForward` → `canTransition`.
+
+`OrderEvent` rows are written on status changes. Online `POST /orders` starts at `PENDING_CONFIRMATION` or `CONFIRMED` when `autoConfirmOrders` is enabled.
+
+**Tenant note:** `StoreSettings` is still keyed as `id = "default"` for the primary row, but business data is scoped by `restaurantId` and `RESTAURANT_ID` env. See `docs/MULTI_TENANCY_PLAN.md`.
+
+### White-label checklist (onboarding a new restaurant)
+
+1. Run `npm run seed:demo -- --name "…" --city "…" --currency PKR` or use Settings after first login.
+2. Set **store name, tagline, phone, address, city**, logo, and **theme colors** in Admin → Settings.
+3. Configure **hours**, **delivery areas**, and **minimum order**.
+4. Upload **promo banners** or rely on generic carousel fallbacks.
+5. Turn on **Show reviews section** only when you have real testimonials (Social tab).
+6. Enable **inventory auto-hide menu** if recipes and stock are in use.
+7. Set `JWT_SECRET`, `RESTAURANT_ID` (if not default), and production API URL on deploy.
+8. Run `npm test` in `backend` before go-live.
 
 ## Hardcoded brand inventory
 

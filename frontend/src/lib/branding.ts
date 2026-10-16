@@ -1,6 +1,6 @@
 import type { StoreSettings } from "./types";
 
-export const DEFAULT_STORE_NAME = "";
+export const DEFAULT_STORE_NAME = "Your Restaurant";
 export const DEFAULT_STORE_TAGLINE = "Order in minutes";
 export const PRODUCT_NAME = "Restaurant OS";
 export const POWERED_BY_NAME = "Devsora";

@@ -36,7 +36,13 @@ export function Navbar() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 border-b border-orange-100 bg-[#fffaf5]/95 backdrop-blur-xl">
+      <header
+        className="sticky top-0 z-40 border-b backdrop-blur-xl"
+        style={{
+          borderColor: "var(--brand-surface-border)",
+          backgroundColor: "color-mix(in srgb, var(--brand-navbar) 95%, transparent)",
+        }}
+      >
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:h-[72px] sm:px-6">
           <Link href="/" className="flex min-w-0 items-center gap-2.5">
             <StoreLogo

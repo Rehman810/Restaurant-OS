@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const proxyTarget =
-  process.env.API_PROXY_TARGET?.replace(/\/$/, "") || "http://80.225.219.189:4000";
+  process.env.API_PROXY_TARGET?.replace(/\/$/, "") || "http://127.0.0.1:4000";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 let apiPattern = { protocol: "http", hostname: "localhost", port: "4000", pathname: "/uploads/**" };

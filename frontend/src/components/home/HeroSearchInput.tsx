@@ -4,7 +4,9 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
 
-const SUGGESTIONS = ["biryani", "zinger burger", "karahi", "broast", "masala fries", "chai"];
+import { MENU_SEARCH_SUGGESTIONS } from "@/lib/storefront-copy";
+
+const SUGGESTIONS = MENU_SEARCH_SUGGESTIONS;
 
 export function HeroSearchInput() {
   const router = useRouter();
@@ -52,8 +54,8 @@ export function HeroSearchInput() {
       <div
         className={`flex h-11 items-center gap-2.5 rounded-full border px-4 transition-all duration-300 ${
           focused
-            ? "border-brand-400 bg-white shadow-[0_0_0_4px_rgba(234,88,12,0.14)]"
-            : "border-orange-200 bg-[#fffaf5] shadow-sm"
+            ? "border-brand-400 bg-white shadow-[0_0_0_4px_color-mix(in_srgb,var(--brand-500)_14%,transparent)]"
+            : "border-brand-200 bg-[var(--brand-surface)] shadow-sm"
         }`}
       >
         <Search

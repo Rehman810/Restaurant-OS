@@ -6,7 +6,7 @@ import { formatWhen, pkr } from "@/lib/format";
 import { StatusBadge } from "./StatusBadge";
 
 const AVATAR_GRADIENTS = [
-  "from-brand-500 to-orange-600",
+  "from-brand-500 to-brand-700",
   "from-violet-500 to-purple-600",
   "from-sky-500 to-blue-600",
   "from-emerald-500 to-teal-600",

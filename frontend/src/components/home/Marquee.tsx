@@ -1,27 +1,14 @@
-const ITEMS = [
-  "Chicken Biryani",
-  "Zinger Burger",
-  "BBQ Broast",
-  "Chicken Karahi",
-  "Beef Smash",
-  "Pepperoni Pizza",
-  "Masala Fries",
-  "Mango Lassi",
-  "Butter Chicken",
-  "Seekh Kebab",
-  "Lava Cake",
-  "Dynamite Prawns",
-];
+import { MARQUEE_DEFAULT } from "@/lib/storefront-copy";
 
 export function Marquee() {
-  const row = [...ITEMS, ...ITEMS];
+  const row = [...MARQUEE_DEFAULT, ...MARQUEE_DEFAULT];
   return (
-    <div className="overflow-hidden border-y border-orange-200/60 bg-brand-900 py-3">
-      <div className="marquee-track flex w-max gap-10 px-4 text-sm font-semibold uppercase tracking-[0.2em] text-orange-100">
+    <div className="overflow-hidden border-y border-brand-200/60 bg-brand-900 py-3">
+      <div className="marquee-track flex w-max gap-10 px-4 text-sm font-semibold uppercase tracking-[0.2em] text-brand-100">
         {row.map((item, i) => (
           <span key={`${item}-${i}`} className="flex shrink-0 items-center gap-10">
             {item}
-            <span className="text-brand-500">✦</span>
+            <span className="text-brand-400">✦</span>
           </span>
         ))}
       </div>

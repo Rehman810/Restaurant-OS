@@ -90,6 +90,16 @@ settingsRouter.patch("/", requireAuth, requireRole(Role.ADMIN), async (req, res)
       ...(body.currencySymbol !== undefined ? { currencySymbol: String(body.currencySymbol).trim() || "Rs" } : {}),
       ...(body.footerText !== undefined ? { footerText: String(body.footerText) } : {}),
       ...(body.showLiveStats !== undefined ? { showLiveStats: Boolean(body.showLiveStats) } : {}),
+      ...(body.showReviewsSection !== undefined ? { showReviewsSection: Boolean(body.showReviewsSection) } : {}),
+      ...(body.inventoryAutoHideMenu !== undefined
+        ? { inventoryAutoHideMenu: Boolean(body.inventoryAutoHideMenu) }
+        : {}),
+      ...(body.inventoryAllowNegative !== undefined
+        ? { inventoryAllowNegative: Boolean(body.inventoryAllowNegative) }
+        : {}),
+      ...(body.inventoryDeductAtPreparing !== undefined
+        ? { inventoryDeductAtPreparing: Boolean(body.inventoryDeductAtPreparing) }
+        : {}),
       ...(body.storeTagline !== undefined
         ? { storeTagline: String(body.storeTagline).trim() || "Order in minutes" }
         : {}),

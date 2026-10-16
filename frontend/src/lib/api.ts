@@ -7,10 +7,15 @@ function isLocalApiUrl(url: string) {
   return /localhost|127\.0\.0\.1/i.test(url);
 }
 
-function resolveApiUrl() {
+/** REST base URL. In the browser during dev, same-origin `/api/proxy` avoids broken `localhost` when using port-forwarding. */
+export function getApiUrl() {
   const configured = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
+  if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
+    if (!configured || isLocalApiUrl(configured)) {
+      return "/api/proxy";
+    }
+  }
   if (configured) {
-    // Vercel builds bake NEXT_PUBLIC_* at build time — never ship localhost to production.
     if (process.env.NODE_ENV === "production" && isLocalApiUrl(configured)) {
       return "/api/proxy";
     }
@@ -19,12 +24,19 @@ function resolveApiUrl() {
   return process.env.NODE_ENV === "production" ? "/api/proxy" : "http://localhost:4000";
 }
 
-export const API_URL = resolveApiUrl();
+/** @deprecated Prefer getApiUrl() in fetch calls; may be wrong in the browser at module load. */
+export const API_URL = getApiUrl();
 
-/** Socket.io needs a real host — set NEXT_PUBLIC_SOCKET_URL when using /api/proxy for REST. */
-export const SOCKET_URL =
-  process.env.NEXT_PUBLIC_SOCKET_URL?.replace(/\/$/, "") ||
-  (API_URL.startsWith("/") ? "" : API_URL);
+/** Socket.io needs a real host — set NEXT_PUBLIC_SOCKET_URL when REST uses /api/proxy. */
+export function getSocketUrl() {
+  const configured = process.env.NEXT_PUBLIC_SOCKET_URL?.replace(/\/$/, "");
+  if (configured) return configured;
+  const api = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
+  if (api && !api.startsWith("/") && !isLocalApiUrl(api)) return api;
+  return "http://localhost:4000";
+}
+
+export const SOCKET_URL = getSocketUrl();
 
 export class ApiError extends Error {
   status: number;
@@ -60,7 +72,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   const timeout = setTimeout(() => controller.abort(), 12_000);
   let res: Response;
   try {
-    res = await fetch(`${API_URL}${path}`, { ...options, headers, credentials: "include", signal: controller.signal });
+    res = await fetch(`${getApiUrl()}${path}`, { ...options, headers, credentials: "include", signal: controller.signal });
   } catch (err) {
     if (err instanceof Error && err.name === "AbortError") {
       throw new ApiError("Server took too long to respond. Is the API running?", 0);
@@ -90,7 +102,7 @@ export async function apiUpload(path: string, file: File): Promise<{ url: string
   body.append("image", file);
   const csrf = readCsrfFromDocument();
 
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${getApiUrl()}${path}`, {
     method: "POST",
     headers: csrf ? { "X-CSRF-Token": csrf } : {},
     credentials: "include",
@@ -112,7 +124,7 @@ export async function apiUpload(path: string, file: File): Promise<{ url: string
 }
 
 export function invoiceUrl(orderId: string, guestToken?: string | null) {
-  const base = `${API_URL}/invoices/${orderId}/download`;
+  const base = `${getApiUrl()}/invoices/${orderId}/download`;
   if (!guestToken) return base;
   return `${base}?token=${encodeURIComponent(guestToken)}`;
 }

@@ -35,6 +35,7 @@ import {
 } from "./components/primitives";
 import { AdminScopeBanner } from "@/components/admin/AdminScopeBanner";
 import { RefreshButton } from "@/components/admin/RefreshButton";
+import { InputSheet } from "@/components/admin/InputSheet";
 import { AdminAlert, AdminEmptyState, AdminPage, AdminPageHeader } from "@/components/admin/ui";
 import { ConfirmSheet } from "@/components/admin/ConfirmSheet";
 import { useBranch } from "@/modules/branches/BranchContext";
@@ -195,6 +196,8 @@ export function InventoryModule() {
   >([]);
   const [showSystemOnCount, setShowSystemOnCount] = useState(false);
 
+  const [categorySheetOpen, setCategorySheetOpen] = useState(false);
+  const [categorySaving, setCategorySaving] = useState(false);
   const [supplierModal, setSupplierModal] = useState(false);
   const [supName, setSupName] = useState("");
   const [supPhone, setSupPhone] = useState("");
@@ -593,13 +596,9 @@ export function InventoryModule() {
                       onChange={setNewCategoryId}
                       options={[{ value: "", label: "General" }, ...categories.map((c) => ({ value: c.id, label: c.name }))]}
                     />
-                    <button type="button" className="text-xs font-semibold text-brand-600" onClick={async () => {
-                      const name = window.prompt("Category name");
-                      if (!name?.trim()) return;
-                      await createCategory(name.trim());
-                      const cats = await fetchCategories();
-                      setCategories(cats.categories);
-                    }}>+ New category</button>
+                    <button type="button" className="text-xs font-semibold text-brand-600" onClick={() => setCategorySheetOpen(true)}>
+                      + New category
+                    </button>
                     <SelectField label="Unit" value={newUnit} onChange={(v) => setNewUnit(v as InventoryUnit)} options={UNITS.map((u) => ({ value: u, label: u }))} />
                     <div className="grid grid-cols-2 gap-2">
                       <Field label="Reorder at"><TextInput value={newReorder} onChange={(e) => setNewReorder(e.target.value)} inputMode="decimal" /></Field>
@@ -1069,6 +1068,25 @@ export function InventoryModule() {
           setArchiveTarget(null);
           setMsg("Item archived.");
           await load();
+        }}
+      />
+      <InputSheet
+        open={categorySheetOpen}
+        title="New category"
+        label="Category name"
+        placeholder="e.g. Dry goods"
+        saving={categorySaving}
+        onClose={() => !categorySaving && setCategorySheetOpen(false)}
+        onConfirm={async (name) => {
+          setCategorySaving(true);
+          try {
+            await createCategory(name);
+            const cats = await fetchCategories();
+            setCategories(cats.categories);
+            setCategorySheetOpen(false);
+          } finally {
+            setCategorySaving(false);
+          }
         }}
       />
     </AdminPage>

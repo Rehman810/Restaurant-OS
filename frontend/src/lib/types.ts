@@ -84,6 +84,10 @@ export type StoreSettings = {
   poweredByUrl?: string;
   showPoweredBy?: boolean;
   showLiveStats?: boolean;
+  showReviewsSection?: boolean;
+  inventoryAutoHideMenu?: boolean;
+  inventoryAllowNegative?: boolean;
+  inventoryDeductAtPreparing?: boolean;
   phone: string;
   whatsapp: string;
   address: string;

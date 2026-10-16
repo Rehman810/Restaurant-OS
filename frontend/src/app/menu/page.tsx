@@ -8,6 +8,7 @@ import { fetchAllCategories, fetchAllMenuItems } from "@/lib/catalog-api";
 import { PAGE_SIZE } from "@/lib/pagination";
 import { usePagination } from "@/hooks/usePagination";
 import { Pagination } from "@/components/Pagination";
+import { MENU_EMPTY_HINT } from "@/lib/storefront-copy";
 import { CATEGORIES as DEFAULT_CATEGORIES, Category, MenuItem } from "@/lib/types";
 
 export default function MenuPage() {
@@ -101,10 +102,13 @@ export default function MenuPage() {
         )}
 
         {items && filtered.length === 0 && (
-          <div className="mt-10 rounded-3xl border border-dashed border-orange-200 bg-white px-6 py-12 text-center shadow-sm">
+          <div
+            className="mt-10 rounded-3xl border border-dashed bg-white px-6 py-12 text-center shadow-sm"
+            style={{ borderColor: "var(--brand-surface-border)" }}
+          >
             <p className="font-display text-xl text-stone-800">Nothing found</p>
             <p className="mt-2 text-sm text-stone-500">
-              Try a different keyword or switch category. Popular picks: biryani, zinger, broast.
+              {MENU_EMPTY_HINT}
             </p>
             {(search || cat !== "All") && (
               <button

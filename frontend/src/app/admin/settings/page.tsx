@@ -11,15 +11,18 @@ import {
   Mail,
   Phone,
   Store,
+  Package,
   Palette,
   Plus,
   Save,
   Settings,
   Share2,
+  Star,
   Trash2,
   Truck,
   Youtube,
 } from "lucide-react";
+import { ConfirmSheet } from "@/components/admin/ConfirmSheet";
 import { OpeningHoursEditor } from "@/components/admin/OpeningHoursEditor";
 import { TwoFactorSettings } from "@/components/admin/TwoFactorSettings";
 import { SettingsField, SettingsSection } from "@/components/admin/SettingsSection";
@@ -28,11 +31,11 @@ import { resolveMediaUrl } from "@/lib/media-url";
 import { currencyForCode, currencyOptions, symbolForCode, timezoneOptions } from "@/lib/locale-options";
 import { isStoreOpen, generatedClosedMessage } from "@/lib/store-hours";
 import { validateSettingsInput } from "@/lib/settings-validate";
-import { PromoBanner, StoreSettings } from "@/lib/types";
+import { PromoBanner, StoreSettings, Testimonial } from "@/lib/types";
 import { AdminScopeBanner } from "@/components/admin/AdminScopeBanner";
 import { applyBrandTheme, normalizeHexColor } from "@/lib/brand-theme";
 
-type SettingsPayload = { settings: StoreSettings; banners: PromoBanner[] };
+type SettingsPayload = { settings: StoreSettings; banners: PromoBanner[]; testimonials: Testimonial[] };
 
 const SOCIAL_FIELDS = [
   { key: "facebookUrl" as const, label: "Facebook", icon: Facebook, placeholder: "https://facebook.com/..." },
@@ -48,6 +51,7 @@ const SETTINGS_TABS = [
   { id: "hours", label: "Hours" },
   { id: "social", label: "Social" },
   { id: "banners", label: "Banners" },
+  { id: "inventory", label: "Inventory" },
   { id: "security", label: "Security" },
 ] as const;
 
@@ -65,12 +69,19 @@ export default function AdminSettingsPage() {
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoError, setLogoError] = useState("");
   const [tab, setTab] = useState<SettingsTab>("store");
+  const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
+  const [testimonialForm, setTestimonialForm] = useState({ name: "", area: "", text: "", rating: 5 });
+  const [bannerDeleteId, setBannerDeleteId] = useState<string | null>(null);
+  const [bannerDeleting, setBannerDeleting] = useState(false);
+  const [leavePromptOpen, setLeavePromptOpen] = useState(false);
+  const [pendingLeaveHref, setPendingLeaveHref] = useState<string | null>(null);
 
   async function load() {
     const data = await api<SettingsPayload>("/settings");
     setSettings(data.settings);
     setBaseline(JSON.stringify(data.settings));
     setBanners(data.banners);
+    setTestimonials(data.testimonials ?? []);
   }
 
   useEffect(() => {
@@ -154,9 +165,36 @@ export default function AdminSettingsPage() {
     refreshStorefront();
   }
 
-  async function removeBanner(id: string) {
-    if (!confirm("Delete this banner?")) return;
-    await api(`/settings/banners/${id}`, { method: "DELETE" });
+  function requestRemoveBanner(id: string) {
+    setBannerDeleteId(id);
+  }
+
+  async function confirmRemoveBanner() {
+    if (!bannerDeleteId) return;
+    setBannerDeleting(true);
+    try {
+      await api(`/settings/banners/${bannerDeleteId}`, { method: "DELETE" });
+      setBannerDeleteId(null);
+      await load();
+      refreshStorefront();
+    } finally {
+      setBannerDeleting(false);
+    }
+  }
+
+  async function addTestimonial() {
+    if (!testimonialForm.name.trim() || !testimonialForm.text.trim()) return;
+    await api("/settings/testimonials", {
+      method: "POST",
+      body: JSON.stringify(testimonialForm),
+    });
+    setTestimonialForm({ name: "", area: "", text: "", rating: 5 });
+    await load();
+    refreshStorefront();
+  }
+
+  async function removeTestimonial(id: string) {
+    await api(`/settings/testimonials/${id}`, { method: "DELETE" });
     await load();
     refreshStorefront();
   }
@@ -190,10 +228,10 @@ export default function AdminSettingsPage() {
       if (!anchor) return;
       const href = anchor.getAttribute("href");
       if (!href || href.startsWith("#")) return;
-      if (!window.confirm("You have unsaved settings. Leave without saving?")) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
+      event.preventDefault();
+      event.stopPropagation();
+      setPendingLeaveHref(href);
+      setLeavePromptOpen(true);
     };
     window.addEventListener("beforeunload", onBefore);
     document.addEventListener("click", onClick, true);
@@ -480,6 +518,39 @@ export default function AdminSettingsPage() {
               Accent text
             </span>
           </div>
+        </SettingsSection>
+        )}
+
+        {tab === "store" && (
+        <SettingsSection
+          icon={Star}
+          title="Storefront reviews"
+          description="Published testimonials appear on the homepage. Live order stats need at least 10 completed orders."
+        >
+          <label className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold text-stone-900">Show reviews section on homepage</p>
+              <p className="text-xs text-stone-500">Turn off to hide ratings and testimonials without deleting them.</p>
+            </div>
+            <input
+              type="checkbox"
+              className="h-5 w-5 shrink-0 rounded border-stone-300 text-brand-600 focus:ring-brand-500"
+              checked={settings.showReviewsSection ?? true}
+              onChange={(e) => setSettings({ ...settings, showReviewsSection: e.target.checked })}
+            />
+          </label>
+          <label className="mt-3 flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold text-stone-900">Show live order count</p>
+              <p className="text-xs text-stone-500">Displays total orders next to your average rating when enabled.</p>
+            </div>
+            <input
+              type="checkbox"
+              className="h-5 w-5 shrink-0 rounded border-stone-300 text-brand-600 focus:ring-brand-500"
+              checked={settings.showLiveStats ?? false}
+              onChange={(e) => setSettings({ ...settings, showLiveStats: e.target.checked })}
+            />
+          </label>
         </SettingsSection>
         )}
 
@@ -859,7 +930,84 @@ export default function AdminSettingsPage() {
           </div>
         </SettingsSection>
         )}
+
+        {tab === "social" && (
+        <SettingsSection
+          icon={Star}
+          title="Customer testimonials"
+          description="Short quotes from real customers. Only published entries appear on the homepage when reviews are enabled."
+        >
+          {testimonials.length === 0 ? (
+            <p className="text-sm text-stone-500">No testimonials yet. Add one below.</p>
+          ) : (
+            <ul className="space-y-2">
+              {testimonials.map((t) => (
+                <li key={t.id} className="flex items-start justify-between gap-3 rounded-2xl border border-stone-200 bg-white px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-stone-900">{t.name}</p>
+                    <p className="text-xs text-stone-500">{t.area || "Customer"} · {t.rating}★</p>
+                    <p className="mt-1 text-sm text-stone-600">{t.text}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="shrink-0 text-xs font-semibold text-rose-600 hover:underline"
+                    onClick={() => void removeTestimonial(t.id)}
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <input
+              className="input"
+              placeholder="Customer name"
+              value={testimonialForm.name}
+              onChange={(e) => setTestimonialForm({ ...testimonialForm, name: e.target.value })}
+            />
+            <input
+              className="input"
+              placeholder="Area (optional)"
+              value={testimonialForm.area}
+              onChange={(e) => setTestimonialForm({ ...testimonialForm, area: e.target.value })}
+            />
+          </div>
+          <textarea
+            className="input mt-3 min-h-[88px]"
+            placeholder="Review text"
+            value={testimonialForm.text}
+            onChange={(e) => setTestimonialForm({ ...testimonialForm, text: e.target.value })}
+          />
+          <button type="button" className="btn-primary mt-3" onClick={() => void addTestimonial()}>
+            <Plus size={16} /> Add testimonial
+          </button>
+        </SettingsSection>
+        )}
       </form>
+
+      {tab === "inventory" && settings && (
+        <SettingsSection
+          icon={Package}
+          title="Inventory & menu"
+          description="Stock rules that affect the storefront and kitchen."
+        >
+          <label className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 dark:border-stone-600 dark:bg-stone-800/50">
+            <div>
+              <p className="text-sm font-semibold text-stone-900 dark:text-stone-100">Auto-hide menu items</p>
+              <p className="text-xs text-stone-500 dark:text-stone-400">
+                Automatically hide menu items when their ingredients run out of stock.
+              </p>
+            </div>
+            <input
+              type="checkbox"
+              className="h-5 w-5 shrink-0 rounded border-stone-300 text-brand-600 focus:ring-brand-500"
+              checked={settings.inventoryAutoHideMenu ?? false}
+              onChange={(e) => setSettings({ ...settings, inventoryAutoHideMenu: e.target.checked })}
+            />
+          </label>
+        </SettingsSection>
+      )}
 
       {tab === "banners" && (
       <SettingsSection
@@ -919,7 +1067,7 @@ export default function AdminSettingsPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => removeBanner(b.id)}
+                    onClick={() => requestRemoveBanner(b.id)}
                     className="grid h-8 w-8 place-items-center rounded-full text-stone-400 transition hover:bg-red-50 hover:text-red-600"
                     aria-label="Delete banner"
                   >
@@ -987,6 +1135,35 @@ export default function AdminSettingsPage() {
         </div>
       </SettingsSection>
       )}
+
+      <ConfirmSheet
+        open={bannerDeleteId !== null}
+        title="Delete banner?"
+        message="This removes the banner from your homepage carousel. You can upload it again later."
+        confirmLabel="Delete"
+        danger
+        saving={bannerDeleting}
+        onClose={() => !bannerDeleting && setBannerDeleteId(null)}
+        onConfirm={() => void confirmRemoveBanner()}
+      />
+      <ConfirmSheet
+        open={leavePromptOpen}
+        title="Leave without saving?"
+        message="You have unsaved settings. If you leave now, your changes will be lost."
+        confirmLabel="Leave"
+        danger
+        saving={false}
+        onClose={() => {
+          setLeavePromptOpen(false);
+          setPendingLeaveHref(null);
+        }}
+        onConfirm={() => {
+          const href = pendingLeaveHref;
+          setLeavePromptOpen(false);
+          setPendingLeaveHref(null);
+          if (href) window.location.href = href;
+        }}
+      />
 
       {tab !== "banners" && tab !== "security" && (
       <div className="fixed bottom-20 left-0 right-0 z-20 px-4 lg:bottom-6 lg:left-72 lg:right-0">

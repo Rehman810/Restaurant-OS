@@ -100,6 +100,7 @@ ordersRouter.post("/", optionalAuth, async (req, res) => {
     customerLongitude,
     customerLocationAccuracy,
     branchId: branchIdBody,
+    idempotencyKey,
   } = req.body as {
     items?: {
       menuItemId: string;
@@ -121,7 +122,18 @@ ordersRouter.post("/", optionalAuth, async (req, res) => {
     customerLongitude?: number;
     customerLocationAccuracy?: number;
     branchId?: string;
+    idempotencyKey?: string;
   };
+  const checkoutKey = idempotencyKey ? cleanText(String(idempotencyKey), 120) : "";
+  if (checkoutKey) {
+    const existing = await prisma.order.findUnique({
+      where: { checkoutIdempotencyKey: checkoutKey },
+      include,
+    });
+    if (existing) {
+      return res.status(200).json(existing);
+    }
+  }
   const cartItems = items ?? [];
   const cartDeals = deals ?? [];
   const phone = normalizePhone(String(customerPhone || ""));
@@ -367,6 +379,7 @@ ordersRouter.post("/", optionalAuth, async (req, res) => {
       customerLongitude: lng,
       customerLocationAccuracy: locAccuracy,
       status: initialStatus,
+      checkoutIdempotencyKey: checkoutKey || null,
       items: { create: lines },
     },
     include,

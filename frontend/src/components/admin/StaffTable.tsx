@@ -39,7 +39,7 @@ const ROLE_STYLES: Record<Role, string> = {
   ADMIN: "bg-violet-50 text-violet-800 ring-violet-100 dark:bg-violet-950/50 dark:text-violet-200 dark:ring-violet-800",
   MANAGER: "bg-indigo-50 text-indigo-800 ring-indigo-100 dark:bg-indigo-950/50 dark:text-indigo-200 dark:ring-indigo-800",
   WAITER: "bg-fuchsia-50 text-fuchsia-800 ring-fuchsia-100 dark:bg-fuchsia-950/50 dark:text-fuchsia-200 dark:ring-fuchsia-800",
-  CHEF: "bg-orange-50 text-orange-800 ring-orange-100 dark:bg-orange-950/50 dark:text-orange-200 dark:ring-orange-800",
+  CHEF: "bg-brand-50 text-brand-800 ring-brand-100 dark:bg-brand-950/50 dark:text-brand-200 dark:ring-brand-800",
   RIDER: "bg-sky-50 text-sky-800 ring-sky-100 dark:bg-sky-950/50 dark:text-sky-200 dark:ring-sky-800",
   CASHIER: "bg-emerald-50 text-emerald-800 ring-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-200 dark:ring-emerald-800",
   CUSTOMER: "bg-stone-50 text-stone-600 ring-stone-100",
@@ -66,7 +66,7 @@ const ROLE_ICONS: Partial<Record<Role, typeof Shield>> = {
 
 const AVATAR_GRADIENTS = [
   "from-violet-500 to-purple-600",
-  "from-brand-500 to-orange-600",
+  "from-brand-500 to-brand-700",
   "from-sky-500 to-blue-600",
   "from-emerald-500 to-teal-600",
 ];
@@ -152,7 +152,7 @@ export function StaffTable({
               return (
                 <tr
                   key={s.id}
-                  className={`border-b border-stone-100 last:border-0 transition hover:bg-orange-50/30 dark:border-stone-800 dark:hover:bg-stone-800/40 ${
+                  className={`border-b border-stone-100 last:border-0 transition hover:bg-brand-50/30 dark:border-stone-800 dark:hover:bg-stone-800/40 ${
                     !s.isActive ? "opacity-75" : ""
                   }`}
                 >

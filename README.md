@@ -50,9 +50,24 @@ Customer sign-in: http://localhost:3000/login
 
 ```bash
 npm run dev          # Docker, migrate, seed, API, and web
-npm test             # unit tests
-npm run typecheck
+npm test             # backend Vitest (from repo root)
+npm run typecheck    # API build + frontend tsc
 ```
+
+### E2E (Playwright)
+
+```bash
+# Terminal 1–2: API + web with seeded DB
+npm run dev
+
+# Terminal 3: install browsers once
+cd frontend && npx playwright install chromium
+
+# Run smoke (skipped unless E2E_RUN=1)
+E2E_RUN=1 E2E_BASE_URL=http://localhost:3000 npm run test:e2e -w restaurant-os-web
+```
+
+Optional dev login shortcuts: set `NEXT_PUBLIC_ENABLE_DEMO_LOGIN=true` in `frontend/.env.local` (never in production).
 
 Check dishes missing images:
 

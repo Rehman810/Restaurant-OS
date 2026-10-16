@@ -51,6 +51,10 @@ export default function CheckoutPage() {
   const [busy, setBusy] = useState(false);
   const [locating, setLocating] = useState(false);
   const [cartChecked, setCartChecked] = useState(false);
+  const idempotencyKey = useMemo(() => {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+    return `chk-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }, []);
 
   const isDelivery = mode === "DELIVERY";
   const settings = store?.settings;
@@ -182,6 +186,7 @@ export default function CheckoutPage() {
           notes,
           items: payload.items,
           deals: payload.deals,
+          idempotencyKey,
           ...(location
             ? {
                 customerLatitude: location.latitude,
