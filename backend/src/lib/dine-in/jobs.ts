@@ -2,13 +2,41 @@ import { ReservationStatus } from "@prisma/client";
 import { prisma } from "../prisma";
 import { writeAuditLog } from "./audit";
 import { enqueueForReservation, processPendingEmailQueue } from "./email-queue";
+import { databaseHelpText } from "../db-health";
+
+let dbJobsWarned = false;
+
+export function resetDineInJobDbWarning() {
+  dbJobsWarned = false;
+}
+
+function logDineInJobDbIssue(err: unknown) {
+  const msg = err instanceof Error ? err.message : String(err);
+  const looksLikeDb =
+    /Authentication failed|credentials|ECONNREFUSED|Can't reach database|Connection refused|P1000|P1001/i.test(msg);
+  if (looksLikeDb) {
+    if (!dbJobsWarned) {
+      dbJobsWarned = true;
+      console.error(
+        "[dine-in jobs] Database unreachable — booking emails, no-shows, and reminders are paused until DATABASE_URL works.\n" +
+          databaseHelpText()
+      );
+    }
+    return;
+  }
+  console.error("[dine-in jobs]", err);
+}
 
 export async function runDineInJobs(now = new Date()) {
-  await processPendingEmailQueue(30);
-  await markNoShows(now);
-  await expireUnconfirmedPending(now);
-  await sendReminders(now);
-  await sendFollowUps(now);
+  try {
+    await processPendingEmailQueue(30);
+    await markNoShows(now);
+    await expireUnconfirmedPending(now);
+    await sendReminders(now);
+    await sendFollowUps(now);
+  } catch (err) {
+    logDineInJobDbIssue(err);
+  }
 }
 
 async function markNoShows(now: Date) {
@@ -94,7 +122,7 @@ async function sendFollowUps(now: Date) {
 export function startDineInJobScheduler() {
   const intervalMs = 60_000;
   setInterval(() => {
-    void runDineInJobs().catch((err) => console.error("[dine-in jobs]", err));
+    void runDineInJobs();
   }, intervalMs);
-  void runDineInJobs().catch((err) => console.error("[dine-in jobs]", err));
+  void runDineInJobs();
 }

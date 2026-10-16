@@ -16,6 +16,7 @@ import { blocklistRouter } from "./routes/blocklist";
 import { posRouter } from "./routes/pos";
 import { branchesRouter } from "./routes/branches";
 import { dineInPublicRouter, dineInRouter } from "./routes/dine-in";
+import { inventoryRouter } from "./routes/inventory";
 import { UPLOAD_DIR } from "./lib/uploads";
 import { resolveRestaurantId, runWithRestaurant } from "./lib/prisma";
 import {
@@ -65,6 +66,7 @@ export function createApp() {
   app.use("/branches", branchesRouter);
   app.use("/dine-in", dineInPublicRouter);
   app.use("/admin/dine-in", dineInRouter);
+  app.use("/admin/inventory", inventoryRouter);
   app.use("/orders", ordersRouter);
   app.use("/pos", posRouter);
   app.use("/rider", riderRouter);

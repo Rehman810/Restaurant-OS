@@ -29,6 +29,8 @@ const TENANT_MODELS = new Set([
   "Order",
   "OrderBlock",
   "Testimonial",
+  "Supplier",
+  "InventoryItem",
 ]);
 
 export function isTenantModel(model?: string) {

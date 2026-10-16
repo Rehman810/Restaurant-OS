@@ -192,6 +192,8 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
   });
 
   emitOrderChange("order:created", order);
+  const { deductInventoryForOrder } = await import("../lib/inventory/stock");
+  void deductInventoryForOrder(order.id, req.user!.id).catch(() => null);
   res.status(201).json(order);
 });
 

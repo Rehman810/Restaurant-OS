@@ -24,6 +24,9 @@ model Restaurant {
   orders       Order[]
   blocks       OrderBlock[]
   testimonials Testimonial[]
+  suppliers            Supplier[]
+  inventoryItems       InventoryItem[]
+  ingredientCategories IngredientCategory[]
 }
 
 model Branch {
@@ -48,6 +51,14 @@ model Branch {
   tableSessions  TableSession[]
   reservations   Reservation[]
   waitlistEntries WaitlistEntry[]
+  branchStocks         BranchStock[]
+  stockMovements       StockMovement[]
+  inventoryPurchases   InventoryPurchase[]
+  stockBatches         StockBatch[]
+  wasteLogs            WasteLog[]
+  stockCounts          StockCount[]
+  transfersOut         StockTransfer[] @relation("TransferFrom")
+  transfersIn          StockTransfer[] @relation("TransferTo")
 
   @@unique([restaurantId, code])
   @@index([restaurantId, isActive])
@@ -110,6 +121,72 @@ enum WaitlistStatus {
   SEATED
   CANCELLED
   LEFT
+}
+
+enum InventoryUnit {
+  KG
+  G
+  L
+  ML
+  PIECE
+  PACK
+  DOZEN
+}
+
+enum StockMovementType {
+  PURCHASE
+  ADJUSTMENT
+  WASTE
+  SALE
+  SALE_DEDUCTION
+  COUNT
+  COUNT_CORRECTION
+  TRANSFER_IN
+  TRANSFER_OUT
+  REVERSAL
+}
+
+enum PurchasePaymentStatus {
+  UNPAID
+  PARTIAL
+  PAID
+}
+
+enum PurchaseStatus {
+  DRAFT
+  RECEIVED
+  VOIDED
+}
+
+enum WasteReason {
+  EXPIRED
+  SPOILED
+  DROPPED
+  OVER_PREPARED
+  STAFF_MEAL
+  OTHER
+}
+
+enum StockCountStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+}
+
+enum TransferStatus {
+  PENDING
+  IN_TRANSIT
+  RECEIVED
+  CANCELLED
+}
+
+enum StockReferenceType {
+  ORDER
+  PURCHASE
+  WASTE
+  COUNT
+  TRANSFER
+  ADJUSTMENT
 }
 
 enum OrderSource {
@@ -348,6 +425,271 @@ model MenuItem {
   sizes         MenuItemSize[]
   addons        MenuItemAddon[]
   optionGroups  MenuItemOptionGroup[]
+  recipeLines   RecipeLine[]
+  menuRecipe    MenuRecipe?
+  wasteLogs     WasteLog[]
+}
+
+model IngredientCategory {
+  id           String     @id @default(uuid())
+  restaurantId String     @default("11111111-1111-4111-8111-111111111111")
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  name         String
+  sortOrder    Int        @default(0)
+  items        InventoryItem[]
+
+  @@unique([restaurantId, name])
+}
+
+model Supplier {
+  id            String     @id @default(uuid())
+  restaurantId  String     @default("11111111-1111-4111-8111-111111111111")
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id])
+  name          String
+  phone         String     @default("")
+  email         String     @default("")
+  address       String     @default("")
+  paymentTerms  String     @default("")
+  notes         String?
+  isActive      Boolean    @default(true)
+  createdAt     DateTime   @default(now())
+  purchases     InventoryPurchase[]
+  supplierItems SupplierItem[]
+
+  @@unique([restaurantId, name])
+}
+
+model SupplierItem {
+  id         String        @id @default(uuid())
+  supplierId String
+  supplier   Supplier      @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  itemId     String
+  item       InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  lastPrice  Decimal       @default(0) @db.Decimal(10, 4)
+  updatedAt  DateTime      @updatedAt
+
+  @@unique([supplierId, itemId])
+}
+
+model InventoryItem {
+  id            String        @id @default(uuid())
+  restaurantId  String        @default("11111111-1111-4111-8111-111111111111")
+  restaurant    Restaurant    @relation(fields: [restaurantId], references: [id])
+  categoryId    String?
+  categoryRef   IngredientCategory? @relation(fields: [categoryId], references: [id])
+  sku           String?
+  name          String
+  category      String        @default("General")
+  unit          InventoryUnit @default(KG)
+  reorderPoint  Decimal       @default(0) @db.Decimal(12, 3)
+  parLevel      Decimal?      @db.Decimal(12, 3)
+  defaultCost   Decimal       @default(0) @db.Decimal(10, 4)
+  trackStock    Boolean       @default(true)
+  trackExpiry   Boolean       @default(false)
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  branchStocks  BranchStock[]
+  movements     StockMovement[]
+  recipeLines   RecipeLine[]
+  purchaseLines InventoryPurchaseLine[]
+  batches       StockBatch[]
+  supplierItems SupplierItem[]
+  wasteLogs     WasteLog[]
+  countLines    StockCountLine[]
+  transferLines StockTransferLine[]
+
+  @@unique([restaurantId, name])
+  @@index([restaurantId, category])
+  @@index([categoryId])
+}
+
+model BranchStock {
+  id        String        @id @default(uuid())
+  branchId  String
+  branch    Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  itemId    String
+  item      InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  quantity  Decimal       @default(0) @db.Decimal(12, 3)
+  avgCost   Decimal       @default(0) @db.Decimal(10, 4)
+  updatedAt DateTime      @updatedAt
+
+  @@unique([branchId, itemId])
+}
+
+model StockMovement {
+  id              String            @id @default(uuid())
+  branchId        String
+  branch          Branch            @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  itemId          String
+  item            InventoryItem     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  type            StockMovementType
+  quantityDelta   Decimal           @db.Decimal(12, 3)
+  quantityAfter   Decimal           @db.Decimal(12, 3)
+  unitCost        Decimal?          @db.Decimal(10, 4)
+  reason          String?
+  reference       String?
+  referenceType   StockReferenceType?
+  referenceId     String?
+  notes           String?
+  actorId         String?
+  orderId         String?
+  createdAt       DateTime          @default(now())
+  purchaseLineId  String?           @unique
+  purchaseLine    InventoryPurchaseLine? @relation(fields: [purchaseLineId], references: [id])
+  wasteLogId      String?           @unique
+  wasteLog        WasteLog?         @relation(fields: [wasteLogId], references: [id])
+
+  @@index([branchId, createdAt])
+  @@index([itemId, createdAt])
+  @@index([orderId])
+  @@index([referenceType, referenceId])
+  @@index([actorId])
+}
+
+model StockBatch {
+  id                String                 @id @default(uuid())
+  branchId          String
+  branch            Branch                 @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  itemId            String
+  item              InventoryItem          @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  purchaseLineId    String?
+  purchaseLine      InventoryPurchaseLine? @relation(fields: [purchaseLineId], references: [id])
+  quantityRemaining Decimal                @db.Decimal(12, 3)
+  expiryDate        DateTime?
+  createdAt         DateTime               @default(now())
+
+  @@index([branchId, itemId])
+  @@index([expiryDate])
+}
+
+model InventoryPurchase {
+  id            String                @id @default(uuid())
+  branchId      String
+  branch        Branch                @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  supplierId    String?
+  supplier      Supplier?             @relation(fields: [supplierId], references: [id])
+  invoiceRef    String?
+  purchaseDate  DateTime              @default(now())
+  subtotal      Decimal               @default(0) @db.Decimal(12, 2)
+  taxAmount     Decimal               @default(0) @db.Decimal(12, 2)
+  discount      Decimal               @default(0) @db.Decimal(12, 2)
+  total         Decimal               @default(0) @db.Decimal(12, 2)
+  paidAmount    Decimal               @default(0) @db.Decimal(12, 2)
+  paymentStatus PurchasePaymentStatus @default(UNPAID)
+  status        PurchaseStatus        @default(RECEIVED)
+  notes         String?
+  createdById   String?
+  receivedAt    DateTime              @default(now())
+  voidedAt      DateTime?
+  createdAt     DateTime              @default(now())
+  lines         InventoryPurchaseLine[]
+}
+
+model InventoryPurchaseLine {
+  id         String            @id @default(uuid())
+  purchaseId String
+  purchase   InventoryPurchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  itemId     String
+  item       InventoryItem     @relation(fields: [itemId], references: [id])
+  quantity   Decimal           @db.Decimal(12, 3)
+  unitCost   Decimal           @db.Decimal(10, 4)
+  lineTotal  Decimal           @default(0) @db.Decimal(12, 2)
+  batchNo    String?
+  expiryDate DateTime?
+  movement   StockMovement?
+  batches    StockBatch[]
+}
+
+model WasteLog {
+  id          String        @id @default(uuid())
+  branchId    String
+  branch      Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  itemId      String?
+  item        InventoryItem? @relation(fields: [itemId], references: [id])
+  menuItemId  String?
+  menuItem    MenuItem?     @relation(fields: [menuItemId], references: [id])
+  quantity    Decimal       @db.Decimal(12, 3)
+  reason      WasteReason
+  costAtTime  Decimal       @default(0) @db.Decimal(12, 2)
+  notes       String?
+  loggedAt    DateTime      @default(now())
+  createdById String?
+  movement    StockMovement?
+}
+
+model MenuRecipe {
+  id            String   @id @default(uuid())
+  menuItemId    String   @unique
+  menuItem      MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  yieldPortions Int      @default(1)
+  notes         String?
+  updatedAt     DateTime @updatedAt
+}
+
+model RecipeLine {
+  id         String        @id @default(uuid())
+  menuItemId String
+  menuItem   MenuItem      @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  itemId     String
+  item       InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  quantity   Decimal       @db.Decimal(12, 4)
+
+  @@unique([menuItemId, itemId])
+}
+
+model StockCount {
+  id           String           @id @default(uuid())
+  branchId     String
+  branch       Branch           @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  status       StockCountStatus @default(DRAFT)
+  countedById  String?
+  approvedById String?
+  createdAt    DateTime         @default(now())
+  submittedAt  DateTime?
+  approvedAt   DateTime?
+  lines        StockCountLine[]
+}
+
+model StockCountLine {
+  id            String        @id @default(uuid())
+  countId       String
+  count         StockCount    @relation(fields: [countId], references: [id], onDelete: Cascade)
+  itemId        String
+  item          InventoryItem @relation(fields: [itemId], references: [id])
+  systemQty     Decimal       @db.Decimal(12, 3)
+  countedQty    Decimal?      @db.Decimal(12, 3)
+  variance      Decimal?      @db.Decimal(12, 3)
+  varianceCost  Decimal?      @db.Decimal(12, 2)
+
+  @@unique([countId, itemId])
+}
+
+model StockTransfer {
+  id           String             @id @default(uuid())
+  fromBranchId String
+  fromBranch   Branch             @relation("TransferFrom", fields: [fromBranchId], references: [id])
+  toBranchId   String
+  toBranch     Branch             @relation("TransferTo", fields: [toBranchId], references: [id])
+  status       TransferStatus     @default(PENDING)
+  createdById  String?
+  receivedById String?
+  createdAt    DateTime           @default(now())
+  shippedAt    DateTime?
+  receivedAt   DateTime?
+  lines        StockTransferLine[]
+}
+
+model StockTransferLine {
+  id               String        @id @default(uuid())
+  transferId       String
+  transfer         StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  itemId           String
+  item             InventoryItem @relation(fields: [itemId], references: [id])
+  quantitySent     Decimal       @db.Decimal(12, 3)
+  quantityReceived Decimal?      @db.Decimal(12, 3)
+
+  @@unique([transferId, itemId])
 }
 
 model MenuItemOptionGroup {
@@ -453,6 +795,9 @@ model StoreSettings {
   tiktokUrl           String   @default("")
   youtubeUrl          String   @default("")
   googlePlaceId       String   @default("")
+  inventoryAllowNegative   Boolean @default(false)
+  inventoryAutoHideMenu    Boolean @default(false)
+  inventoryDeductAtPreparing Boolean @default(true)
   updatedAt           DateTime @updatedAt
 }
 
@@ -550,6 +895,7 @@ model Order {
   customerLocationAccuracy Decimal? @db.Decimal(10, 2)
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
+  inventoryDeductedAt DateTime?
   items            OrderItem[]
   invoice          Invoice?
   events           OrderEvent[]

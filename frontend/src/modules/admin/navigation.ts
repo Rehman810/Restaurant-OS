@@ -8,6 +8,7 @@ import {
   LayoutGrid,
   Map,
   MapPinned,
+  Package,
   Receipt,
   Settings,
   UserCog,
@@ -41,6 +42,7 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
     title: "Catalog",
     items: [
       { href: "/admin/menu", label: "Menu", icon: UtensilsCrossed },
+      { href: "/admin/inventory", label: "Inventory", icon: Package },
       { href: "/admin/areas", label: "Areas", icon: MapPinned },
     ],
   },

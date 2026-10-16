@@ -694,6 +694,8 @@ ordersRouter.patch("/:id/status", requireAuth, requireRole(...ORDER_OPS), async 
   }
   if (status === OrderStatus.PREPARING && existing.status !== OrderStatus.PREPARING) {
     void sendOrderPreparingEmail(order);
+    const { deductInventoryForOrder } = await import("../lib/inventory/stock");
+    void deductInventoryForOrder(order.id, req.user!.id).catch(() => null);
   }
   if (status === OrderStatus.OUT_FOR_DELIVERY && existing.status !== OrderStatus.OUT_FOR_DELIVERY) {
     void sendOrderOnTheWayEmail(order);
@@ -704,6 +706,8 @@ ordersRouter.patch("/:id/status", requireAuth, requireRole(...ORDER_OPS), async 
   }
   if (status === OrderStatus.CANCELLED && existing.status !== OrderStatus.CANCELLED) {
     void sendOrderCancelledEmail(order);
+    const { reverseInventoryForOrder } = await import("../lib/inventory/stock");
+    void reverseInventoryForOrder(order.id, req.user!.id).catch(() => null);
   }
   if (status === OrderStatus.DELIVERED) {
     await generateInvoicePdf(order.id);

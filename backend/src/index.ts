@@ -22,7 +22,9 @@ import { blocklistRouter } from "./routes/blocklist";
 import { posRouter } from "./routes/pos";
 import { branchesRouter } from "./routes/branches";
 import { dineInPublicRouter, dineInRouter } from "./routes/dine-in";
+import { inventoryRouter } from "./routes/inventory";
 import { startDineInJobScheduler } from "./lib/dine-in/jobs";
+import { databaseHelpText, verifyDatabaseConnection } from "./lib/db-health";
 import { UPLOAD_DIR } from "./lib/uploads";
 import { initRealtime } from "./lib/realtime";
 import { resolveRestaurantId, runWithRestaurant } from "./lib/prisma";
@@ -84,6 +86,7 @@ app.use("/settings", settingsRouter);
 app.use("/branches", branchesRouter);
 app.use("/dine-in", dineInPublicRouter);
 app.use("/admin/dine-in", dineInRouter);
+app.use("/admin/inventory", inventoryRouter);
 app.use("/orders", ordersRouter);
 app.use("/pos", posRouter);
 app.use("/rider", riderRouter);
@@ -108,5 +111,15 @@ server.on("error", (err: NodeJS.ErrnoException) => {
 
 server.listen(PORT, () => {
   console.log(`Restaurant OS API on http://localhost:${PORT}`);
-  startDineInJobScheduler();
+  void (async () => {
+    const check = await verifyDatabaseConnection();
+    if (!check.ok) {
+      console.error("[database] Connection failed:", check.message);
+      console.error(databaseHelpText());
+      if (process.env.NODE_ENV === "production") {
+        process.exit(1);
+      }
+    }
+    startDineInJobScheduler();
+  })();
 });

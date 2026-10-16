@@ -240,6 +240,25 @@ h4 {
   border-radius: 99px;
 }
 
+/* Inventory lists — subtle scrollbars in tight panels */
+.inventory-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #d6d3d1 transparent;
+}
+.inventory-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.inventory-scroll::-webkit-scrollbar-thumb {
+  background: #d6d3d1;
+  border-radius: 99px;
+}
+[data-admin-theme="dark"] .inventory-scroll {
+  scrollbar-color: #57534e transparent;
+}
+[data-admin-theme="dark"] .inventory-scroll::-webkit-scrollbar-thumb {
+  background: #57534e;
+}
+
 /* Admin panel dark theme (scoped — storefront unchanged) */
 [data-admin-theme="dark"] {
   color-scheme: dark;

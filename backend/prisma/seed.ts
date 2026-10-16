@@ -405,6 +405,15 @@ async function main() {
         timezone: TIMEZONE,
       },
     });
+    const mainBranch = await prisma.branch.findFirst({
+      where: { restaurantId: "11111111-1111-4111-8111-111111111111", isActive: true },
+      orderBy: [{ isDefault: "desc" }, { sortOrder: "asc" }],
+    });
+    if (mainBranch) {
+      const { seedInventoryDemo } = await import("../src/lib/inventory/seed-demo");
+      const inv = await seedInventoryDemo(mainBranch.id);
+      console.log(`Inventory demo refreshed: ${inv.ingredients} ingredients, ${inv.recipes} menu recipes.`);
+    }
     console.log("Demo data already present. Branding updated. Admin password was not reset.");
     return;
   }
@@ -899,6 +908,9 @@ async function main() {
       await generateInvoicePdf(order.id);
     }
   }
+
+  const { seedInventoryDemo } = await import("../src/lib/inventory/seed-demo");
+  await seedInventoryDemo(mainBranch.id);
 
   console.log(`Seeded ${BRAND_NAME} in ${CITY}.`);
   console.log("Demo accounts (password shown once; it will not be printed or reset on the next seed):");

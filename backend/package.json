@@ -9,6 +9,7 @@
     "start": "prisma migrate deploy && tsx prisma/seed.ts && tsx src/index.ts",
     "prisma:migrate": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts",
+    "prisma:seed-inventory": "tsx scripts/seed-inventory.ts",
     "prisma:studio": "prisma studio",
     "test": "vitest run",
     "test:unit": "vitest run",
