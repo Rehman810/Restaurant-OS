@@ -16,7 +16,7 @@ import { useAuth } from "@/lib/auth";
 import { eta, formatWhen, pkr } from "@/lib/format";
 import { usePoll } from "@/hooks/usePoll";
 import { useLiveOrders } from "@/hooks/useLiveOrders";
-import { FulfillmentBadge } from "@/components/FulfillmentBadge";
+import { FulfillmentBadge, fulfillmentLabel } from "@/components/FulfillmentBadge";
 import { Order, orderStatusLabel } from "@/lib/types";
 import { OrderFeedbackForm } from "@/components/OrderFeedbackForm";
 import { OrderPushPrompt } from "@/components/OrderPushPrompt";
@@ -143,7 +143,7 @@ export default function OrderDetailPage() {
               <StatusTrack status={order.status} fulfillmentType={order.fulfillmentType} />
             </div>
 
-            {order.status !== "CANCELLED" && order.status !== "DELIVERED" && (
+            {order.status !== "CANCELLED" && !terminal && (
               <OrderPushPrompt orderId={order.id} />
             )}
 
@@ -176,7 +176,7 @@ export default function OrderDetailPage() {
                   <span>{pkr(order.subtotal)}</span>
                 </div>
               )}
-              {Number(order.deliveryCharge || 0) > 0 && (
+              {order.fulfillmentType === "DELIVERY" && Number(order.deliveryCharge || 0) > 0 && (
                 <div className="flex justify-between">
                   <span className="text-stone-500">
                     Delivery{order.deliveryArea?.name ? ` · ${order.deliveryArea.name}` : ""}
@@ -192,7 +192,7 @@ export default function OrderDetailPage() {
 
             <div className="rounded-2xl bg-[#fffaf5] px-4 py-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">
-                {order.fulfillmentType === "PICKUP" ? "Takeaway" : "Delivery"}
+                {fulfillmentLabel(order.fulfillmentType)}
               </p>
               <p className="mt-1.5 text-sm leading-relaxed text-stone-600">{order.deliveryAddress}</p>
               {order.notes && (
@@ -218,7 +218,7 @@ export default function OrderDetailPage() {
               <button type="button" className="btn-ghost h-12 w-full" onClick={repeatOrder}>
                 <RotateCcw size={16} /> Order again
               </button>
-              {(order.status === "DELIVERED" || order.invoice) && (
+              {(terminal || order.invoice) && (
                 <button
                   type="button"
                   className="btn-primary h-12 w-full"

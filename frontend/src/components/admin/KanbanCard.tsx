@@ -5,7 +5,7 @@ import { ArrowRight, Bike, ChevronRight, GripVertical, MapPin, Package } from "l
 import { formatElapsed, formatWhen, pkr } from "@/lib/format";
 import { STATUS_THEME } from "@/lib/admin-status";
 import { FulfillmentBadge } from "@/components/FulfillmentBadge";
-import { Order, OrderStatus, STATUS_FLOW, orderStatusLabel } from "@/lib/types";
+import { isOrderTerminal, nextOrderStatus, Order, OrderStatus, orderStatusLabel } from "@/lib/types";
 
 export function KanbanCard({
   order,
@@ -27,8 +27,8 @@ export function KanbanCard({
   const didDrag = useRef(false);
   const theme = STATUS_THEME[order.status];
   const itemCount = order.items.reduce((n, i) => n + i.quantity, 0);
-  const nextStatus = STATUS_FLOW[STATUS_FLOW.indexOf(order.status) + 1];
-  const canAdvance = order.status !== "DELIVERED" && nextStatus;
+  const nextStatus = nextOrderStatus(order.status, order.fulfillmentType);
+  const canAdvance = Boolean(nextStatus) && !isOrderTerminal(order.status);
 
   return (
     <article

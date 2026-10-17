@@ -4,19 +4,32 @@ import { useEffect, useState, type DragEvent, type Dispatch, type SetStateAction
 import { api } from "@/lib/api";
 import { pkr } from "@/lib/format";
 import { STATUS_THEME } from "@/lib/admin-status";
-import { canMoveForward, isBackwardMove, Order, OrderStatus, STATUS_LABEL, STATUS_FLOW } from "@/lib/types";
+import {
+  ADMIN_KANBAN_COLUMNS,
+  canMoveForward,
+  isBackwardMove,
+  isOrderTerminal,
+  nextOrderStatus,
+  Order,
+  OrderStatus,
+  STATUS_LABEL,
+} from "@/lib/types";
 import { KanbanCard } from "./KanbanCard";
 import { OrderDetailSheet } from "./OrderDetailSheet";
 
-const COLUMNS: OrderStatus[] = STATUS_FLOW;
+const COLUMNS: OrderStatus[] = ADMIN_KANBAN_COLUMNS;
 
 function columnDropHandlers(
   columnStatus: OrderStatus,
-  draggingStatus: OrderStatus | null,
+  draggingOrder: Order | null,
   setDragOver: Dispatch<SetStateAction<OrderStatus | null>>,
   onDropOrder: (orderId: string, status: OrderStatus) => void
 ) {
-  const canDrop = draggingStatus !== null && canMoveForward(draggingStatus, columnStatus);
+  const draggingStatus = draggingOrder?.status ?? null;
+  const canDrop =
+    draggingOrder !== null &&
+    draggingStatus !== null &&
+    canMoveForward(draggingStatus, columnStatus, draggingOrder.fulfillmentType);
   const isSameColumn = draggingStatus === columnStatus;
 
   return {
@@ -29,7 +42,10 @@ function columnDropHandlers(
       if (canDrop) {
         e.dataTransfer.dropEffect = "move";
         setDragOver(columnStatus);
-      } else if (isSameColumn || (draggingStatus && isBackwardMove(draggingStatus, columnStatus))) {
+      } else if (
+        isSameColumn ||
+        (draggingOrder && draggingStatus && isBackwardMove(draggingStatus, columnStatus, draggingOrder.fulfillmentType))
+      ) {
         e.dataTransfer.dropEffect = "none";
       }
     },
@@ -69,7 +85,7 @@ export function KanbanBoard({
     setLocalOrders(orders);
   }, [orders]);
 
-  const draggingOrder = localOrders.find((o) => o.id === draggingId);
+  const draggingOrder = localOrders.find((o) => o.id === draggingId) ?? null;
   const draggingStatus = draggingOrder?.status ?? null;
   const selectedOrder = localOrders.find((o) => o.id === selectedId) ?? null;
 
@@ -77,7 +93,7 @@ export function KanbanBoard({
     const order = localOrders.find((o) => o.id === orderId);
     if (!order || order.status === status) return;
 
-    if (!canMoveForward(order.status, status)) {
+    if (!canMoveForward(order.status, status, order.fulfillmentType)) {
       setError("Orders can only move forward — not back to an earlier stage.");
       return;
     }
@@ -101,9 +117,9 @@ export function KanbanBoard({
   }
 
   async function advance(order: Order) {
-    const idx = COLUMNS.indexOf(order.status);
-    if (idx < 0 || idx >= COLUMNS.length - 1) return;
-    await moveOrder(order.id, COLUMNS[idx + 1]);
+    const next = nextOrderStatus(order.status, order.fulfillmentType);
+    if (!next) return;
+    await moveOrder(order.id, next);
   }
 
   return (
@@ -119,10 +135,16 @@ export function KanbanBoard({
           const theme = STATUS_THEME[status];
           const list = localOrders.filter((o) => o.status === status);
           const isOver = dragOver === status;
-          const canDropHere = draggingStatus !== null && canMoveForward(draggingStatus, status);
-          const isBackward = draggingStatus !== null && isBackwardMove(draggingStatus, status);
+          const canDropHere =
+            draggingOrder !== null &&
+            draggingStatus !== null &&
+            canMoveForward(draggingStatus, status, draggingOrder.fulfillmentType);
+          const isBackward =
+            draggingOrder !== null &&
+            draggingStatus !== null &&
+            isBackwardMove(draggingStatus, status, draggingOrder.fulfillmentType);
           const columnValue = list.reduce((sum, o) => sum + Number(o.total), 0);
-          const dropHandlers = columnDropHandlers(status, draggingStatus, setDragOver, moveOrder);
+          const dropHandlers = columnDropHandlers(status, draggingOrder ?? null, setDragOver, moveOrder);
 
           return (
             <div
@@ -205,5 +227,5 @@ export function KanbanBoard({
 }
 
 export function kanbanActiveCount(orders: Order[]) {
-  return orders.filter((o) => o.status !== "DELIVERED" && o.status !== "CANCELLED").length;
+  return orders.filter((o) => !isOrderTerminal(o.status) && o.status !== "CANCELLED").length;
 }

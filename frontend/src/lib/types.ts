@@ -1,4 +1,5 @@
-import { canTransition } from "./order-machine";
+import { canTransition, flowFor, isTerminalStatus, nextStatus as nextStatusInFlow } from "./order-machine";
+import type { Fulfillment } from "./order-machine";
 
 export type Role = "CUSTOMER" | "ADMIN" | "MANAGER" | "WAITER" | "RIDER" | "CHEF" | "CASHIER";
 
@@ -335,19 +336,43 @@ export const STATUS_LABEL: Record<OrderStatus, string> = {
 };
 
 export function orderStatusLabel(status: OrderStatus, fulfillment?: FulfillmentType | null) {
-  if (status === "READY" && fulfillment === "DINE_IN") return "Ready to serve";
-  if (status === "READY" && fulfillment === "PICKUP") return "Ready for pickup";
+  const f = fulfillment || "DELIVERY";
+  if (status === "READY" && f === "DINE_IN") return "Ready to serve";
+  if (status === "READY" && f === "PICKUP") return "Ready for pickup";
+  if (status === "READY" && f === "DELIVERY") return "Ready for rider";
   return STATUS_LABEL[status];
 }
 
-export const STATUS_FLOW: OrderStatus[] = [
-  "PENDING_CONFIRMATION",
+/** Customer timeline steps — matches backend order machine per fulfillment type. */
+export function statusFlowFor(fulfillment?: FulfillmentType | null): OrderStatus[] {
+  return flowFor((fulfillment || "DELIVERY") as Fulfillment) as OrderStatus[];
+}
+
+/** @deprecated Prefer statusFlowFor(fulfillment) — delivery-only default. */
+export const STATUS_FLOW: OrderStatus[] = statusFlowFor("DELIVERY");
+
+/** Admin kanban columns (orders land in the column matching their status). */
+export const ADMIN_KANBAN_COLUMNS: OrderStatus[] = [
   "CONFIRMED",
   "PREPARING",
   "READY",
   "OUT_FOR_DELIVERY",
   "DELIVERED",
+  "COLLECTED",
+  "SERVED",
 ];
+
+export function nextOrderStatus(
+  current: OrderStatus,
+  fulfillment?: FulfillmentType | null
+): OrderStatus | null {
+  const next = nextStatusInFlow(current, (fulfillment || "DELIVERY") as Fulfillment);
+  return next as OrderStatus | null;
+}
+
+export function isOrderTerminal(status: OrderStatus) {
+  return isTerminalStatus(status as import("./order-machine").Status);
+}
 
 /** Kanban / pipeline: one legal step forward for this fulfillment type. */
 export function canMoveForward(
@@ -355,18 +380,24 @@ export function canMoveForward(
   to: OrderStatus,
   fulfillment?: FulfillmentType | null
 ): boolean {
-  return from !== to && canTransition(from, to, fulfillment || "DELIVERY");
+  return from !== to && canTransition(from, to, (fulfillment || "DELIVERY") as Fulfillment);
 }
 
-export function isBackwardMove(from: OrderStatus, to: OrderStatus): boolean {
-  const fromIdx = STATUS_FLOW.indexOf(from);
-  const toIdx = STATUS_FLOW.indexOf(to);
+export function isBackwardMove(
+  from: OrderStatus,
+  to: OrderStatus,
+  fulfillment?: FulfillmentType | null
+): boolean {
+  const flow = statusFlowFor(fulfillment);
+  const fromIdx = flow.indexOf(from);
+  const toIdx = flow.indexOf(to);
   if (fromIdx < 0 || toIdx < 0) return false;
   return toIdx < fromIdx;
 }
 
-export function forwardStatusOptions(current: OrderStatus) {
-  const idx = STATUS_FLOW.indexOf(current);
-  if (idx < 0) return STATUS_FLOW;
-  return STATUS_FLOW.slice(idx);
+export function forwardStatusOptions(current: OrderStatus, fulfillment?: FulfillmentType | null) {
+  const flow = statusFlowFor(fulfillment);
+  const idx = flow.indexOf(current);
+  if (idx < 0) return flow;
+  return flow.slice(idx);
 }

@@ -49,7 +49,11 @@ export function statusLabel(status: Status, fulfillment: Fulfillment = "DELIVERY
   if (status === "PENDING_CONFIRMATION") return "Awaiting confirmation";
   if (status === "CONFIRMED") return "Confirmed";
   if (status === "PREPARING") return "Preparing";
-  if (status === "READY") return fulfillment === "DINE_IN" ? "Ready to serve" : "Ready";
+  if (status === "READY") {
+    if (fulfillment === "DINE_IN") return "Ready to serve";
+    if (fulfillment === "PICKUP") return "Ready for pickup";
+    return "Ready for rider";
+  }
   if (status === "OUT_FOR_DELIVERY") return "Out for delivery";
   if (status === "DELIVERED") return "Delivered";
   if (status === "COLLECTED") return "Collected";

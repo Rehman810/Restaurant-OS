@@ -5,7 +5,15 @@ import { downloadInvoice } from "@/lib/api";
 import { formatWhen, pkr } from "@/lib/format";
 import { Rider } from "@/lib/admin-types";
 import { STATUS_THEME } from "@/lib/admin-status";
-import { isBackwardMove, Order, OrderStatus, STATUS_FLOW, STATUS_LABEL, orderStatusLabel } from "@/lib/types";
+import {
+  forwardStatusOptions,
+  isBackwardMove,
+  isOrderTerminal,
+  Order,
+  OrderStatus,
+  STATUS_LABEL,
+  orderStatusLabel,
+} from "@/lib/types";
 import { FulfillmentBadge } from "@/components/FulfillmentBadge";
 import { OrderDeviceInfo } from "./OrderDeviceInfo";
 import { OrderControlsSummary } from "./OrderControlsSummary";
@@ -32,17 +40,19 @@ export function OrderPanel({
   forwardOnly?: boolean;
 }) {
   const showRider =
-    order.fulfillmentType !== "PICKUP" &&
-    order.status !== "DELIVERED" &&
+    order.fulfillmentType === "DELIVERY" &&
+    !isOrderTerminal(order.status) &&
     order.status !== "CANCELLED" &&
     order.status !== "PENDING_CONFIRMATION";
   const theme = STATUS_THEME[order.status];
   const itemCount = order.items.reduce((n, i) => n + i.quantity, 0);
-  const statusOptions = (forwardOnly ? STATUS_FLOW : (Object.keys(STATUS_LABEL) as OrderStatus[])).map((k) => ({
+  const statusOptions = (
+    forwardOnly ? forwardStatusOptions(order.status, order.fulfillmentType) : (Object.keys(STATUS_LABEL) as OrderStatus[])
+  ).map((k) => ({
     value: k,
     label: orderStatusLabel(k, order.fulfillmentType),
     status: k,
-    disabled: forwardOnly ? isBackwardMove(order.status, k) : false,
+    disabled: forwardOnly ? isBackwardMove(order.status, k, order.fulfillmentType) : false,
   }));
 
   return (
