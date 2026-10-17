@@ -131,6 +131,24 @@ settingsRouter.patch("/", requireAuth, requireRole(Role.ADMIN), async (req, res)
       ...(body.riderCashStaleHours !== undefined
         ? { riderCashStaleHours: Number(body.riderCashStaleHours) || 24 }
         : {}),
+      ...(body.lateConfirmMinutes !== undefined
+        ? { lateConfirmMinutes: Math.max(1, Math.floor(Number(body.lateConfirmMinutes) || 15)) }
+        : {}),
+      ...(body.latePrepMinutes !== undefined
+        ? { latePrepMinutes: Math.max(1, Math.floor(Number(body.latePrepMinutes) || 30)) }
+        : {}),
+      ...(body.lateDeliveryMinutes !== undefined
+        ? { lateDeliveryMinutes: Math.max(1, Math.floor(Number(body.lateDeliveryMinutes) || 45)) }
+        : {}),
+      ...(body.shiftOpenWarningHours !== undefined
+        ? { shiftOpenWarningHours: Math.max(1, Math.floor(Number(body.shiftOpenWarningHours) || 12)) }
+        : {}),
+      ...(body.lowRatingThreshold !== undefined
+        ? { lowRatingThreshold: Math.min(5, Math.max(1, Math.floor(Number(body.lowRatingThreshold) || 2))) }
+        : {}),
+      ...(body.twoFaReminderDays !== undefined
+        ? { twoFaReminderDays: Math.max(1, Math.floor(Number(body.twoFaReminderDays) || 7)) }
+        : {}),
       ...(body.offlinePosEnabled !== undefined
         ? { offlinePosEnabled: Boolean(body.offlinePosEnabled) }
         : {}),

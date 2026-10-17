@@ -17,7 +17,7 @@ export type AccessAction =
   | "rider.own";
 
 const MATRIX: Record<AccessAction, AppRole[]> = {
-  dashboard: ["ADMIN", "MANAGER"],
+  dashboard: ["ADMIN", "MANAGER", "CASHIER", "CHEF"],
   analytics: ["ADMIN", "MANAGER"],
   kitchen: ["ADMIN", "MANAGER", "CHEF", "CASHIER"],
   pos: ["ADMIN", "MANAGER", "CASHIER"],

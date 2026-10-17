@@ -32,6 +32,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [now, setNow] = useState(() => new Date());
   const [pendingDineIn, setPendingDineIn] = useState(0);
   const [lowStockCount, setLowStockCount] = useState(0);
+  const [syncConflictCount, setSyncConflictCount] = useState(0);
   const { theme, toggle: toggleTheme } = useAdminTheme();
 
   useEffect(() => {
@@ -94,6 +95,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return () => window.clearInterval(id);
   }, [user, path]);
 
+  useEffect(() => {
+    if (!user || store?.settings.offlinePosEnabled === false) {
+      setSyncConflictCount(0);
+      return;
+    }
+    if (user.role !== "ADMIN" && user.role !== "MANAGER") return;
+    const refresh = () => {
+      void api<{ orders: unknown[] }>("/pos/sync-conflicts")
+        .then((r) => setSyncConflictCount(r.orders?.length ?? 0))
+        .catch(() => setSyncConflictCount(0));
+    };
+    refresh();
+    const id = window.setInterval(refresh, 60_000);
+    return () => window.clearInterval(id);
+  }, [user, store?.settings.offlinePosEnabled]);
+
   const isStaffLogin = path === "/admin/login";
 
   useEffect(() => {
@@ -102,12 +119,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       router.replace("/admin/login?next=/admin");
       return;
     }
-    if (user.role === "CHEF" && !path.startsWith("/admin/kitchen")) {
-      router.replace("/admin/kitchen");
+    if (user.role === "CHEF") {
+      const allowedPath = ["/admin", "/admin/kitchen"].some(
+        (prefix) => path === prefix || path.startsWith(`${prefix}/`)
+      );
+      if (!allowedPath) router.replace("/admin/kitchen");
       return;
     }
     if (user.role === "CASHIER") {
-      const allowedPath = ["/admin/pos", "/admin/kitchen", "/admin/orders", "/admin/customers"].some(
+      const allowedPath = ["/admin", "/admin/pos", "/admin/kitchen", "/admin/orders", "/admin/customers"].some(
         (prefix) => path === prefix || path.startsWith(`${prefix}/`)
       );
       if (!allowedPath) router.replace("/admin/pos");
@@ -138,6 +158,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         "/admin/customers",
         "/admin/riders",
         "/admin/dine-in",
+        "/admin/riders/cash",
+        "/admin/kitchen/stations",
       ].some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
       if (!allowedPath) router.replace("/admin");
       return;
@@ -181,10 +203,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     );
   }
 
-  const sidebarSections = navSectionsForRole(user.role);
+  const sidebarSections = navSectionsForRole(user.role, {
+    offlinePosEnabled: store?.settings.offlinePosEnabled === true,
+  });
   const mobileNav = MOBILE_NAV_FOR_ROLE[user.role];
   const isPos = path.startsWith("/admin/pos");
   const isKitchen = path.startsWith("/admin/kitchen");
+  const isDashboard = path === "/admin";
+  const storeTimezone = store?.settings.timezone ?? "Asia/Karachi";
 
   return (
     <BranchProvider>
@@ -250,6 +276,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                           }`}
                         >
                           {lowStockCount > 99 ? "99+" : lowStockCount}
+                        </span>
+                      )}
+                      {n.href === "/admin/sync-conflicts" && syncConflictCount > 0 && (
+                        <span
+                          className={`ml-auto grid min-w-[1.25rem] place-items-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold text-white ${
+                            collapsed ? "lg:absolute lg:right-1 lg:top-1 lg:ml-0" : ""
+                          }`}
+                        >
+                          {syncConflictCount > 99 ? "99+" : syncConflictCount}
                         </span>
                       )}
                       {n.href === "/admin/dine-in" && pendingDineIn > 0 && (
@@ -325,12 +360,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </button>
             <div className="min-w-0 leading-tight">
               <p className="font-display text-base font-semibold text-stone-800 dark:text-stone-100 sm:text-lg">
-                {now.toLocaleDateString("en-US", { weekday: "long" })}
+                {now.toLocaleDateString("en-US", { weekday: "long", timeZone: storeTimezone })}
               </p>
               <p className="text-sm font-medium text-stone-600 dark:text-stone-400 sm:text-base">
-                {now.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" })}
+                {now.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric", timeZone: storeTimezone })}
                 <span className="mx-1.5 text-stone-300 dark:text-stone-600">·</span>
-                {now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                {now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: storeTimezone })}
               </p>
             </div>
           </div>
@@ -379,7 +414,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               ? "flex min-h-0 flex-1 flex-col overflow-y-auto p-0 lg:p-8 lg:pb-8"
               : isKitchen
                 ? "flex min-h-0 flex-1 flex-col overflow-hidden p-4 pb-24 sm:p-6 sm:pb-6 lg:p-8 lg:pb-8"
-                : "flex min-h-0 flex-1 flex-col overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-6 lg:p-8 lg:pb-8"
+                : isDashboard
+                  ? "flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-24 pt-1 sm:px-5 sm:pb-6 lg:px-6 lg:pb-8"
+                  : "flex min-h-0 flex-1 flex-col overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-6 lg:p-8 lg:pb-8"
           }
         >
           {children}

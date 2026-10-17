@@ -14,12 +14,14 @@ import {
   MapPinned,
   Package,
   Receipt,
+  Wallet,
   ScrollText,
   Settings,
   Tag,
   UserCog,
   Users,
   UtensilsCrossed,
+  Printer,
 } from "lucide-react";
 import { Role } from "@/lib/types";
 
@@ -42,10 +44,12 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
     title: "Operations",
     items: [
       { href: "/admin/kitchen", label: "Kitchen", icon: Flame },
+      { href: "/admin/kitchen/stations", label: "Print stations", icon: Printer },
       { href: "/admin/pos", label: "POS", icon: Receipt },
       { href: "/admin/orders", label: "Orders", icon: ClipboardList },
       { href: "/admin/shifts", label: "Shifts", icon: DoorClosed },
       { href: "/admin/sync-conflicts", label: "Sync conflicts", icon: AlertTriangle },
+      { href: "/admin/riders/cash", label: "Rider cash", icon: Wallet },
       { href: "/admin/tracking", label: "Live tracking", icon: Map },
       { href: "/admin/dine-in", label: "Dine-in", icon: LayoutGrid },
     ],
@@ -103,14 +107,29 @@ const WAITER_NAV_SECTIONS: NavSection[] = [
   },
 ];
 
-export function navSectionsForRole(role: Role): NavSection[] {
-  if (role === "MANAGER") return MANAGER_NAV_SECTIONS;
+export type NavOptions = { offlinePosEnabled?: boolean };
+
+export function applyNavOptions(sections: NavSection[], opts?: NavOptions): NavSection[] {
+  if (opts?.offlinePosEnabled !== true) {
+    return sections.map((section) => ({
+      ...section,
+      items: section.items.filter((item) => item.href !== "/admin/sync-conflicts"),
+    }));
+  }
+  return sections;
+}
+
+export function navSectionsForRole(role: Role, opts?: NavOptions): NavSection[] {
+  if (role === "MANAGER") return applyNavOptions(MANAGER_NAV_SECTIONS, opts);
   if (role === "WAITER") return WAITER_NAV_SECTIONS;
   if (role === "CHEF") {
     return [
       {
         title: "Operations",
-        items: [{ href: "/admin/kitchen", label: "Kitchen", icon: Flame }],
+        items: [
+          { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
+          { href: "/admin/kitchen", label: "Kitchen", icon: Flame },
+        ],
       },
     ];
   }
@@ -119,6 +138,7 @@ export function navSectionsForRole(role: Role): NavSection[] {
       {
         title: "Operations",
         items: [
+          { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
           { href: "/admin/kitchen", label: "Kitchen", icon: Flame },
           { href: "/admin/pos", label: "POS", icon: Receipt },
           { href: "/admin/orders", label: "Orders", icon: ClipboardList },
@@ -130,7 +150,7 @@ export function navSectionsForRole(role: Role): NavSection[] {
       },
     ];
   }
-  return ADMIN_NAV_SECTIONS;
+  return applyNavOptions(ADMIN_NAV_SECTIONS, opts);
 }
 
 export const MOBILE_NAV_FOR_ROLE: Record<Role, NavItem[]> = {
@@ -147,8 +167,12 @@ export const MOBILE_NAV_FOR_ROLE: Record<Role, NavItem[]> = {
     { href: "/admin/orders", label: "Orders", icon: ClipboardList },
     { href: "/admin/customers", label: "Customers", icon: Users },
   ],
-  CHEF: [{ href: "/admin/kitchen", label: "Kitchen", icon: Flame }],
+  CHEF: [
+    { href: "/admin", label: "Home", icon: LayoutDashboard },
+    { href: "/admin/kitchen", label: "Kitchen", icon: Flame },
+  ],
   CASHIER: [
+    { href: "/admin", label: "Home", icon: LayoutDashboard },
     { href: "/admin/pos", label: "POS", icon: Receipt },
     { href: "/admin/kitchen", label: "Kitchen", icon: Flame },
     { href: "/admin/orders", label: "Orders", icon: ClipboardList },

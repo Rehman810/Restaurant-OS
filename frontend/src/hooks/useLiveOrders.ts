@@ -35,25 +35,49 @@ async function ensureSocket(): Promise<Socket | null> {
   return socket;
 }
 
-export function useLiveOrders(onChange: () => void, orderId?: string, guestToken?: string | null) {
+export type LiveOrdersOptions = {
+  onCreated?: () => void;
+  onConnectChange?: (connected: boolean) => void;
+};
+
+export function useLiveOrders(
+  onChange: () => void,
+  orderId?: string,
+  guestToken?: string | null,
+  options?: LiveOrdersOptions
+) {
   useEffect(() => {
     let s: Socket | null = null;
+    const onConnect = () => options?.onConnectChange?.(true);
+    const onDisconnect = () => options?.onConnectChange?.(false);
+    const onUpdated = () => onChange();
+    const onCreated = () => {
+      options?.onCreated?.();
+      onChange();
+    };
     void ensureSocket().then((sock) => {
       s = sock;
-      if (!s) return;
-      const handler = () => onChange();
-      s.on("order:created", handler);
-      s.on("order:updated", handler);
+      if (!s) {
+        options?.onConnectChange?.(false);
+        return;
+      }
+      s.on("order:created", onCreated);
+      s.on("order:updated", onUpdated);
+      s.on("connect", onConnect);
+      s.on("disconnect", onDisconnect);
+      options?.onConnectChange?.(s.connected);
       if (orderId) {
         s.emit("watch-order", guestToken ? { orderId, token: guestToken } : orderId);
       }
     });
     return () => {
       if (!s) return;
-      s.off("order:created", onChange);
-      s.off("order:updated", onChange);
+      s.off("order:created", onCreated);
+      s.off("order:updated", onUpdated);
+      s.off("connect", onConnect);
+      s.off("disconnect", onDisconnect);
     };
-  }, [onChange, orderId, guestToken]);
+  }, [onChange, orderId, guestToken, options]);
 }
 
 export function reconnectLiveSocket() {

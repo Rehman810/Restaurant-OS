@@ -1221,6 +1221,74 @@ export default function AdminSettingsPage() {
               }
             />
           </SettingsField>
+          <h3 className="pt-4 font-display text-lg font-bold text-stone-900 dark:text-stone-50">Dashboard & alerts</h3>
+          <SettingsField label="Late confirmation (minutes)">
+            <input
+              type="number"
+              min={1}
+              className="input w-full max-w-xs"
+              value={settings.lateConfirmMinutes ?? 15}
+              onChange={(e) =>
+                setSettings({ ...settings, lateConfirmMinutes: Number(e.target.value) || 15 })
+              }
+            />
+          </SettingsField>
+          <SettingsField label="Late prep / ready (minutes)">
+            <input
+              type="number"
+              min={1}
+              className="input w-full max-w-xs"
+              value={settings.latePrepMinutes ?? 30}
+              onChange={(e) =>
+                setSettings({ ...settings, latePrepMinutes: Number(e.target.value) || 30 })
+              }
+            />
+          </SettingsField>
+          <SettingsField label="Late delivery (minutes)">
+            <input
+              type="number"
+              min={1}
+              className="input w-full max-w-xs"
+              value={settings.lateDeliveryMinutes ?? 45}
+              onChange={(e) =>
+                setSettings({ ...settings, lateDeliveryMinutes: Number(e.target.value) || 45 })
+              }
+            />
+          </SettingsField>
+          <SettingsField label="Shift open warning (hours)">
+            <input
+              type="number"
+              min={1}
+              className="input w-full max-w-xs"
+              value={settings.shiftOpenWarningHours ?? 12}
+              onChange={(e) =>
+                setSettings({ ...settings, shiftOpenWarningHours: Number(e.target.value) || 12 })
+              }
+            />
+          </SettingsField>
+          <SettingsField label="Low rating threshold (1–5)">
+            <input
+              type="number"
+              min={1}
+              max={5}
+              className="input w-full max-w-xs"
+              value={settings.lowRatingThreshold ?? 2}
+              onChange={(e) =>
+                setSettings({ ...settings, lowRatingThreshold: Number(e.target.value) || 2 })
+              }
+            />
+          </SettingsField>
+          <SettingsField label="2FA reminder dismiss (days)">
+            <input
+              type="number"
+              min={1}
+              className="input w-full max-w-xs"
+              value={settings.twoFaReminderDays ?? 7}
+              onChange={(e) =>
+                setSettings({ ...settings, twoFaReminderDays: Number(e.target.value) || 7 })
+              }
+            />
+          </SettingsField>
           <SettingsField label="Refund reasons (one per line)">
             <textarea
               className="input min-h-[88px] w-full font-mono text-sm"

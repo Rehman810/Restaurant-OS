@@ -101,6 +101,12 @@ export type StoreSettings = {
   refundReasonOptions?: string[];
   shiftVarianceTolerance?: number | string;
   riderCashStaleHours?: number;
+  lateConfirmMinutes?: number;
+  latePrepMinutes?: number;
+  lateDeliveryMinutes?: number;
+  shiftOpenWarningHours?: number;
+  lowRatingThreshold?: number;
+  twoFaReminderDays?: number;
   autoPrintKitchenTickets?: boolean;
   offlinePosEnabled?: boolean;
   offlineClockSkewThresholdMinutes?: number;

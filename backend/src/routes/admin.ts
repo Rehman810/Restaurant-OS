@@ -29,6 +29,8 @@ import { sendStaffWelcomeEmail } from "../lib/email";
 import { getStoreSettings } from "../lib/settings-data";
 import { branchDayRangeUtc } from "../lib/dine-in/branch-time";
 import { storeTodayUtcRange } from "../lib/reports/time-range";
+import { canAccess, type AppRole } from "../lib/access";
+import { buildDashboardSummary, resolveDashboardTimezone } from "../lib/dashboard/summary";
 
 export const adminRouter = Router();
 
@@ -199,6 +201,23 @@ async function buildChart(
   }
   return buckets;
 }
+
+adminRouter.get("/dashboard/summary", requireAuth, async (req, res) => {
+  const role = req.user!.role as AppRole;
+  if (!canAccess(role, "dashboard")) {
+    return res.status(403).json({ error: "You do not have access to this area." });
+  }
+  let scope;
+  try {
+    scope = await resolveBranchScope(req);
+  } catch (err) {
+    return branchScopeError(res, err);
+  }
+  const timezone = await resolveDashboardTimezone(scope);
+  const summary = await buildDashboardSummary(scope.where, timezone, req.user!.role);
+  res.setHeader("Cache-Control", "no-store");
+  return res.json(summary);
+});
 
 adminRouter.get("/stats", requireAuth, requireRole(...ADMIN_LIKE), async (req, res) => {
   let scope;

@@ -901,6 +901,12 @@ model StoreSettings {
   offlinePosEnabled       Boolean @default(true)
   offlineClockSkewThresholdMinutes Int @default(10)
   storefrontPushEnabled Boolean @default(false)
+  lateConfirmMinutes    Int      @default(15)
+  latePrepMinutes       Int      @default(30)
+  lateDeliveryMinutes   Int      @default(45)
+  shiftOpenWarningHours Int      @default(12)
+  lowRatingThreshold    Int      @default(2)
+  twoFaReminderDays     Int      @default(7)
   updatedAt           DateTime @updatedAt
 }
 

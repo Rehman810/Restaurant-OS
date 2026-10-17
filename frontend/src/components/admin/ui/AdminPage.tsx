@@ -1,11 +1,19 @@
 "use client";
 
 import { LucideIcon } from "lucide-react";
-import { ReactNode } from "react";
+import { HTMLAttributes, ReactNode } from "react";
 
 /** Standard admin page root — spacing + overflow */
-export function AdminPage({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`min-w-0 w-full space-y-5 ${className}`}>{children}</div>;
+export function AdminPage({
+  children,
+  className = "",
+  ...rest
+}: { children: ReactNode; className?: string } & HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div className={`min-w-0 w-full space-y-5 ${className}`} {...rest}>
+      {children}
+    </div>
+  );
 }
 
 const KPI_ACCENTS = {
