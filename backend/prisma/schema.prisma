@@ -1166,6 +1166,11 @@ model Order {
   customerLocationAccuracy Decimal? @db.Decimal(10, 2)
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
+  readyAt          DateTime?
+  promisedAt       DateTime?
+  isRush           Boolean         @default(false)
+  kotPrintedAt     DateTime?
+  kotPrintCount    Int             @default(0)
   serverReceivedAt DateTime?
   clientClockSkewMinutes Int?
   clockSkewFlag    Boolean         @default(false)
@@ -1188,6 +1193,7 @@ model Order {
   needsReview           Boolean    @default(false)
   needsReviewReason     String?
   feedback              OrderFeedback?
+  kotPrintLogs          KotPrintLog[]
 
   @@index([branchId, needsReview])
   @@index([branchId, createdAt])
@@ -1243,6 +1249,18 @@ model OrderItem {
   lineTaxableAmount Decimal @default(0) @db.Decimal(10, 2)
   lineTaxAmount     Decimal @default(0) @db.Decimal(10, 2)
   lineTaxRatePercent Decimal? @db.Decimal(5, 2)
+  kitchenDoneAt      DateTime?
+}
+
+model KotPrintLog {
+  id        String   @id @default(uuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  isReprint Boolean  @default(false)
+  actorId   String?
+  createdAt DateTime @default(now())
+
+  @@index([orderId, createdAt])
 }
 
 model OrderBlock {

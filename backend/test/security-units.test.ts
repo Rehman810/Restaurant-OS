@@ -45,6 +45,8 @@ describe("security helpers", () => {
     expect(canAccess("CASHIER", "customers.read")).toBe(true);
     expect(canAccess("CASHIER", "settings")).toBe(false);
     expect(canAccess("CHEF", "kitchen")).toBe(true);
+    expect(canAccess("CHEF", "dashboard")).toBe(false);
+    expect(canAccess("CHEF", "analytics")).toBe(false);
     expect(canAccess("CHEF", "pos")).toBe(false);
     expect(canAccess("RIDER", "rider.own")).toBe(true);
     expect(canAccess("RIDER", "orders.read")).toBe(false);

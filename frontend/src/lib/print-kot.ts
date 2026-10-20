@@ -1,4 +1,5 @@
 import { api } from "./api";
+import { recordKotPrint } from "./admin-kitchen";
 import { Order } from "./types";
 import { receiptPhone, ReceiptStore } from "./print-receipt";
 
@@ -57,7 +58,8 @@ const BASE_STYLES = `
 function kotTicketHtml(
   order: KotResponse["order"],
   store: ReceiptStore,
-  ticket: KotTicketPayload
+  ticket: KotTicketPayload,
+  reprint: boolean
 ) {
   const time = new Date(order.createdAt).toLocaleString("en-PK", {
     dateStyle: "short",
@@ -77,7 +79,10 @@ function kotTicketHtml(
     )
     .join("");
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>${BASE_STYLES}</style></head><body>
+  return `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>${BASE_STYLES}
+  .reprint { font-size: 16px; font-weight: 900; letter-spacing: 0.2em; color: #b91c1c; margin: 6px 0; }
+  </style></head><body>
+    ${reprint ? `<div class="center reprint">REPRINT</div>` : ""}
     <div class="center station">${esc(ticket.stationName)} · ${esc(ticket.stationCode)}</div>
     <div class="center"><div class="order-no">${esc(order.orderNumber)}</div><div class="meta">${time}</div></div>
     <hr class="rule" />
@@ -105,13 +110,15 @@ export async function printKotForOrder(orderId: string) {
   if (!data.tickets.length) {
     throw new Error("No kitchen tickets for this order.");
   }
+  const printMeta = await recordKotPrint(orderId);
+  const reprint = printMeta.isReprint;
   data.tickets.forEach((ticket, index) => {
-    const html = kotTicketHtml(data.order, data.store, ticket);
+    const html = kotTicketHtml(data.order, data.store, ticket, reprint);
     setTimeout(() => {
       openPrint(html, `KOT ${data.order.orderNumber} ${ticket.stationCode}`);
     }, index * 500);
   });
-  return data;
+  return { ...data, printMeta };
 }
 
 export function formatKotSummary(tickets: KotTicketPayload[]) {

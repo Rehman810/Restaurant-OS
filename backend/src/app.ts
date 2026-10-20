@@ -23,6 +23,7 @@ import { shiftsRouter } from "./routes/shifts";
 import { riderCashRouter } from "./routes/rider-cash";
 import { printStationsRouter } from "./routes/print-stations";
 import { kotRouter } from "./routes/kot";
+import { kitchenRouter } from "./routes/kitchen";
 import { couponsAdminRouter, couponsPublicRouter } from "./routes/coupons";
 import { reportsRouter } from "./routes/reports";
 import { UPLOAD_DIR } from "./lib/uploads";
@@ -88,6 +89,7 @@ export function createApp() {
   app.use("/admin/rider-cash", riderCashRouter);
   app.use("/admin/print-stations", printStationsRouter);
   app.use("/admin/kot", kotRouter);
+  app.use("/kitchen", kitchenRouter);
   app.use("/admin/reports", reportsRouter);
   app.use("/admin", adminRouter);
   app.use("/invoices", invoicesRouter);

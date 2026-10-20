@@ -1,5 +1,13 @@
 import { FulfillmentType, OrderStatus } from "@prisma/client";
-import { canTransition, flowFor, isTerminalStatus, nextStatus, type Fulfillment, type Status } from "./order-machine";
+import {
+  canTransition,
+  flowFor,
+  isKitchenUndoStep,
+  isTerminalStatus,
+  nextStatus,
+  type Fulfillment,
+  type Status,
+} from "./order-machine";
 
 function asStatus(status: OrderStatus): Status {
   return status as Status;
@@ -22,6 +30,14 @@ export function canTransitionStatus(
 export function chefNextStatus(current: OrderStatus, fulfillment?: FulfillmentType | null): OrderStatus | null {
   const next = nextStatus(asStatus(current), asFulfillment(fulfillment));
   return (next as OrderStatus | null) ?? null;
+}
+
+export function chefKitchenUndoStatus(
+  current: OrderStatus,
+  target: OrderStatus,
+  fulfillment?: FulfillmentType | null
+): boolean {
+  return isKitchenUndoStep(asStatus(current), asStatus(target), asFulfillment(fulfillment));
 }
 
 export function forwardStatusOptions(current: OrderStatus, fulfillment?: FulfillmentType | null): OrderStatus[] {

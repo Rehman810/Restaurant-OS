@@ -9,6 +9,7 @@ import { StoreLogo } from "@/components/StoreLogo";
 import { AdminThemeToggle } from "@/components/admin/AdminThemeToggle";
 import { BranchSwitcher } from "@/components/admin/BranchSwitcher";
 import { MOBILE_NAV_FOR_ROLE, navSectionsForRole } from "@/modules/admin/navigation";
+import { isAdminNavActive } from "@/modules/admin/nav-active";
 import { fetchPendingBookingsCount } from "@/modules/dine-in/api";
 import { BranchProvider } from "@/modules/branches/BranchContext";
 import { api } from "@/lib/api";
@@ -17,6 +18,9 @@ import { useAdminTheme } from "@/hooks/useAdminTheme";
 import { PRODUCT_NAME, storeDisplayName } from "@/lib/branding";
 import { useStore } from "@/lib/store";
 import { PublicStore } from "@/lib/types";
+import { OpsKitchenAlertBanner } from "@/components/admin/OpsKitchenAlertBanner";
+import { chefAdminPathAllowed } from "@/lib/kitchen/chef-access";
+import { readKitchenKiosk } from "@/lib/kitchen/display";
 
 const SIDEBAR_KEY = "uff-admin-sidebar-collapsed";
 
@@ -33,10 +37,27 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [pendingDineIn, setPendingDineIn] = useState(0);
   const [lowStockCount, setLowStockCount] = useState(0);
   const [syncConflictCount, setSyncConflictCount] = useState(0);
+  const [kitchenKiosk, setKitchenKiosk] = useState(false);
   const { theme, toggle: toggleTheme } = useAdminTheme();
 
   useEffect(() => {
     setCollapsed(localStorage.getItem(SIDEBAR_KEY) === "1");
+  }, []);
+
+  useEffect(() => {
+    const syncKiosk = () => setKitchenKiosk(readKitchenKiosk());
+    syncKiosk();
+    window.addEventListener("kitchen-kiosk-change", syncKiosk);
+    const onFs = () => {
+      if (!document.fullscreenElement) {
+        syncKiosk();
+      }
+    };
+    document.addEventListener("fullscreenchange", onFs);
+    return () => {
+      window.removeEventListener("kitchen-kiosk-change", syncKiosk);
+      document.removeEventListener("fullscreenchange", onFs);
+    };
   }, []);
 
   useEffect(() => {
@@ -120,10 +141,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       return;
     }
     if (user.role === "CHEF") {
-      const allowedPath = ["/admin", "/admin/kitchen"].some(
-        (prefix) => path === prefix || path.startsWith(`${prefix}/`)
-      );
-      if (!allowedPath) router.replace("/admin/kitchen");
+      if (!chefAdminPathAllowed(path)) router.replace("/admin/kitchen");
       return;
     }
     if (user.role === "CASHIER") {
@@ -210,6 +228,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const isPos = path.startsWith("/admin/pos");
   const isKitchen = path.startsWith("/admin/kitchen");
   const isDashboard = path === "/admin";
+  const hideChrome = isKitchen && kitchenKiosk;
   const storeTimezone = store?.settings.timezone ?? "Asia/Karachi";
 
   return (
@@ -219,7 +238,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       className="min-h-screen bg-[#fffaf5] dark:bg-stone-950 lg:flex"
     >
       <aside
-        className={`${isPos ? "hidden lg:flex" : ""} lg:fixed lg:inset-y-0 lg:z-30 lg:flex-col lg:transition-[width] lg:duration-300 ${
+        className={`${hideChrome ? "hidden" : isPos ? "hidden lg:flex" : ""} lg:fixed lg:inset-y-0 lg:z-30 lg:flex-col lg:transition-[width] lg:duration-300 ${
           collapsed ? "lg:w-[4.75rem]" : "lg:w-72"
         }`}
       >
@@ -252,7 +271,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   {section.title}
                 </p>
                 {section.items.map((n) => {
-                  const active = path === n.href || (n.href !== "/admin" && path.startsWith(n.href));
+                  const peerHrefs = section.items.map((i) => i.href);
+                  const active = isAdminNavActive(path, n.href, peerHrefs);
                   const Icon = n.icon;
                   return (
                     <Link
@@ -345,12 +365,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       <div
         className={`flex min-h-0 flex-1 flex-col overflow-hidden lg:h-dvh lg:max-h-dvh ${
-          collapsed ? "lg:pl-[4.75rem]" : "lg:pl-72"
+          hideChrome ? "lg:pl-0" : collapsed ? "lg:pl-[4.75rem]" : "lg:pl-72"
         }`}
       >
         <header
           className={`sticky top-0 z-20 flex items-center justify-between border-b border-orange-100/80 bg-[#fffaf5]/90 px-4 py-3 backdrop-blur-md dark:border-stone-700 dark:bg-stone-950/90 sm:px-6 lg:px-8 ${
-            isPos ? "hidden lg:flex" : ""
+            hideChrome ? "hidden" : isPos ? "hidden lg:flex" : ""
           }`}
         >
           <div className="flex items-center gap-3">
@@ -417,23 +437,27 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             isPos
               ? "flex min-h-0 flex-1 flex-col overflow-y-auto p-0 lg:p-8 lg:pb-8"
               : isKitchen
-                ? "flex min-h-0 flex-1 flex-col overflow-hidden p-4 pb-24 sm:p-6 sm:pb-6 lg:p-8 lg:pb-8"
+                ? hideChrome
+                  ? "fixed inset-0 z-40 flex min-h-0 flex-col overflow-hidden bg-[#fffaf5] p-2 dark:bg-stone-950"
+                  : "flex min-h-0 flex-1 flex-col overflow-hidden p-4 pb-24 sm:p-6 sm:pb-6 lg:p-8 lg:pb-8"
                 : isDashboard
                   ? "flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-24 pt-1 sm:px-5 sm:pb-6 lg:px-6 lg:pb-8"
                   : "flex min-h-0 flex-1 flex-col overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-6 lg:p-8 lg:pb-8"
           }
         >
+          {!hideChrome ? <OpsKitchenAlertBanner /> : null}
           {children}
         </main>
 
         <nav
           className={`fixed bottom-0 left-0 right-0 z-30 border-t border-orange-100 bg-white/95 backdrop-blur-md dark:border-stone-700 dark:bg-stone-900/95 lg:hidden ${
-            isPos ? "hidden" : ""
+            hideChrome || isPos ? "hidden" : ""
           }`}
         >
           <div className="grid" style={{ gridTemplateColumns: `repeat(${mobileNav.length}, minmax(0, 1fr))` }}>
             {mobileNav.map((n) => {
-              const active = path === n.href || (n.href !== "/admin" && path.startsWith(n.href));
+              const peerHrefs = mobileNav.map((i) => i.href);
+              const active = isAdminNavActive(path, n.href, peerHrefs);
               const Icon = n.icon;
               return (
                 <Link

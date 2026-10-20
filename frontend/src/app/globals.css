@@ -201,6 +201,14 @@ h4 {
   display: none;
 }
 
+.kds-root {
+  --kds-scale: 1;
+}
+
+.kds-root .kds-ticket {
+  font-size: calc(1rem * var(--kds-scale, 1));
+}
+
 .kanban-scroll {
   scrollbar-width: thin;
   scrollbar-color: #d6d3d1 transparent;

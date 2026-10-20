@@ -45,6 +45,18 @@ export function nextStatus(current: Status, fulfillment: Fulfillment = "DELIVERY
   return flow[idx + 1];
 }
 
+export function prevStatus(current: Status, fulfillment: Fulfillment = "DELIVERY"): Status | null {
+  const flow = flowFor(fulfillment);
+  const idx = flow.indexOf(current);
+  if (idx <= 0) return null;
+  return flow[idx - 1];
+}
+
+export function isKitchenUndoStep(from: Status, to: Status, fulfillment: Fulfillment = "DELIVERY") {
+  const prev = prevStatus(from, fulfillment);
+  return prev !== null && to === prev;
+}
+
 export function terminalLabel(fulfillment: Fulfillment) {
   if (fulfillment === "DINE_IN") return "Served";
   if (fulfillment === "PICKUP") return "Collected";

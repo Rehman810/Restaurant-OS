@@ -37,6 +37,7 @@ import {
 import { buildOrderLines, nextOrderNumber } from "../lib/order-lines";
 import {
   canTransitionStatus,
+  chefKitchenUndoStatus,
   chefNextStatus,
 } from "../lib/order-status";
 import { signOrderViewToken } from "../lib/order-access";
@@ -86,7 +87,8 @@ function zonedDayStart(isoDate: string, timeZone: string) {
 export const ordersRouter = Router();
 
 const include = {
-  items: true,
+  items: { include: { menuItem: { select: { printStationId: true } } } },
+  diningTable: { select: { id: true, label: true } },
   rider: { select: { id: true, name: true, phone: true } },
   invoice: true,
   feedback: true,
@@ -855,6 +857,7 @@ ordersRouter.patch("/:id/confirm", requireAuth, requireRole(...ADMIN_LIKE), asyn
 
 ordersRouter.patch("/:id/status", requireAuth, requireRole(...ORDER_OPS), async (req, res) => {
   const status = req.body.status as OrderStatus;
+  const kitchenUndo = req.body.kitchenUndo === true;
   const reason = typeof req.body.reason === "string" ? req.body.reason.trim() : "";
   const collectedAmount =
     req.body.collectedAmount !== undefined ? Number(req.body.collectedAmount) : undefined;
@@ -890,12 +893,30 @@ ordersRouter.patch("/:id/status", requireAuth, requireRole(...ORDER_OPS), async 
     voidMeta = voidCheck;
   }
 
-  if (req.user!.role === Role.CHEF) {
+  if (kitchenUndo) {
+    if (!chefKitchenUndoStatus(existing.status, status, existing.fulfillmentType)) {
+      return res.status(400).json({ error: "That status change cannot be undone." });
+    }
+    if (
+      req.user!.role !== Role.CHEF &&
+      req.user!.role !== Role.ADMIN &&
+      req.user!.role !== Role.MANAGER &&
+      req.user!.role !== Role.CASHIER &&
+      req.user!.role !== Role.WAITER
+    ) {
+      return res.status(403).json({ error: "Not allowed to undo this ticket." });
+    }
+  } else if (req.user!.role === Role.CHEF) {
     const next = chefNextStatus(existing.status, existing.fulfillmentType);
     if (!next || status !== next) {
       return res.status(403).json({ error: "Chefs can only advance orders one kitchen step at a time." });
     }
-  } else if (req.user!.role === Role.ADMIN || req.user!.role === Role.CASHIER) {
+  } else if (
+    req.user!.role === Role.ADMIN ||
+    req.user!.role === Role.MANAGER ||
+    req.user!.role === Role.CASHIER ||
+    req.user!.role === Role.WAITER
+  ) {
     if (!canTransitionStatus(existing.status, status, existing.fulfillmentType)) {
       return res.status(400).json({
         error: `Cannot change status from ${existing.status} to ${status}.`,
@@ -926,10 +947,18 @@ ordersRouter.patch("/:id/status", requireAuth, requireRole(...ORDER_OPS), async 
   }
 
   const order = await prisma.$transaction(async (tx) => {
+    const readyAt =
+      status === OrderStatus.READY
+        ? new Date()
+        : existing.status === OrderStatus.READY
+          ? null
+          : existing.readyAt;
+
     const updated = await tx.order.update({
       where: { id: req.params.id },
       data: {
         status,
+        readyAt,
         ...(riderId && !existing.riderId ? { riderId } : {}),
         ...(voidMeta
           ? {
@@ -944,7 +973,7 @@ ordersRouter.patch("/:id/status", requireAuth, requireRole(...ORDER_OPS), async 
             toStatus: status,
             actorId: req.user!.id,
             actorRole: req.user!.role,
-            reason: voidMeta?.reasonCode || reason || null,
+            reason: kitchenUndo ? "kitchen_undo" : voidMeta?.reasonCode || reason || null,
           },
         },
       },

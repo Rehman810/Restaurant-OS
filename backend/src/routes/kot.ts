@@ -63,6 +63,8 @@ kotRouter.get("/orders/:orderId", requireAuth, requireRole(...ORDER_OPS), async 
       tableNumber: order.tableNumber,
       notes: order.notes,
       createdAt: order.createdAt,
+      kotPrintedAt: order.kotPrintedAt,
+      kotPrintCount: order.kotPrintCount,
     },
     store: {
       name: storeNameFrom(settings),
@@ -70,5 +72,45 @@ kotRouter.get("/orders/:orderId", requireAuth, requireRole(...ORDER_OPS), async 
       address: settings.address,
     },
     tickets,
+  });
+});
+
+kotRouter.post("/orders/:orderId/print", requireAuth, requireRole(...ORDER_OPS), async (req, res) => {
+  let scope;
+  try {
+    scope = await resolveBranchScope(req);
+  } catch (err) {
+    return branchScopeError(res, err);
+  }
+
+  const order = await prisma.order.findUnique({ where: { id: req.params.orderId } });
+  if (!order) return res.status(404).json({ error: "Order not found." });
+  if (!scope.allBranches && order.branchId && order.branchId !== scope.branchId) {
+    return res.status(403).json({ error: "Order is outside your branch." });
+  }
+
+  const isReprint = (order.kotPrintCount ?? 0) > 0;
+  const now = new Date();
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.kotPrintLog.create({
+      data: {
+        orderId: order.id,
+        isReprint,
+        actorId: req.user!.id,
+      },
+    });
+    return tx.order.update({
+      where: { id: order.id },
+      data: {
+        kotPrintedAt: now,
+        kotPrintCount: { increment: 1 },
+      },
+    });
+  });
+
+  res.json({
+    kotPrintedAt: updated.kotPrintedAt,
+    kotPrintCount: updated.kotPrintCount,
+    isReprint,
   });
 });

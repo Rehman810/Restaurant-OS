@@ -56,8 +56,10 @@ export async function playKitchenChime(preview = false) {
 export const KITCHEN_ALERTS_KEY = "uff-kitchen-alerts";
 
 export function readKitchenAlertsEnabled() {
-  if (typeof window === "undefined") return false;
-  return localStorage.getItem(KITCHEN_ALERTS_KEY) === "1";
+  if (typeof window === "undefined") return true;
+  const stored = localStorage.getItem(KITCHEN_ALERTS_KEY);
+  if (stored === null) return true;
+  return stored === "1";
 }
 
 export function writeKitchenAlertsEnabled(on: boolean) {

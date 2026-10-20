@@ -125,11 +125,8 @@ export function navSectionsForRole(role: Role, opts?: NavOptions): NavSection[] 
   if (role === "CHEF") {
     return [
       {
-        title: "Operations",
-        items: [
-          { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
-          { href: "/admin/kitchen", label: "Kitchen", icon: Flame },
-        ],
+        title: "Kitchen",
+        items: [{ href: "/admin/kitchen", label: "Kitchen board", icon: Flame }],
       },
     ];
   }
@@ -167,10 +164,7 @@ export const MOBILE_NAV_FOR_ROLE: Record<Role, NavItem[]> = {
     { href: "/admin/orders", label: "Orders", icon: ClipboardList },
     { href: "/admin/customers", label: "Customers", icon: Users },
   ],
-  CHEF: [
-    { href: "/admin", label: "Home", icon: LayoutDashboard },
-    { href: "/admin/kitchen", label: "Kitchen", icon: Flame },
-  ],
+  CHEF: [{ href: "/admin/kitchen", label: "Kitchen", icon: Flame }],
   CASHIER: [
     { href: "/admin", label: "Home", icon: LayoutDashboard },
     { href: "/admin/pos", label: "POS", icon: Receipt },

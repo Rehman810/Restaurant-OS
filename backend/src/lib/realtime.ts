@@ -46,8 +46,10 @@ export function initRealtime(httpServer: HttpServer) {
     const user = socket.data.user as SocketUser | undefined;
     if (
       user?.role === Role.ADMIN ||
+      user?.role === Role.MANAGER ||
       user?.role === Role.CHEF ||
-      user?.role === Role.CASHIER
+      user?.role === Role.CASHIER ||
+      user?.role === Role.WAITER
     ) {
       socket.join("ops");
     }
@@ -103,4 +105,16 @@ export function emitOrderChange(event: "order:created" | "order:updated", order:
   io.to(`order:${order.id}`).emit(event, payload);
   if (order.customerId) io.to(`customer:${order.customerId}`).emit(event, payload);
   if (order.riderId) io.to(`rider:${order.riderId}`).emit(event, payload);
+}
+
+export type KitchenAlertPayload = {
+  type: "kitchen_reject_order" | "kitchen_reject_item" | "menu_86";
+  orderId: string;
+  orderNumber: string;
+  message: string;
+};
+
+export function emitKitchenAlert(alert: KitchenAlertPayload) {
+  if (!io) return;
+  io.to("ops").emit("kitchen:alert", { ...alert, at: Date.now() });
 }

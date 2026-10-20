@@ -244,6 +244,9 @@ export type OrderItem = {
   nameAtOrder: string;
   optionsLabel?: string;
   instructions?: string;
+  printStationId?: string | null;
+  menuItem?: { printStationId?: string | null; isAvailable?: boolean; name?: string } | null;
+  kitchenDoneAt?: string | null;
 };
 
 export type FulfillmentType = "DELIVERY" | "PICKUP" | "DINE_IN";
@@ -282,6 +285,7 @@ export type Order = {
   paymentMethod?: PaymentMethod | null;
   paymentStatus?: string | null;
   tableNumber?: string | null;
+  diningTable?: { id: string; label: string } | null;
   deliveryAreaId?: string | null;
   deliveryArea?: { id: string; name: string; deliveryCharge?: string | number } | null;
   subtotal?: string | number;
@@ -315,6 +319,11 @@ export type Order = {
   customerLongitude?: string | number | null;
   customerLocationAccuracy?: string | number | null;
   createdAt: string;
+  readyAt?: string | null;
+  promisedAt?: string | null;
+  isRush?: boolean;
+  kotPrintedAt?: string | null;
+  kotPrintCount?: number;
   items: OrderItem[];
   rider?: { id: string; name: string; phone?: string | null } | null;
   invoice?: { id: string; invoiceNumber: string } | null;
