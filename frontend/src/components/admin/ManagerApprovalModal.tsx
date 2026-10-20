@@ -82,7 +82,7 @@ export function ManagerApprovalModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-stone-950/50 p-4 sm:items-center" role="presentation">
+    <div className="fixed inset-0 z-[120] flex items-end justify-center bg-stone-950/50 p-4 sm:items-center" role="presentation">
       <div
         className="w-full max-w-md rounded-3xl border border-stone-200 bg-white p-5 shadow-xl dark:border-stone-600 dark:bg-stone-900"
         role="dialog"

@@ -7,7 +7,6 @@ import {
   OrderStatus,
   PaymentMethod,
   Role,
-  TableSessionStatus,
 } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { findOrderBlock } from "../lib/blocklist";
@@ -47,6 +46,21 @@ import {
   type PosCashMovementSyncInput,
   type PosSyncInput,
 } from "../lib/pos-offline-sync";
+import {
+  clientTotalMatchesServer,
+  computePosTotals,
+  resolveTaxContextForPayments,
+} from "../lib/pos-totals";
+import { normalizePosPayments, validatePosPayments, type PosPaymentInput } from "../lib/pos-payments";
+import { resolvePosDineIn } from "../lib/pos-dine-in";
+import {
+  createPosHold,
+  getPosHoldForBranch,
+  listPosHolds,
+  DEFAULT_POS_HOLD_HOURS,
+} from "../lib/pos-holds";
+import { listRecentPosOrders } from "../lib/pos-recent";
+import { posPopularMenuItemIds } from "../lib/pos-popular";
 
 export const posRouter = Router();
 posRouter.use("/shift", posShiftRouter);
@@ -78,6 +92,7 @@ async function recordRefundCash(
 
 const include = {
   items: true,
+  payments: { orderBy: { sortOrder: "asc" as const } },
   deliveryArea: { select: { id: true, name: true, deliveryCharge: true } },
   createdBy: { select: { id: true, name: true } },
 };
@@ -106,6 +121,11 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
     waiterId,
     paymentMethod,
     paymentStatus,
+    payments,
+    cashTendered,
+    cashChangeGiven,
+    clientTotal,
+    idempotencyKey,
     discountPercent,
     discountReasonCode,
     discountReasonNote,
@@ -133,6 +153,11 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
     waiterId?: string;
     paymentMethod?: PaymentMethod;
     paymentStatus?: "PAID" | "UNPAID";
+    payments?: PosPaymentInput[];
+    cashTendered?: number;
+    cashChangeGiven?: number;
+    clientTotal?: number;
+    idempotencyKey?: string;
     discountPercent?: number;
     discountReasonCode?: string;
     discountReasonNote?: string;
@@ -145,6 +170,15 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
       : fulfillmentType === FulfillmentType.PICKUP
         ? FulfillmentType.PICKUP
         : FulfillmentType.DELIVERY;
+
+  const idemKey = String(idempotencyKey || "").trim();
+  if (idemKey) {
+    const existing = await prisma.order.findUnique({
+      where: { posClientOrderId: idemKey },
+      include,
+    });
+    if (existing) return res.status(200).json(existing);
+  }
 
   const built = await buildOrderLines(items ?? [], deals ?? []);
   if (!built.ok) return res.status(built.status).json({ error: built.error });
@@ -173,7 +207,6 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
   let deliveryCharge = 0;
   let areaId: string | null = null;
   let address = storeAddress;
-  let dineSession: { id: string; tableId: string; table: { label: string }; waiterId: string | null } | null = null;
   let resolvedTableNumber: string | null = null;
   let resolvedDiningTableId: string | null = diningTableId || null;
   let resolvedSessionId: string | null = tableSessionId || null;
@@ -189,7 +222,19 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
     }
     deliveryCharge = Number(area.deliveryCharge);
     areaId = area.id;
-    address = String(deliveryAddress || "").trim() || storeAddress;
+    const addr = String(deliveryAddress || "").trim();
+    if (!addr) {
+      return res.status(400).json({ error: "Delivery address is required." });
+    }
+    address = addr;
+    const nameCheck = cleanText(customerName, 80);
+    const phoneCheck = normalizePhone(String(customerPhone || ""));
+    if (!nameCheck) {
+      return res.status(400).json({ error: "Customer name is required for delivery." });
+    }
+    if (!phoneCheck) {
+      return res.status(400).json({ error: "Customer phone is required for delivery." });
+    }
     if (
       storeSettings.freeDeliveryAbove != null &&
       built.subtotal >= Number(storeSettings.freeDeliveryAbove)
@@ -197,41 +242,24 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
       deliveryCharge = 0;
     }
   } else if (mode === FulfillmentType.DINE_IN) {
-    let tableLabel = tableNumber?.trim() || "";
-    if (tableSessionId) {
-      dineSession = await prisma.tableSession.findFirst({
-        where: { id: tableSessionId, status: TableSessionStatus.OPEN, branchId: resolvedBranchId },
-        include: { table: true },
-      });
-      if (!dineSession) {
-        return res.status(400).json({ error: "Invalid or closed table session." });
-      }
-      tableLabel = dineSession.table.label;
-      resolvedDiningTableId = dineSession.tableId;
-      resolvedSessionId = dineSession.id;
-      if (!resolvedWaiterId && dineSession.waiterId) resolvedWaiterId = dineSession.waiterId;
-    }
-    resolvedTableNumber = tableLabel || null;
-    address = tableLabel ? `Dine-in · Table ${tableLabel}` : "Dine-in · Counter";
+    const dine = await resolvePosDineIn(resolvedBranchId, {
+      tableNumber,
+      tableSessionId,
+      diningTableId,
+      waiterId,
+    });
+    if (!dine.ok) return res.status(dine.status).json({ error: dine.error });
+    resolvedTableNumber = dine.resolvedTableNumber;
+    resolvedDiningTableId = dine.resolvedDiningTableId;
+    resolvedSessionId = dine.resolvedSessionId;
+    resolvedWaiterId = dine.resolvedWaiterId;
+    address = dine.resolvedTableNumber
+      ? `Dine-in · Table ${dine.resolvedTableNumber}`
+      : "Dine-in · Counter";
   } else {
     address = storeAddress;
   }
 
-  const payMethod =
-    paymentMethod === PaymentMethod.CARD ? PaymentMethod.CARD : PaymentMethod.CASH;
-  if (payMethod === PaymentMethod.CARD && !storeSettings.acceptCard) {
-    return res.status(400).json({ error: "Card at the counter is turned off." });
-  }
-  if (payMethod === PaymentMethod.CASH && !storeSettings.acceptCash) {
-    return res.status(400).json({ error: "Cash is turned off." });
-  }
-  const payStatus = paymentStatus === "UNPAID" ? "UNPAID" : "PAID";
-
-  const name = cleanText(customerName, 80) || "Walk-in";
-  const phone = normalizePhone(String(customerPhone || ""));
-  const taxCtx = { fulfillmentType: mode, paymentMethod: payMethod };
-  const enriched = enrichLinesWithTax(built.lines, storeSettings, taxCtx);
-  const quoted = quoteCharges(built.subtotal, deliveryCharge, storeSettings, taxCtx);
   const pct = Number(discountPercent ?? 0);
   const maxCashierPct = Number(storeSettings.maxCashierDiscountPercent ?? 10);
   const needsDiscountApproval = discountNeedsManagerApproval(req.user!.role, pct, storeSettings);
@@ -242,7 +270,57 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
       return res.status(400).json({ error: "Select a discount reason." });
     }
   }
+
+  const lineInputs = built.lines.map((l) => ({ price: l.priceAtOrder, quantity: l.quantity }));
+  const provisionalPay =
+    paymentMethod === PaymentMethod.CARD ? PaymentMethod.CARD : PaymentMethod.CASH;
+  const provisionalTaxCtx = { fulfillmentType: mode, paymentMethod: provisionalPay };
+  const totals = computePosTotals({
+    lines: lineInputs,
+    deliveryCharge,
+    discountPercent: pct > 0 ? pct : null,
+    settings: storeSettings,
+    taxCtx: provisionalTaxCtx,
+  });
+  const totalMatch = clientTotalMatchesServer(clientTotal, totals.totalMinor);
+  if (!totalMatch.ok) return res.status(400).json({ error: totalMatch.error });
+
+  const payStatus = paymentStatus === "UNPAID" ? "UNPAID" : "PAID";
+  const fallbackMethod =
+    paymentMethod === PaymentMethod.CARD ? PaymentMethod.CARD : PaymentMethod.CASH;
+  const paymentRows = normalizePosPayments(payments, {
+    method: fallbackMethod,
+    total: totals.total,
+    tendered: cashTendered,
+    changeGiven: cashChangeGiven,
+  });
+  const payValidation =
+    payStatus === "PAID"
+      ? validatePosPayments(paymentRows, totals.totalMinor)
+      : { ok: true as const, cashDrawerMinor: 0, primaryMethod: fallbackMethod, normalized: paymentRows };
+  if (!payValidation.ok) return res.status(400).json({ error: payValidation.error });
+
+  const payMethod = payValidation.primaryMethod;
+  const taxCtx = resolveTaxContextForPayments(payValidation.normalized, mode);
+  const enriched = enrichLinesWithTax(built.lines, storeSettings, taxCtx);
+  const quoted = quoteCharges(built.subtotal, deliveryCharge, storeSettings, taxCtx);
   const discounted = applyOrderDiscount(quoted, pct > 0 ? pct : null, null);
+  if (Math.abs(totals.total - discounted.total) > 0.02) {
+    return res.status(400).json({ error: "Total mismatch after tax recalculation." });
+  }
+
+  if (payMethod === PaymentMethod.CARD && !storeSettings.acceptCard) {
+    return res.status(400).json({ error: "Card at the counter is turned off." });
+  }
+  if (
+    payValidation.normalized.some((p) => p.method === PaymentMethod.CASH) &&
+    !storeSettings.acceptCash
+  ) {
+    return res.status(400).json({ error: "Cash is turned off." });
+  }
+
+  const name = cleanText(customerName, 80) || "Walk-in";
+  const phone = normalizePhone(String(customerPhone || ""));
 
   const blocked = await findOrderBlock(null, phone || "");
   if (blocked) {
@@ -273,7 +351,9 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
     order = await prisma.$transaction(async (tx) => {
       const orderNumber = await nextPosOrderNumber(tx, resolvedBranchId);
       const db = tx as unknown as CashDb & { order: typeof prisma.order };
-      if (payMethod === PaymentMethod.CASH && payStatus === "PAID") {
+      const needsCashDrawer =
+        payStatus === "PAID" && payValidation.cashDrawerMinor > 0;
+      if (needsCashDrawer) {
         const shift = await tx.cashShift.findFirst({
           where: {
             branchId: resolvedBranchId,
@@ -322,6 +402,19 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
           paymentMethod: payMethod,
           paymentStatus: payStatus,
           status: OrderStatus.CONFIRMED,
+          posClientOrderId: idemKey || null,
+          payments:
+            payStatus === "PAID"
+              ? {
+                  create: payValidation.normalized.map((p, sortOrder) => ({
+                    method: p.method,
+                    amount: p.amount,
+                    tendered: p.tendered ?? null,
+                    changeGiven: p.changeGiven ?? null,
+                    sortOrder,
+                  })),
+                }
+              : undefined,
           items: {
             create: enriched.lines.map((l) => ({
               menuItemId: l.menuItemId,
@@ -338,7 +431,7 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
         },
         include,
       });
-      if (payMethod === PaymentMethod.CASH && payStatus === "PAID") {
+      if (needsCashDrawer) {
         const shift = await tx.cashShift.findFirst({
           where: {
             branchId: resolvedBranchId,
@@ -350,7 +443,7 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
           await recordCashMovement(db, {
             shiftId: shift.id,
             type: CashMovementType.SALE_CASH,
-            amount: Number(created.total),
+            amount: payValidation.cashDrawerMinor / 100,
             reason: `POS sale ${created.orderNumber}`,
             orderId: created.id,
             createdById: req.user!.id,
@@ -376,6 +469,18 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
       entityId: order.id,
       after: { discountPercent: pct, discountAmount: discounted.discountAmount },
       reason: String(discountReasonCode || ""),
+      ip: clientIp(req) ?? undefined,
+    });
+  }
+  if (built.hadPriceOverride) {
+    await writeAudit(prisma, {
+      actorId: req.user!.id,
+      actorRole: req.user!.role,
+      branchId: resolvedBranchId,
+      action: AuditAction.ITEM_PRICE_CHANGED,
+      entityType: "order",
+      entityId: order.id,
+      after: { priceOverride: true },
       ip: clientIp(req) ?? undefined,
     });
   }
@@ -750,6 +855,148 @@ posRouter.get(
       },
     });
     res.json({ orders });
+  }
+);
+
+posRouter.get(
+  "/popular-menu",
+  requireAuth,
+  requireRole(...ADMIN_LIKE, Role.CASHIER, Role.WAITER),
+  async (req, res) => {
+    let scope;
+    try {
+      scope = await resolveBranchScope(req);
+    } catch (err) {
+      return branchScopeError(res, err);
+    }
+    const branchId = scope.allBranches ? await getDefaultBranchId() : scope.branchId!;
+    const days = Math.min(90, Math.max(1, Number(req.query.days) || 30));
+    const limit = Math.min(24, Math.max(1, Number(req.query.limit) || 12));
+    const popular = await posPopularMenuItemIds(branchId, days, limit);
+    res.json({ popular, days });
+  }
+);
+
+posRouter.get(
+  "/recent",
+  requireAuth,
+  requireRole(...ADMIN_LIKE, Role.CASHIER, Role.WAITER),
+  async (req, res) => {
+    let scope;
+    try {
+      scope = await resolveBranchScope(req);
+    } catch (err) {
+      return branchScopeError(res, err);
+    }
+    const branchId = scope.allBranches ? await getDefaultBranchId() : scope.branchId!;
+    const orders = await listRecentPosOrders(branchId, req.user!.id);
+    res.json({ orders });
+  }
+);
+
+posRouter.post(
+  "/holds",
+  requireAuth,
+  requireRole(...ADMIN_LIKE, Role.CASHIER, Role.WAITER),
+  async (req, res) => {
+    const { label, payload, holdHours } = req.body as {
+      label?: string;
+      payload?: Record<string, unknown>;
+      holdHours?: number;
+    };
+    if (!payload || typeof payload !== "object") {
+      return res.status(400).json({ error: "Hold payload is required." });
+    }
+    let scope;
+    try {
+      scope = await resolveBranchScope(req);
+    } catch (err) {
+      return branchScopeError(res, err);
+    }
+    const branchId = scope.allBranches ? await getDefaultBranchId() : scope.branchId!;
+    const hours = Number(holdHours);
+    const hold = await createPosHold(
+      branchId,
+      req.user!.id,
+      payload,
+      label,
+      Number.isFinite(hours) && hours > 0 ? hours : DEFAULT_POS_HOLD_HOURS
+    );
+    res.status(201).json({ hold });
+  }
+);
+
+posRouter.get(
+  "/holds",
+  requireAuth,
+  requireRole(...ADMIN_LIKE, Role.CASHIER, Role.WAITER),
+  async (req, res) => {
+    let scope;
+    try {
+      scope = await resolveBranchScope(req);
+    } catch (err) {
+      return branchScopeError(res, err);
+    }
+    const branchId = scope.allBranches ? await getDefaultBranchId() : scope.branchId!;
+    const shared = req.query.shared === "1" || req.query.shared === "true";
+    const holds = await listPosHolds(branchId, shared ? undefined : req.user!.id);
+    res.json({ holds });
+  }
+);
+
+posRouter.get(
+  "/holds/:holdId",
+  requireAuth,
+  requireRole(...ADMIN_LIKE, Role.CASHIER, Role.WAITER),
+  async (req, res) => {
+    let scope;
+    try {
+      scope = await resolveBranchScope(req);
+    } catch (err) {
+      return branchScopeError(res, err);
+    }
+    const branchId = scope.allBranches ? await getDefaultBranchId() : scope.branchId!;
+    const hold = await getPosHoldForBranch(branchId, req.params.holdId);
+    if (!hold) return res.status(404).json({ error: "Hold not found or expired." });
+    res.json({ hold });
+  }
+);
+
+posRouter.post(
+  "/holds/:holdId/resume",
+  requireAuth,
+  requireRole(...ADMIN_LIKE, Role.CASHIER, Role.WAITER),
+  async (req, res) => {
+    let scope;
+    try {
+      scope = await resolveBranchScope(req);
+    } catch (err) {
+      return branchScopeError(res, err);
+    }
+    const branchId = scope.allBranches ? await getDefaultBranchId() : scope.branchId!;
+    const hold = await getPosHoldForBranch(branchId, req.params.holdId);
+    if (!hold) return res.status(404).json({ error: "Hold not found or expired." });
+    await prisma.posHold.delete({ where: { id: hold.id } });
+    res.json({ hold });
+  }
+);
+
+posRouter.delete(
+  "/holds/:holdId",
+  requireAuth,
+  requireRole(...ADMIN_LIKE, Role.CASHIER, Role.WAITER),
+  async (req, res) => {
+    let scope;
+    try {
+      scope = await resolveBranchScope(req);
+    } catch (err) {
+      return branchScopeError(res, err);
+    }
+    const branchId = scope.allBranches ? await getDefaultBranchId() : scope.branchId!;
+    const hold = await getPosHoldForBranch(branchId, req.params.holdId);
+    if (!hold) return res.status(404).json({ error: "Hold not found or expired." });
+    await prisma.posHold.delete({ where: { id: hold.id } });
+    res.json({ ok: true });
   }
 );
 

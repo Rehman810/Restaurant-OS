@@ -16,6 +16,8 @@ import { issueTaxInvoiceForOrder } from "./tax/invoicing";
 import { getStoreSettings } from "./settings-data";
 import { cleanText } from "./text";
 import { recordCashMovement, SHIFT_REQUIRED_CODE, SHIFT_REQUIRED_ERROR, type CashDb } from "./cash-shift";
+import { normalizePosPayments, validatePosPayments } from "./pos-payments";
+import { computePosTotals } from "./pos-totals";
 
 const TOTAL_EPS = 0.02;
 
@@ -40,6 +42,9 @@ export type PosSyncInput = {
   paymentMethod?: PaymentMethod;
   paymentStatus?: "PAID" | "UNPAID";
   discountPercent?: number;
+  payments?: { method: PaymentMethod; amount: number; tendered?: number; changeGiven?: number }[];
+  cashTendered?: number;
+  cashChangeGiven?: number;
 };
 
 export function validateOfflineSyncPayload(body: PosSyncInput) {
@@ -51,6 +56,9 @@ export function validateOfflineSyncPayload(body: PosSyncInput) {
   }
   const pay = body.paymentMethod === PaymentMethod.CARD ? PaymentMethod.CARD : PaymentMethod.CASH;
   if (pay === PaymentMethod.CARD) {
+    return { ok: false as const, status: 400, error: "Only cash payments can be synced offline." };
+  }
+  if ((body.payments ?? []).some((p) => p.method === PaymentMethod.CARD)) {
     return { ok: false as const, status: 400, error: "Only cash payments can be synced offline." };
   }
   if (body.fulfillmentType === FulfillmentType.DELIVERY) {
@@ -117,6 +125,22 @@ export async function syncPosOrderFromOffline(
   const quoted = quoteCharges(built.subtotal, 0, settings, taxCtx);
   const discounted = applyOrderDiscount(quoted, null, null);
   const serverTotal = discounted.total;
+  const totals = computePosTotals({
+    lines: built.lines.map((l) => ({ price: l.priceAtOrder, quantity: l.quantity })),
+    deliveryCharge: 0,
+    settings,
+    taxCtx,
+  });
+  const paymentRows = normalizePosPayments(body.payments, {
+    method: PaymentMethod.CASH,
+    total: serverTotal,
+    tendered: body.cashTendered,
+    changeGiven: body.cashChangeGiven,
+  });
+  const payCheck = validatePosPayments(paymentRows, totals.totalMinor);
+  if (!payCheck.ok) {
+    throw Object.assign(new Error(payCheck.error), { status: 400 });
+  }
 
   if (
     body.clientClaimedTotal != null &&
@@ -175,6 +199,15 @@ export async function syncPosOrderFromOffline(
         paymentMethod: PaymentMethod.CASH,
         paymentStatus: "PAID",
         status: OrderStatus.CONFIRMED,
+        payments: {
+          create: payCheck.normalized.map((p, sortOrder) => ({
+            method: p.method,
+            amount: p.amount,
+            tendered: p.tendered ?? null,
+            changeGiven: p.changeGiven ?? null,
+            sortOrder,
+          })),
+        },
         posClientOrderId: body.clientOrderId.trim(),
         offlineLabel: body.offlineLabel?.trim() || null,
         offlineClientCreatedAt: clientCreatedAt,
@@ -205,7 +238,7 @@ export async function syncPosOrderFromOffline(
     await recordCashMovement(tx as unknown as CashDb, {
       shiftId: shift.id,
       type: CashMovementType.SALE_CASH,
-      amount: serverTotal,
+      amount: payCheck.cashDrawerMinor / 100,
       reason: finalNeedsReview
         ? `Offline sync ${body.offlineLabel} (needs review)`
         : `Offline sync ${body.offlineLabel}`,

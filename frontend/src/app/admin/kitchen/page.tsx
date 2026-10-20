@@ -395,6 +395,25 @@ export default function KitchenPage() {
     }
   }
 
+  async function printKot(orderId: string) {
+    setPrintBusyId(orderId);
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next[orderId];
+      return next;
+    });
+    try {
+      await printKotForOrder(orderId);
+    } catch (e) {
+      setErrors((prev) => ({
+        ...prev,
+        [orderId]: e instanceof Error ? e.message : "Could not print KOT",
+      }));
+    } finally {
+      setPrintBusyId(null);
+    }
+  }
+
   async function bulkCloseStale() {
     if (!confirm(`Cancel ${staleCount} stale ticket(s) older than 2 hours?`)) return;
     setStaleBusy(true);

@@ -17,6 +17,7 @@ import { getDeviceLabel, setDeviceLabel } from "@/lib/offline/device-label";
 
 type Props = {
   conflictCount?: number;
+  onPendingChange?: (pending: number) => void;
 };
 
 function formatSyncedAt(iso: string | null) {
@@ -28,7 +29,7 @@ function formatSyncedAt(iso: string | null) {
   }
 }
 
-export function PosOfflineBar({ conflictCount = 0 }: Props) {
+export function PosOfflineBar({ conflictCount = 0, onPendingChange }: Props) {
   const [online, setOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
   const [meta, setMeta] = useState<PosSnapshotMeta | null>(null);
   const [progress, setProgress] = useState({ syncing: false, pending: 0, failed: 0, conflicts: 0 });
@@ -45,15 +46,22 @@ export function PosOfflineBar({ conflictCount = 0 }: Props) {
 
   const refresh = useCallback(async () => {
     setMeta(await getSnapshotMeta());
-    setProgress(await getSyncProgress());
+    const progress = await getSyncProgress();
+    setProgress(progress);
     setQueue(await listQueue());
-  }, []);
+    onPendingChange?.(progress.pending);
+  }, [onPendingChange]);
 
   useEffect(() => {
     const on = () => setOnline(true);
     const off = () => setOnline(false);
+    const openQueue = () => {
+      setQueueOpen(true);
+      void refresh();
+    };
     window.addEventListener("online", on);
     window.addEventListener("offline", off);
+    window.addEventListener("pos-open-queue", openQueue);
     void refresh();
     const stop = startAutoSync(() => {
       void refresh();
@@ -61,6 +69,7 @@ export function PosOfflineBar({ conflictCount = 0 }: Props) {
     return () => {
       window.removeEventListener("online", on);
       window.removeEventListener("offline", off);
+      window.removeEventListener("pos-open-queue", openQueue);
       stop();
     };
   }, [refresh]);
@@ -103,9 +112,11 @@ export function PosOfflineBar({ conflictCount = 0 }: Props) {
     ? "Online only"
     : !online
       ? "Offline"
-      : progress.syncing || progress.pending > 0
-        ? `Syncing ${progress.pending}`
-        : "Online";
+      : progress.syncing
+        ? "Syncing…"
+        : progress.pending > 0
+          ? `Pending ${progress.pending}`
+          : "Online";
 
   const chipClass =
     !idbOk
@@ -153,10 +164,10 @@ export function PosOfflineBar({ conflictCount = 0 }: Props) {
               localStorage.setItem("pos-pwa-install-dismissed", "1");
               setInstallHint(false);
             }}
-            className="hidden items-center gap-1 rounded-lg bg-brand-600 px-2 py-1 text-[10px] font-bold text-white sm:flex"
-            title="Install POS app from browser menu"
+            className="hidden items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-semibold text-stone-600 ring-1 ring-stone-200 dark:text-stone-300 dark:ring-stone-600 sm:flex"
+            title="Install POS from the browser menu (Add to Home Screen)"
           >
-            <Download size={12} /> Install POS
+            <Download size={12} /> Install
           </button>
         )}
       </div>

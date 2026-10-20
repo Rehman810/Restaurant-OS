@@ -2,6 +2,8 @@
 export function isAdminNavActive(path: string, href: string, peerHrefs: string[]): boolean {
   const current = path.split("?")[0].split("#")[0];
   if (current === href) return true;
+  // `/admin` is a prefix of every admin route; only exact match counts.
+  if (href === "/admin") return false;
   if (!current.startsWith(`${href}/`)) return false;
 
   const hasMoreSpecificPeer = peerHrefs.some(

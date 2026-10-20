@@ -13,4 +13,11 @@ describe("isAdminNavActive", () => {
     expect(isAdminNavActive("/admin/kitchen", "/admin/kitchen", ops)).toBe(true);
     expect(isAdminNavActive("/admin/kitchen", "/admin/kitchen/stations", ops)).toBe(false);
   });
+
+  it("does not highlight dashboard on nested admin routes", () => {
+    const overview = ["/admin", "/admin/analytics", "/admin/pos"];
+    expect(isAdminNavActive("/admin/pos", "/admin", overview)).toBe(false);
+    expect(isAdminNavActive("/admin/pos", "/admin/pos", overview)).toBe(true);
+    expect(isAdminNavActive("/admin", "/admin", overview)).toBe(true);
+  });
 });

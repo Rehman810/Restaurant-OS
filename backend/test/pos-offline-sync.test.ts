@@ -50,4 +50,31 @@ describe("[POS-OFF-01] offline sync validation", () => {
     const r = validateOfflineSyncPayload(base);
     expect(r.ok).toBe(true);
   });
+
+  it("accepts legacy payload without payments array", () => {
+    const r = validateOfflineSyncPayload({
+      ...base,
+      cashTendered: undefined,
+      cashChangeGiven: undefined,
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it("accepts optional split payments for forward-compatible queues", () => {
+    const r = validateOfflineSyncPayload({
+      ...base,
+      payments: [{ method: PaymentMethod.CASH, amount: 120, tendered: 200, changeGiven: 80 }],
+      cashTendered: 200,
+      cashChangeGiven: 80,
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it("rejects card in payments array offline", () => {
+    const r = validateOfflineSyncPayload({
+      ...base,
+      payments: [{ method: PaymentMethod.CARD, amount: 50 }],
+    });
+    expect(r.ok).toBe(false);
+  });
 });

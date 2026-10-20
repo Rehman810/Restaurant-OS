@@ -34,6 +34,7 @@ type PosCartState = {
   setQty: (id: string, qty: number) => void;
   remove: (id: string) => void;
   setLinePrice: (id: string, price: number) => void;
+  setLineInstructions: (id: string, instructions: string) => void;
   clear: () => void;
 };
 
@@ -95,6 +96,14 @@ export const usePosCart = create<PosCartState>((set, get) => ({
     if (!Number.isFinite(n) || n < 0) return;
     set({
       lines: get().lines.map((l) => (l.id === id ? { ...l, price: n } : l)),
+    });
+  },
+  setLineInstructions: (id, instructions) => {
+    const note = instructions.trim();
+    set({
+      lines: get().lines.map((l) =>
+        l.id === id ? { ...l, instructions: note || undefined } : l
+      ),
     });
   },
   clear: () => set({ lines: [] }),

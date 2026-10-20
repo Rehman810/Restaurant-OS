@@ -62,7 +62,10 @@ export function computeExpectedCashMinor(
 export async function findOpenShift(branchId: string, cashierId: string) {
   return prisma.cashShift.findFirst({
     where: { branchId, cashierId, status: CashShiftStatus.OPEN },
-    include: { movements: { orderBy: { createdAt: "asc" } } },
+    include: {
+      movements: { orderBy: { createdAt: "asc" } },
+      cashier: { select: { id: true, name: true } },
+    },
   });
 }
 

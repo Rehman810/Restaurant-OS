@@ -67,6 +67,7 @@ model Branch {
   branchCoupons        Coupon[]
   posOrderDayCounters  BranchPosOrderDayCounter[]
   taxInvoiceCounters   BranchTaxInvoiceCounter[]
+  posHolds             PosHold[]
 
   @@unique([restaurantId, code])
   @@index([restaurantId, isActive])
@@ -295,6 +296,7 @@ model User {
   riderSettlementsSettled   RiderSettlement[] @relation("RiderSettlementsSettledBy")
   loyaltyPoints             Int               @default(0)
   pushSubscriptions         CustomerPushSubscription[]
+  posHolds                  PosHold[]
 }
 
 model DiningFloor {
@@ -1194,10 +1196,40 @@ model Order {
   needsReviewReason     String?
   feedback              OrderFeedback?
   kotPrintLogs          KotPrintLog[]
+  payments              OrderPayment[]
 
   @@index([branchId, needsReview])
   @@index([branchId, createdAt])
   @@index([branchId, status, createdAt])
+}
+
+model OrderPayment {
+  id          String        @id @default(uuid())
+  orderId     String
+  order       Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  method      PaymentMethod
+  amount      Decimal       @db.Decimal(10, 2)
+  tendered    Decimal?      @db.Decimal(10, 2)
+  changeGiven Decimal?      @db.Decimal(10, 2)
+  sortOrder   Int           @default(0)
+  createdAt   DateTime      @default(now())
+
+  @@index([orderId])
+}
+
+model PosHold {
+  id          String   @id @default(uuid())
+  branchId    String
+  branch      Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  label       String?
+  payload     Json
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([branchId, expiresAt])
+  @@index([branchId, createdById])
 }
 
 model OrderFeedback {

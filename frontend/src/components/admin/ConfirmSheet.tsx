@@ -75,7 +75,7 @@ export function ConfirmSheet({
   }
 
   const sheet = (
-    <div className="fixed inset-0 z-[100] flex justify-end" aria-hidden={closing}>
+    <div className="fixed inset-0 z-[110] flex justify-end" aria-hidden={closing}>
       <button
         type="button"
         aria-label="Close"

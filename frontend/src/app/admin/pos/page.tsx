@@ -1,38 +1,55 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  ArrowLeft,
-  Banknote,
   Bike,
   ChevronRight,
-  CreditCard,
-  LayoutGrid,
   LogOut,
-  Minus,
-  Plus,
-  Printer,
+  Maximize2,
+  Minimize2,
   Search,
   ShoppingBag,
-  Trash2,
   UtensilsCrossed,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { fetchAllDeals, fetchAllMenuItems } from "@/lib/catalog-api";
 import { useAuth } from "@/lib/auth";
 import { DEFAULT_STORE_NAME, storeDisplayName } from "@/lib/branding";
-import { buildPosOrderPayload, posCartTotal, usePosCart } from "@/lib/pos-cart";
-import { buildQuickAddConfig, itemHasConfigurableOptions, menuItemPrice } from "@/lib/menu-price";
+import { buildPosOrderPayload, type PosLine, usePosCart } from "@/lib/pos-cart";
+import { computePosTotalsClient } from "@/lib/pos-totals";
+import { buildPaymentsPayload, posChargeBlockedReason, type PosPaymentRow } from "@/lib/pos/checkout-helpers";
+import {
+  isWalkInCustomerName,
+  POS_WALK_IN_LABEL,
+  resolvePosCustomerNameForCheckout,
+} from "@/lib/pos/delivery-customer";
+import { readPosFullscreen, writePosFullscreen } from "@/lib/pos/display";
+import { buildQuickAddConfig, itemHasConfigurableOptions } from "@/lib/menu-price";
 import { printReceipt } from "@/lib/print-receipt";
 import { pkr } from "@/lib/format";
 import { Deal, DeliveryArea, FulfillmentType, MenuItem, Order, PaymentMethod } from "@/lib/types";
 import { PosItemSheet } from "@/components/admin/PosItemSheet";
 import { ManagerApprovalModal } from "@/components/admin/ManagerApprovalModal";
 import { InputSheet } from "@/components/admin/InputSheet";
-import { CashShiftPanel } from "@/components/admin/pos/CashShiftPanel";
+import { PosCartPanel } from "@/components/admin/pos/PosCartPanel";
+import { PosItemActionSheet } from "@/components/admin/pos/PosItemActionSheet";
+import { PosLineSheet } from "@/components/admin/pos/PosLineSheet";
+import { PosMenuBrowser } from "@/components/admin/pos/PosMenuBrowser";
+import { PosConnectivityBanner } from "@/components/admin/pos/PosConnectivityBanner";
+import { PosHelpButton } from "@/components/admin/pos/PosHelpButton";
+import { PosCustomerSheet } from "@/components/admin/pos/PosCustomerSheet";
 import { PosOfflineBar } from "@/components/admin/pos/PosOfflineBar";
+import { setMenuItemStock } from "@/lib/admin-kitchen";
+import {
+  readPinnedMenuIds,
+  readPosMenuDensity,
+  togglePinnedMenuId,
+  writePosMenuDensity,
+  type PosMenuDensity,
+} from "@/lib/pos/menu-preferences";
+import { useStore } from "@/lib/store";
 import { getDeviceLabel } from "@/lib/offline/device-label";
 import {
   enqueuePosOrder,
@@ -59,54 +76,27 @@ const MODES: { id: PosMode; label: string; short: string; icon: typeof UtensilsC
   { id: "DELIVERY", label: "Delivery", short: "Deliv", icon: Bike },
 ];
 
-function PosProductCard({ item, onTap }: { item: MenuItem; onTap: () => void }) {
-  const price = menuItemPrice(item);
-  const hasOptions = itemHasConfigurableOptions(item) || (item.optionGroups?.length ?? 0) > 0;
-
-  return (
-    <button
-      type="button"
-      onClick={onTap}
-      className="group relative flex flex-col overflow-hidden rounded-xl border border-stone-200/80 bg-white text-left shadow-sm transition active:scale-[0.98] dark:border-stone-600 dark:bg-stone-800 sm:rounded-2xl sm:hover:-translate-y-0.5 sm:hover:border-brand-300 sm:hover:shadow-lg dark:sm:hover:border-brand-500"
-    >
-      <div className="relative h-24 w-full shrink-0 overflow-hidden bg-gradient-to-br from-stone-100 to-stone-200 sm:h-28">
-        {item.imageUrl ? (
-          <img src={item.imageUrl} alt="" className="h-full w-full object-cover sm:transition sm:duration-300 sm:group-hover:scale-105" />
-        ) : (
-          <div className="grid h-full place-items-center text-stone-400">
-            <UtensilsCrossed size={24} strokeWidth={1.5} />
-          </div>
-        )}
-        <span className="absolute bottom-1.5 right-1.5 rounded-md bg-white/95 px-1.5 py-0.5 text-[10px] font-bold text-brand-700 shadow ring-1 ring-brand-100 sm:bottom-2 sm:right-2 sm:px-2 sm:py-1 sm:text-[11px]">
-          {pkr(price)}
-        </span>
-        {hasOptions && (
-          <span className="absolute left-1.5 top-1.5 rounded bg-white/95 px-1 py-0.5 text-[8px] font-bold uppercase text-brand-700 shadow-sm sm:left-2 sm:top-2 sm:text-[9px]">
-            Opt
-          </span>
-        )}
-      </div>
-      <div className="flex flex-1 flex-col p-2 sm:p-2.5">
-        <p className="line-clamp-2 text-xs font-bold leading-snug text-stone-900 dark:text-stone-50 sm:text-[13px]">{item.name}</p>
-        <p className="mt-0.5 hidden text-[10px] font-medium uppercase tracking-wide text-stone-400 dark:text-stone-400 sm:block">{item.category}</p>
-      </div>
-    </button>
-  );
-}
-
 export default function PosPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { selection } = useBranch();
   const { user, logout } = useAuth();
   const isManager = user?.role === "ADMIN" || user?.role === "MANAGER";
+  const canMark86 =
+    user?.role === "ADMIN" ||
+    user?.role === "MANAGER" ||
+    user?.role === "CASHIER" ||
+    user?.role === "CHEF";
+  const branchKey = selection === "all" ? "all" : String(selection);
   const lines = usePosCart((s) => s.lines);
   const addItem = usePosCart((s) => s.addItem);
   const addDeal = usePosCart((s) => s.addDeal);
   const setQty = usePosCart((s) => s.setQty);
   const remove = usePosCart((s) => s.remove);
   const setLinePrice = usePosCart((s) => s.setLinePrice);
+  const setLineInstructions = usePosCart((s) => s.setLineInstructions);
   const clear = usePosCart((s) => s.clear);
+  const publicStore = useStore();
 
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
@@ -114,7 +104,7 @@ export default function PosPage() {
   const [category, setCategory] = useState("All");
   const [search, setSearch] = useState("");
   const [mode, setMode] = useState<PosMode>("DINE_IN");
-  const [customerName, setCustomerName] = useState("Walk-in");
+  const [customerName, setCustomerName] = useState(POS_WALK_IN_LABEL);
   const [customerPhone, setCustomerPhone] = useState("");
   const [tableNumber, setTableNumber] = useState("");
   const [floorTables, setFloorTables] = useState<FloorTable[]>([]);
@@ -135,19 +125,36 @@ export default function PosPage() {
   const [store, setStore] = useState({ name: DEFAULT_STORE_NAME, phone: "", address: "" });
   const [freeDeliveryAbove, setFreeDeliveryAbove] = useState<number | null>(null);
   const [showDetails, setShowDetails] = useState(false);
-  const [clock, setClock] = useState("");
   const [mobileView, setMobileView] = useState<MobileView>("menu");
+  const [splitRows, setSplitRows] = useState<PosPaymentRow[]>([]);
+  const [lineSheet, setLineSheet] = useState<PosLine | null>(null);
+  const [holdCount, setHoldCount] = useState(0);
+  const [holdsOpen, setHoldsOpen] = useState(false);
+  const [holds, setHolds] = useState<{ id: string; label: string | null; payload: unknown; createdAt: string }[]>([]);
+  const [clearUndoUntil, setClearUndoUntil] = useState(0);
+  const [clearedSnapshot, setClearedSnapshot] = useState<PosLine[] | null>(null);
+  const [posFullscreen, setPosFullscreen] = useState(false);
+  const [successToast, setSuccessToast] = useState<{ orderNumber: string; change?: number } | null>(null);
+  const [priceOverridePending, setPriceOverridePending] = useState<{ id: string; price: number } | null>(null);
+  const [menuDensity, setMenuDensity] = useState<PosMenuDensity>(() => readPosMenuDensity());
+  const [popularIds, setPopularIds] = useState<string[]>([]);
+  const [pinnedIds, setPinnedIds] = useState<string[]>(() => readPinnedMenuIds(branchKey));
+  const [actionItem, setActionItem] = useState<MenuItem | null>(null);
+  const [pendingSyncCount, setPendingSyncCount] = useState(0);
+  const searchRef = useRef<HTMLInputElement>(null);
   const [discountPercent, setDiscountPercent] = useState("");
   const [discountReasonCode, setDiscountReasonCode] = useState("");
   const [discountReasonNote, setDiscountReasonNote] = useState("");
   const [maxCashierDiscountPercent, setMaxCashierDiscountPercent] = useState(10);
   const [discountReasons, setDiscountReasons] = useState<string[]>([]);
   const [voidReasons, setVoidReasons] = useState<string[]>([]);
-  const [approvalFlow, setApprovalFlow] = useState<"checkout" | "void" | null>(null);
+  const [approvalFlow, setApprovalFlow] = useState<"checkout" | "void" | "price" | null>(null);
   const [voidReasonCode, setVoidReasonCode] = useState("");
   const [voidReasonNote, setVoidReasonNote] = useState("");
   const [priceEditLine, setPriceEditLine] = useState<{ id: string; price: number } | null>(null);
   const [shiftOpen, setShiftOpen] = useState(true);
+  const [cashTendered, setCashTendered] = useState("");
+  const [checkoutIdempotencyKey, setCheckoutIdempotencyKey] = useState(() => crypto.randomUUID());
   const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
   const [conflictCount, setConflictCount] = useState(0);
   const [offlinePosEnabled, setOfflinePosEnabled] = useState(true);
@@ -195,7 +202,7 @@ export default function PosPage() {
         "/settings/public"
       ).catch(() => null),
     ]);
-    setMenu(m.filter((i) => i.isAvailable));
+    setMenu(m);
     setDeals(d.filter((x) => x.isActive));
     void saveMenuSnapshot(m);
     void saveDealsSnapshot(d);
@@ -294,37 +301,127 @@ export default function PosPage() {
   }, [load]);
 
   useEffect(() => {
-    const tick = () =>
-      setClock(new Date().toLocaleTimeString("en-PK", { hour: "2-digit", minute: "2-digit", hour12: true }));
-    tick();
-    const id = setInterval(tick, 30_000);
-    return () => clearInterval(id);
+    setPosFullscreen(readPosFullscreen());
+    const onFs = () => setPosFullscreen(readPosFullscreen());
+    window.addEventListener("pos-fullscreen-change", onFs);
+    return () => window.removeEventListener("pos-fullscreen-change", onFs);
   }, []);
+
+  const refreshHolds = useCallback(async () => {
+    try {
+      const res = await api<{ holds: { id: string; label: string | null; payload: unknown; createdAt: string }[] }>(
+        "/pos/holds?shared=1"
+      );
+      setHolds(res.holds);
+      setHoldCount(res.holds.length);
+    } catch {
+      setHolds([]);
+      setHoldCount(0);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshHolds();
+  }, [refreshHolds]);
+
+  useEffect(() => {
+    void pendingQueueCount().then(setPendingSyncCount).catch(() => setPendingSyncCount(0));
+  }, [isOnline]);
+
+  useEffect(() => {
+    setPinnedIds(readPinnedMenuIds(branchKey));
+  }, [branchKey]);
+
+  useEffect(() => {
+    const onPins = () => setPinnedIds(readPinnedMenuIds(branchKey));
+    const onDensity = () => setMenuDensity(readPosMenuDensity());
+    window.addEventListener("pos-menu-pins-change", onPins);
+    window.addEventListener("pos-menu-density-change", onDensity);
+    return () => {
+      window.removeEventListener("pos-menu-pins-change", onPins);
+      window.removeEventListener("pos-menu-density-change", onDensity);
+    };
+  }, [branchKey]);
+
+  useEffect(() => {
+    if (!isOnline || selection === "all") {
+      setPopularIds([]);
+      return;
+    }
+    void api<{ popular: { menuItemId: string; quantity: number }[] }>("/pos/popular-menu")
+      .then((r) => setPopularIds(r.popular.map((p) => p.menuItemId)))
+      .catch(() => setPopularIds([]));
+  }, [isOnline, selection]);
 
   const categories = useMemo(() => {
     const cats = [...new Set(menu.map((m) => m.category))].sort();
     return ["All", ...cats];
   }, [menu]);
 
-  const filtered = useMemo(() => {
-    let list = menu;
-    if (category !== "All") list = list.filter((m) => m.category === category);
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter((m) => m.name.toLowerCase().includes(q) || m.category.toLowerCase().includes(q));
-    }
-    return list;
-  }, [menu, category, search]);
-
   const itemCount = lines.reduce((n, l) => n + l.quantity, 0);
-  const subtotal = posCartTotal(lines);
+  const checkoutCustomerName = resolvePosCustomerNameForCheckout(mode, customerName);
+
+  function selectMode(next: PosMode) {
+    setMode(next);
+    if (next === "DELIVERY" && isWalkInCustomerName(customerName)) {
+      setCustomerName("");
+    } else if (next !== "DELIVERY" && !customerName.trim()) {
+      setCustomerName(POS_WALK_IN_LABEL);
+    }
+  }
+
+  function openCustomerDetails() {
+    if (mode === "DELIVERY" && isWalkInCustomerName(customerName)) {
+      setCustomerName("");
+    }
+    setShowDetails(true);
+  }
+  const taxSettings = {
+    taxEnabled: publicStore?.settings.taxEnabled,
+    taxPercent: publicStore?.settings.taxPercent,
+    taxIncluded: publicStore?.settings.taxIncluded,
+    pricesIncludeTax: publicStore?.settings.pricesIncludeTax,
+    serviceChargePercent: publicStore?.settings.serviceChargePercent,
+    serviceIncluded: publicStore?.settings.serviceIncluded,
+  };
+  const lineInputs = lines.map((l) => ({ price: l.price, quantity: l.quantity }));
   const rawDeliveryFee =
     mode === "DELIVERY" ? Number(areas.find((a) => a.id === areaId)?.deliveryCharge || 0) : 0;
+  const subtotalPreview = lineInputs.reduce((s, l) => s + l.price * l.quantity, 0);
   const deliveryFee =
-    mode === "DELIVERY" && freeDeliveryAbove != null && subtotal >= freeDeliveryAbove ? 0 : rawDeliveryFee;
+    mode === "DELIVERY" && freeDeliveryAbove != null && subtotalPreview >= freeDeliveryAbove ? 0 : rawDeliveryFee;
   const pct = Number(discountPercent) || 0;
-  const discountPreview = pct > 0 ? ((subtotal + deliveryFee) * pct) / 100 : 0;
-  const total = Math.max(0, subtotal + deliveryFee - discountPreview);
+  const totals = computePosTotalsClient({
+    lines: lineInputs,
+    deliveryCharge: deliveryFee,
+    discountPercent: pct > 0 ? pct : null,
+    settings: taxSettings,
+  });
+  const total = totals.total;
+  const chargeBlocked = posChargeBlockedReason({
+    linesEmpty: !lines.length,
+    mode,
+    tableSessionId,
+    deliveryAreaId: areaId,
+    deliveryAddress,
+    customerName,
+    customerPhone,
+    payment,
+    shiftOpen,
+    cashTendered,
+    total,
+    splitRows,
+    discountPercent: pct,
+    discountReasonCode,
+    discountReasonNote,
+  });
+  const storeTimezone = publicStore?.settings.timezone ?? "Asia/Karachi";
+  const posClock = new Date().toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: storeTimezone,
+  });
   const hasPriceOverride = lines.some(
     (l) => l.catalogPrice != null && Math.abs(l.price - l.catalogPrice) > 0.009
   );
@@ -333,12 +430,23 @@ export default function PosPage() {
     ((pct > 0 && pct > maxCashierDiscountPercent) || hasPriceOverride);
 
   function tapItem(item: MenuItem) {
+    if (!item.isAvailable) return;
     if (itemHasConfigurableOptions(item) || (item.optionGroups?.length ?? 0) > 0) {
       setConfigItem(item);
       return;
     }
     const cfg = buildQuickAddConfig(item);
     addItem({ item, price: cfg.price, optionIds: cfg.optionIds, optionsLabel: cfg.optionsLabel });
+  }
+
+  async function updateItemAvailability(item: MenuItem, isAvailable: boolean) {
+    try {
+      await setMenuItemStock(item.id, isAvailable);
+      setMenu((prev) => prev.map((m) => (m.id === item.id ? { ...m, isAvailable } : m)));
+      setActionItem(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update availability.");
+    }
   }
 
   async function placeOrder(approval?: { approverId: string; pin: string }) {
@@ -391,6 +499,7 @@ export default function PosPage() {
       return;
     }
     setBusy(true);
+    const idempotencyKey = checkoutIdempotencyKey;
     try {
       const payload = buildPosOrderPayload(lines);
       if (offlineMode) {
@@ -401,7 +510,7 @@ export default function PosPage() {
         const body = {
           ...payload,
           fulfillmentType: mode,
-          customerName,
+          customerName: checkoutCustomerName,
           customerPhone: customerPhone || undefined,
           tableNumber: mode === "DINE_IN" ? tableNumber : undefined,
           tableSessionId: mode === "DINE_IN" ? tableSessionId : undefined,
@@ -425,9 +534,9 @@ export default function PosPage() {
           offlineLabel,
           lines,
           total,
-          subtotal,
+          subtotal: totals.subtotal,
           fulfillmentType: mode,
-          customerName,
+          customerName: checkoutCustomerName,
           customerPhone,
           tableNumber: mode === "DINE_IN" ? tableNumber : undefined,
           notes,
@@ -439,6 +548,17 @@ export default function PosPage() {
         printReceipt(pseudo, store, { cashier: user?.name, offlinePending: true });
         return;
       }
+      if (chargeBlocked) {
+        setError(chargeBlocked);
+        return;
+      }
+      const tenderedNum = cashTendered.trim() ? Number(cashTendered) : undefined;
+      const payments = buildPaymentsPayload({
+        rows: splitRows,
+        total,
+        singleMethod: payment,
+        cashTendered: tenderedNum,
+      });
       const order = await api<Order>("/pos", {
         method: "POST",
         body: JSON.stringify({
@@ -446,15 +566,18 @@ export default function PosPage() {
           fulfillmentType: mode,
           deliveryAreaId: mode === "DELIVERY" ? areaId : undefined,
           deliveryAddress: mode === "DELIVERY" ? deliveryAddress : undefined,
-          customerName,
+          customerName: checkoutCustomerName,
           customerPhone: customerPhone || undefined,
           tableNumber: mode === "DINE_IN" ? tableNumber : undefined,
           tableSessionId: mode === "DINE_IN" ? tableSessionId : undefined,
           diningTableId: mode === "DINE_IN" ? diningTableId : undefined,
           waiterId: mode === "DINE_IN" ? waiterId || undefined : undefined,
           notes,
-          paymentMethod: payment,
+          paymentMethod: payments[0]?.method ?? payment,
           paymentStatus: "PAID",
+          clientTotal: total,
+          idempotencyKey,
+          payments,
           discountPercent: pct > 0 ? pct : undefined,
           discountReasonCode: pct > 0 ? discountReasonCode : undefined,
           discountReasonNote: pct > 0 ? discountReasonNote : undefined,
@@ -462,6 +585,14 @@ export default function PosPage() {
         }),
       });
       setLastOrder(order);
+      const cashRow = payments.find((p) => p.method === "CASH");
+      const changeDue =
+        cashRow?.changeGiven ??
+        (cashRow?.tendered != null ? Math.max(0, cashRow.tendered - cashRow.amount) : undefined);
+      setSuccessToast({ orderNumber: order.orderNumber, change: changeDue });
+      setCheckoutIdempotencyKey(crypto.randomUUID());
+      setCashTendered("");
+      setSplitRows([]);
       clear();
       setNotes("");
       setDiscountPercent("");
@@ -469,7 +600,11 @@ export default function PosPage() {
       setDiscountReasonNote("");
       setApprovalFlow(null);
       setMobileView("menu");
-      printReceipt(order, store, { cashier: user?.name });
+      try {
+        printReceipt(order, store, { cashier: user?.name });
+      } catch {
+        setError("Order saved but printing failed — use Reprint.");
+      }
       void syncPosQueue();
     } catch (err) {
       if (err instanceof ApiError && err.code === "APPROVAL_REQUIRED") {
@@ -535,256 +670,193 @@ export default function PosPage() {
     }
   }
 
-  const cartPanel = (
-    <>
-      <div className="flex shrink-0 items-center justify-between border-b border-orange-100/80 bg-orange-50/50 px-3 py-2.5 dark:border-stone-700 dark:bg-stone-800/80 sm:px-4 sm:py-3">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setMobileView("menu")}
-            className="grid h-8 w-8 place-items-center rounded-lg bg-white text-stone-700 ring-1 ring-stone-200 lg:hidden"
-          >
-            <ArrowLeft size={16} />
-          </button>
-          <div>
-            <p className="text-sm font-bold text-stone-900 dark:text-stone-50">Current order</p>
-            <p className="text-[11px] text-stone-500 dark:text-stone-400">
-              {itemCount} item{itemCount !== 1 ? "s" : ""} · {MODES.find((m) => m.id === mode)?.label}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-1.5">
-          {lines.length > 0 && (
-            <button type="button" onClick={clear} className="rounded-lg px-2 py-1.5 text-[11px] font-semibold text-rose-600 hover:bg-rose-50">
-              Clear
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => setShowDetails((v) => !v)}
-            className="rounded-lg bg-white px-2.5 py-1.5 text-[11px] font-semibold text-stone-700 ring-1 ring-stone-200"
-          >
-            {showDetails ? "Hide" : "Customer"}
-          </button>
-        </div>
-      </div>
+  function snapshotCartPayload() {
+    return {
+      lines,
+      mode,
+      customerName,
+      customerPhone,
+      tableNumber,
+      tableSessionId,
+      diningTableId,
+      waiterId,
+      deliveryAddress,
+      areaId,
+      notes,
+      discountPercent,
+      discountReasonCode,
+      discountReasonNote,
+      payment,
+    };
+  }
 
-      <div className="shrink-0 border-b border-orange-100/80 px-3 py-2 dark:border-stone-700">
-        <CashShiftPanel paymentMethod={payment} onShiftChange={setShiftOpen} />
-      </div>
+  async function parkCurrentOrder() {
+    if (!lines.length) return;
+    try {
+      await api("/pos/holds", {
+        method: "POST",
+        body: JSON.stringify({ payload: snapshotCartPayload(), label: `Hold · ${itemCount} items` }),
+      });
+      clear();
+      setNotes("");
+      setSplitRows([]);
+      void refreshHolds();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not hold order.");
+    }
+  }
 
-      {showDetails && (
-        <div className="shrink-0 space-y-2 border-b border-orange-100/80 bg-[#fffaf5] px-3 py-3">
-          <input className="input h-9 text-sm" placeholder="Customer name" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
-          <input className="input h-9 text-sm" placeholder="Phone (optional)" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} />
-          {mode === "DINE_IN" && (
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={() => setShowTablePicker(true)}
-                className="flex w-full items-center justify-between rounded-xl border border-brand-200 bg-brand-50/80 px-3 py-2 text-left text-sm font-semibold text-brand-900"
-              >
-                <span className="flex items-center gap-2">
-                  <LayoutGrid size={16} />
-                  {tableSessionId ? `Table ${tableNumber}` : "Select table"}
-                </span>
-                <ChevronRight size={16} />
-              </button>
-              {waiterId && (
-                <p className="text-[11px] text-stone-500">
-                  Waiter: {floorWaiters.find((w) => w.id === waiterId)?.name ?? "—"}
-                </p>
-              )}
-            </div>
-          )}
-          {mode === "DELIVERY" && (
-            <>
-              <select className="input h-9 text-sm" value={areaId} onChange={(e) => setAreaId(e.target.value)}>
-                {areas.map((a) => (
-                  <option key={a.id} value={a.id}>{a.name} (+{pkr(a.deliveryCharge)})</option>
-                ))}
-              </select>
-              <input className="input h-9 text-sm" placeholder="Delivery address" value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} />
-            </>
-          )}
-          <input className="input h-9 text-sm" placeholder="Order notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
-        </div>
-      )}
+  async function resumeHold(holdId: string) {
+    try {
+      const { hold } = await api<{ hold: { payload: ReturnType<typeof snapshotCartPayload> } }>(
+        `/pos/holds/${holdId}/resume`,
+        { method: "POST" }
+      );
+      const p = hold.payload;
+      usePosCart.setState({ lines: p.lines });
+      setMode(p.mode);
+      setCustomerName(p.customerName);
+      setCustomerPhone(p.customerPhone);
+      setTableNumber(p.tableNumber);
+      setTableSessionId(p.tableSessionId);
+      setDiningTableId(p.diningTableId);
+      setWaiterId(p.waiterId);
+      setDeliveryAddress(p.deliveryAddress);
+      setAreaId(p.areaId);
+      setNotes(p.notes);
+      setDiscountPercent(p.discountPercent);
+      setDiscountReasonCode(p.discountReasonCode);
+      setDiscountReasonNote(p.discountReasonNote);
+      setPayment(p.payment);
+      setHoldsOpen(false);
+      void refreshHolds();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not resume hold.");
+    }
+  }
 
-      <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-3">
-        {lines.length === 0 ? (
-          <li className="flex min-h-[120px] flex-col items-center justify-center rounded-2xl border border-dashed border-orange-200 bg-orange-50/40 px-4 py-8 text-center sm:min-h-[160px]">
-            <ShoppingBag size={28} className="text-orange-300" strokeWidth={1.5} />
-            <p className="mt-3 text-sm font-semibold text-stone-500">Cart is empty</p>
-            <p className="mt-1 text-xs text-stone-400">Tap items from the menu to add</p>
-          </li>
-        ) : (
-          lines.map((l) => (
-            <li key={l.id} className="flex items-start gap-2 rounded-xl border border-orange-100 bg-[#fffaf5] p-2.5">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-bold leading-snug text-stone-900">{l.name}</p>
-                {l.optionsLabel && l.optionsLabel !== l.name && (
-                  <p className="mt-0.5 text-[10px] text-stone-500">{l.optionsLabel}</p>
-                )}
-                <p className="mt-1 text-xs font-bold text-brand-700">{pkr(l.price * l.quantity)}</p>
-                {l.catalogPrice != null && Math.abs(l.price - l.catalogPrice) > 0.009 && (
-                  <p className="text-[10px] text-amber-700">Price override</p>
-                )}
-              </div>
-              <div className="flex shrink-0 items-center gap-0.5">
-                <button
-                  type="button"
-                  className="grid h-9 w-9 place-items-center rounded-lg border border-amber-200 bg-white text-[10px] font-bold text-amber-800"
-                  onClick={() => setPriceEditLine({ id: l.id, price: l.price })}
-                  title="Override price"
-                >
-                  Rs
-                </button>
-                <button type="button" className="grid h-9 w-9 place-items-center rounded-lg border border-stone-200 bg-white" onClick={() => setQty(l.id, l.quantity - 1)}>
-                  <Minus size={14} />
-                </button>
-                <span className="w-5 text-center text-sm font-black tabular-nums">{l.quantity}</span>
-                <button type="button" className="grid h-9 w-9 place-items-center rounded-lg border border-stone-200 bg-white" onClick={() => setQty(l.id, l.quantity + 1)}>
-                  <Plus size={14} />
-                </button>
-                <button type="button" className="grid h-9 w-9 place-items-center rounded-lg border border-rose-200 bg-white text-rose-600" onClick={() => remove(l.id)}>
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            </li>
-          ))
-        )}
-      </ul>
+  function requestClearCart() {
+    setClearedSnapshot([...lines]);
+    clear();
+    setClearUndoUntil(Date.now() + 10_000);
+  }
 
-      <div className="shrink-0 border-t border-orange-100/80 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] dark:border-stone-700 dark:bg-stone-900 sm:p-4">
-        <div className="rounded-2xl bg-orange-50/60 p-3 ring-1 ring-orange-100 dark:bg-stone-800/80 dark:ring-stone-600">
-          <div className="space-y-1.5 text-sm">
-            <div className="flex justify-between text-stone-600 dark:text-stone-300">
-              <span>Subtotal</span>
-              <span className="font-medium tabular-nums">{pkr(subtotal)}</span>
-            </div>
-            {mode === "DELIVERY" && rawDeliveryFee > 0 && deliveryFee === 0 && (
-              <div className="flex justify-between text-emerald-700">
-                <span>Delivery</span>
-                <span className="font-medium">Free</span>
-              </div>
-            )}
-            {deliveryFee > 0 && (
-              <div className="flex justify-between text-stone-600">
-                <span>Delivery</span>
-                <span className="font-medium tabular-nums">{pkr(deliveryFee)}</span>
-              </div>
-            )}
-            <div className="grid gap-2 pt-1 sm:grid-cols-2">
-              <input
-                className="input h-9 text-sm"
-                type="number"
-                min={0}
-                max={100}
-                placeholder={`Discount % (max ${maxCashierDiscountPercent} w/o PIN)`}
-                value={discountPercent}
-                onChange={(e) => setDiscountPercent(e.target.value)}
-              />
-              <select
-                className="input h-9 text-sm"
-                value={discountReasonCode}
-                onChange={(e) => setDiscountReasonCode(e.target.value)}
-              >
-                <option value="">Discount reason…</option>
-                {discountReasons.map((r) => (
-                  <option key={r} value={r}>{r}</option>
-                ))}
-              </select>
-            </div>
-            {discountPreview > 0 && (
-              <div className="flex justify-between text-emerald-700">
-                <span>Discount</span>
-                <span className="font-medium tabular-nums">−{pkr(discountPreview)}</span>
-              </div>
-            )}
-            <div className="flex items-end justify-between border-t border-orange-100 pt-2 dark:border-stone-600">
-              <span className="text-xs font-bold uppercase tracking-wider text-stone-500 dark:text-stone-300">Total due</span>
-              <span className="text-2xl font-black tabular-nums text-brand-700 dark:text-brand-300">{pkr(total)}</span>
-            </div>
-          </div>
-        </div>
+  function undoClear() {
+    if (!clearedSnapshot) return;
+    usePosCart.setState({ lines: clearedSnapshot });
+    setClearedSnapshot(null);
+    setClearUndoUntil(0);
+  }
 
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() => setPayment("CASH")}
-            className={`flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold ring-1 ${
-              payment === "CASH" ? "bg-emerald-600 text-white ring-emerald-600" : "bg-white text-stone-600 ring-stone-200"
-            }`}
-          >
-            <Banknote size={16} /> Cash
-          </button>
-          <button
-            type="button"
-            onClick={() => setPayment("CARD")}
-            className={`flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold ring-1 ${
-              payment === "CARD" ? "bg-violet-600 text-white ring-violet-600" : "bg-white text-stone-600 ring-stone-200"
-            }`}
-          >
-            <CreditCard size={16} /> Card
-          </button>
-        </div>
+  function beginPriceOverride(line: PosLine) {
+    if (!isManager) {
+      setPriceOverridePending({ id: line.id, price: line.price });
+      setPriceEditLine({ id: line.id, price: line.price });
+      return;
+    }
+    setPriceEditLine({ id: line.id, price: line.price });
+  }
 
-        <button
-          type="button"
-          disabled={busy || !lines.length}
-          onClick={() => void placeOrder()}
-          className="btn-primary mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-2xl text-sm font-bold disabled:opacity-40 sm:h-14 sm:text-base"
-        >
-          {busy ? "Processing…" : (
-            <>
-              <Printer size={18} />
-              Charge &amp; Print · {pkr(total)}
-            </>
-          )}
-        </button>
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "/" && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+      if (e.key === "F2") {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+      if (e.key === "Escape") {
+        setLineSheet(null);
+        setShowTablePicker(false);
+        setHoldsOpen(false);
+      }
+      if (e.key === "F9" && !chargeBlocked && lines.length) {
+        e.preventDefault();
+        void placeOrder();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [chargeBlocked, lines.length]);
 
-        {lastOrder && (
-          <div className="mt-2 space-y-2">
-            <button
-              type="button"
-              onClick={reprintLast}
-              className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-stone-200 text-xs font-semibold text-stone-600"
-            >
-              <Printer size={14} /> Reprint {lastOrder.orderNumber}
-            </button>
-            {lastOrder.status !== "CANCELLED" && (
-              <>
-                <select
-                  className="input h-9 w-full text-sm"
-                  value={voidReasonCode}
-                  onChange={(e) => setVoidReasonCode(e.target.value)}
-                >
-                  <option value="">Void reason…</option>
-                  {voidReasons.map((r) => (
-                    <option key={r} value={r}>{r}</option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void voidLastOrder()}
-                  className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 text-xs font-semibold text-rose-700"
-                >
-                  <Trash2 size={14} /> Void {lastOrder.orderNumber}
-                </button>
-              </>
-            )}
-          </div>
-        )}
-      </div>
-    </>
+  const cartTotals = { ...totals, deliveryFee, rawDeliveryFee };
+
+  const renderCartPanel = (sheetMode: boolean) => (
+    <PosCartPanel
+      sheetMode={sheetMode}
+      mobileBack={() => setMobileView("menu")}
+      itemCount={itemCount}
+      mode={mode}
+      modes={MODES}
+      tableLabel={tableSessionId ? tableNumber : null}
+      onOpenTable={() => setShowTablePicker(true)}
+      onOpenCustomer={openCustomerDetails}
+      onHold={() => void parkCurrentOrder()}
+      onShowHolds={() => {
+        setHoldsOpen(true);
+        void refreshHolds();
+      }}
+      holdCount={holdCount}
+      lines={lines}
+      onLineTap={setLineSheet}
+      onQty={setQty}
+      onClearRequest={requestClearCart}
+      totals={cartTotals}
+      maxCashierDiscountPercent={maxCashierDiscountPercent}
+      discountPercent={discountPercent}
+      discountReasonCode={discountReasonCode}
+      discountReasonNote={discountReasonNote}
+      discountReasons={discountReasons}
+      onDiscountPercent={setDiscountPercent}
+      onDiscountReasonCode={setDiscountReasonCode}
+      onDiscountReasonNote={setDiscountReasonNote}
+      kitchenNote={notes}
+      onKitchenNote={setNotes}
+      payment={payment}
+      onPayment={setPayment}
+      cashTendered={cashTendered}
+      onCashTendered={setCashTendered}
+      splitRows={splitRows}
+      onSplitRows={setSplitRows}
+      shiftOpen={shiftOpen}
+      onShiftChange={setShiftOpen}
+      cashierName={user?.name ?? "Cashier"}
+      deliveryAreas={areas}
+      deliveryAreaId={areaId}
+      onDeliveryAreaId={setAreaId}
+      deliveryAddress={deliveryAddress}
+      onDeliveryAddress={setDeliveryAddress}
+      customerName={customerName}
+      onCustomerName={setCustomerName}
+      customerPhone={customerPhone}
+      onCustomerPhone={setCustomerPhone}
+      chargeBlocked={chargeBlocked}
+      busy={busy}
+      onCharge={() => void placeOrder()}
+      lastOrder={lastOrder}
+      onReprint={reprintLast}
+      onOverridePrice={beginPriceOverride}
+    />
   );
 
+  const mobileCartOpen = mobileView === "cart";
+
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden bg-[#fffaf5] dark:bg-stone-950 lg:-m-4 lg:h-[calc(100dvh-4.5rem)] lg:rounded-2xl lg:border lg:border-orange-100/80 lg:shadow-sm dark:lg:border-stone-700">
+    <div
+      className={`flex h-[100dvh] max-w-[100vw] flex-col overflow-x-hidden overflow-y-hidden bg-[#fffaf5] dark:bg-stone-950 ${
+        posFullscreen
+          ? "fixed inset-0 z-30"
+          : "lg:-m-4 lg:h-[calc(100dvh-4.5rem)] lg:rounded-2xl lg:border lg:border-stone-100 lg:shadow-sm dark:lg:border-stone-700"
+      }`}
+    >
       {/* Header */}
-      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-orange-100/80 bg-white px-3 py-2.5 dark:border-stone-700 dark:bg-stone-900 sm:px-4 sm:py-3">
+      <header
+        className={`shrink-0 items-center justify-between gap-2 border-b border-orange-100/80 bg-white px-3 py-2.5 dark:border-stone-700 dark:bg-stone-900 sm:px-4 sm:py-3 ${
+          mobileCartOpen ? "hidden md:flex" : "flex"
+        }`}
+      >
         <div className="flex min-w-0 items-center gap-2">
           <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-orange-600 text-white shadow-md sm:h-10 sm:w-10">
             <UtensilsCrossed size={16} className="sm:hidden" />
@@ -792,7 +864,9 @@ export default function PosPage() {
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-bold text-stone-900 dark:text-stone-50">Point of Sale</p>
-            <p className="hidden text-[11px] text-stone-500 dark:text-stone-400 sm:block">{store.name} · Counter</p>
+            <p className="truncate text-[11px] text-stone-500 dark:text-stone-400">
+              {user?.name ?? "Cashier"} · {posClock}
+            </p>
           </div>
         </div>
 
@@ -804,9 +878,9 @@ export default function PosPage() {
               <button
                 key={m.id}
                 type="button"
-                onClick={() => setMode(m.id)}
+                onClick={() => selectMode(m.id)}
                 className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold ${
-                  active ? "bg-white text-brand-800 shadow-sm ring-1 ring-orange-100 dark:bg-stone-700 dark:text-brand-200 dark:ring-stone-600" : "text-stone-500 dark:text-stone-400"
+                  active ? "bg-stone-900 text-white shadow-sm ring-1 ring-stone-900 dark:bg-stone-100 dark:text-stone-900" : "text-stone-500 dark:text-stone-400"
                 }`}
               >
                 <Icon size={14} />
@@ -817,12 +891,23 @@ export default function PosPage() {
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          <PosOfflineBar conflictCount={conflictCount} />
-          <p className="hidden text-sm font-bold tabular-nums text-stone-700 dark:text-stone-300 sm:block">{clock}</p>
+          <PosHelpButton />
+          <PosOfflineBar conflictCount={conflictCount} onPendingChange={setPendingSyncCount} />
+          <button
+            type="button"
+            onClick={() => {
+              writePosFullscreen(!posFullscreen);
+              setPosFullscreen(!posFullscreen);
+            }}
+            className="inline-flex h-9 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-stone-600 ring-1 ring-stone-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:text-stone-300 dark:ring-stone-600"
+          >
+            {posFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+            <span className="hidden sm:inline">{posFullscreen ? "Exit POS" : "Full screen"}</span>
+          </button>
           <button
             type="button"
             onClick={() => setMobileView("cart")}
-            className="relative rounded-xl bg-brand-50 px-2.5 py-1.5 ring-1 ring-brand-100 lg:hidden"
+            className="relative rounded-xl bg-brand-50 px-2.5 py-1.5 ring-1 ring-brand-100 focus-visible:ring-2 focus-visible:ring-brand-500 md:hidden"
           >
             <ShoppingBag size={18} className="text-brand-700" />
             {itemCount > 0 && (
@@ -831,10 +916,6 @@ export default function PosPage() {
               </span>
             )}
           </button>
-          <div className="hidden rounded-xl bg-brand-50 px-3 py-2 text-center ring-1 ring-brand-100 lg:block">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-brand-600">Cart</p>
-            <p className="text-lg font-black tabular-nums leading-none text-brand-800">{itemCount}</p>
-          </div>
           <button
             type="button"
             onClick={() => void guardedLogout()}
@@ -847,7 +928,11 @@ export default function PosPage() {
       </header>
 
       {/* Mobile mode + view tabs */}
-      <div className="flex shrink-0 flex-col gap-1.5 border-b border-orange-100/80 bg-white px-2 py-2 dark:border-stone-700 dark:bg-stone-900 md:hidden">
+      <div
+        className={`shrink-0 flex-col gap-1.5 border-b border-orange-100/80 bg-white px-2 py-2 dark:border-stone-700 dark:bg-stone-900 md:hidden ${
+          mobileCartOpen ? "hidden" : "flex"
+        }`}
+      >
         <div className="flex gap-1">
           {MODES.map((m) => {
             const Icon = m.icon;
@@ -855,9 +940,9 @@ export default function PosPage() {
               <button
                 key={m.id}
                 type="button"
-                onClick={() => setMode(m.id)}
+                onClick={() => selectMode(m.id)}
                 className={`flex flex-1 items-center justify-center gap-1 rounded-lg py-2 text-[11px] font-bold ${
-                  mode === m.id ? "bg-brand-600 text-white" : "bg-orange-50 text-stone-600"
+                  mode === m.id ? "bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900" : "bg-stone-100 text-stone-600 dark:bg-stone-800"
                 }`}
               >
                 <Icon size={13} />
@@ -866,27 +951,15 @@ export default function PosPage() {
             );
           })}
         </div>
-        <div className="flex gap-1 rounded-xl bg-stone-100 p-1 lg:hidden">
-          <button
-            type="button"
-            onClick={() => setMobileView("menu")}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-bold ${
-              mobileView === "menu" ? "bg-white text-stone-900 shadow-sm" : "text-stone-500"
-            }`}
-          >
-            <LayoutGrid size={14} /> Menu
-          </button>
-          <button
-            type="button"
-            onClick={() => setMobileView("cart")}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-bold ${
-              mobileView === "cart" ? "bg-white text-stone-900 shadow-sm" : "text-stone-500"
-            }`}
-          >
-            <ShoppingBag size={14} /> Cart ({itemCount})
-          </button>
-        </div>
       </div>
+
+      <PosConnectivityBanner
+        offline={offlineMode}
+        offlinePosEnabled={offlinePosEnabled}
+        pendingCount={pendingSyncCount}
+        conflictCount={conflictCount}
+        onOpenQueue={() => window.dispatchEvent(new CustomEvent("pos-open-queue"))}
+      />
 
       {error && (
         <div className="shrink-0 border-b border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{error}</div>
@@ -896,92 +969,71 @@ export default function PosPage() {
           Offline storage unavailable — POS will not queue orders without internet.
         </div>
       )}
-      {offlineMode && (
-        <div className="shrink-0 border-b border-stone-700 bg-stone-900 px-3 py-2 text-sm font-medium text-amber-200">
-          Offline mode — cash only, no delivery, coupons, or manager PIN actions. Orders sync when back online.
-        </div>
-      )}
-
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        {/* Menu */}
-        <section
-          className={`min-h-0 min-w-0 flex-1 flex-col bg-[#fffaf5] dark:bg-stone-950 ${
-            mobileView === "cart" ? "hidden lg:flex" : "flex"
-          }`}
-        >
+      <div className={`flex min-h-0 flex-1 flex-col md:flex-row ${mobileCartOpen ? "hidden md:flex" : ""}`}>
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#fffaf5] dark:bg-stone-950">
           <div className="shrink-0 border-b border-stone-200 bg-white px-3 py-2.5 dark:border-stone-700 dark:bg-stone-900">
             <div className="relative">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
               <input
+                ref={searchRef}
                 className="w-full rounded-xl border border-stone-200 bg-stone-50 py-2 pl-9 pr-3 text-sm outline-none focus:border-brand-400 focus:bg-white focus:ring-2 focus:ring-brand-400/30"
-                placeholder="Search menu…"
+                placeholder="Search or scan"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && search.trim()) {
+                    const q = search.trim().toLowerCase();
+                    const hit = menu.find((m) => m.name.toLowerCase() === q);
+                    if (hit) {
+                      tapItem(hit);
+                      setSearch("");
+                    }
+                  }
+                }}
+                aria-label="Search menu"
               />
             </div>
-            <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {categories.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setCategory(c)}
-                  className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-bold sm:px-3.5 sm:text-xs ${
-                    category === c ? "bg-brand-600 text-white" : "bg-white text-stone-600 ring-1 ring-stone-200"
-                  }`}
-                >
-                  {c}
-                </button>
-              ))}
-            </div>
           </div>
 
-          {deals.length > 0 && (
-            <div className="shrink-0 border-b border-amber-100 bg-gradient-to-r from-amber-50 to-orange-50 px-3 py-2 dark:border-stone-700 dark:from-stone-900 dark:to-stone-800">
-              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-amber-700 dark:text-amber-300">Deals</p>
-              <div className="flex gap-2 overflow-x-auto pb-0.5">
-                {deals.map((d) => (
-                  <button
-                    key={d.id}
-                    type="button"
-                    onClick={() => addDeal(d)}
-                    className="flex shrink-0 items-center gap-2 rounded-xl border border-amber-200 bg-white px-3 py-1.5 text-xs font-bold"
-                  >
-                    {d.title}
-                    <span className="rounded-md bg-amber-500 px-1.5 py-0.5 text-[10px] text-white">{pkr(d.dealPrice)}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="min-h-0 flex-1 overflow-y-auto p-2 pb-20 sm:p-3 lg:pb-3">
-            {filtered.length === 0 ? (
-              <div className="grid min-h-[200px] place-items-center rounded-2xl border border-dashed border-stone-300 bg-white text-center">
-                <p className="text-sm font-semibold text-stone-500">No items found</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-2.5 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-                {filtered.map((item) => (
-                  <PosProductCard key={item.id} item={item} onTap={() => tapItem(item)} />
-                ))}
-              </div>
-            )}
-          </div>
+          <PosMenuBrowser
+            menu={menu}
+            deals={deals}
+            categories={categories}
+            category={category}
+            onCategory={setCategory}
+            search={search}
+            density={menuDensity}
+            onDensity={(d) => {
+              writePosMenuDensity(d);
+              setMenuDensity(d);
+            }}
+            popularIds={popularIds}
+            pinnedIds={pinnedIds}
+            canMark86={canMark86}
+            canPin={isManager}
+            onTapItem={tapItem}
+            onTapDeal={addDeal}
+            onItemLongPress={(item) => setActionItem(item)}
+          />
         </section>
 
-        {/* Cart — side panel on desktop, full screen tab on mobile */}
-        <aside
-          className={`w-full shrink-0 flex-col border-orange-100/80 bg-white dark:border-stone-700 dark:bg-stone-900 lg:flex lg:w-[380px] lg:border-l ${
-            mobileView === "menu" ? "hidden lg:flex" : "flex min-h-0 flex-1"
-          }`}
-        >
-          {cartPanel}
+        <aside className="hidden h-full min-h-0 w-full shrink-0 border-stone-200 bg-white dark:border-stone-700 dark:bg-stone-900 md:flex md:w-[min(380px,38vw)] md:min-h-0 md:flex-col md:border-l">
+          {renderCartPanel(false)}
         </aside>
       </div>
 
-      {/* Floating cart bar — mobile menu view only */}
-      {mobileView === "menu" && itemCount > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-orange-200 bg-white/95 p-3 backdrop-blur-md lg:hidden pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      {mobileCartOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex min-h-0 flex-col bg-white dark:bg-stone-900 md:hidden pt-[env(safe-area-inset-top)]"
+          role="dialog"
+          aria-label="Cart and checkout"
+        >
+          {renderCartPanel(true)}
+        </div>
+      )}
+
+      {!mobileCartOpen && mobileView === "menu" && itemCount > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-stone-200 bg-white/95 p-3 backdrop-blur-md md:hidden pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <button
             type="button"
             onClick={() => setMobileView("cart")}
@@ -989,7 +1041,7 @@ export default function PosPage() {
           >
             <span className="flex items-center gap-2">
               <ShoppingBag size={18} />
-              {itemCount} item{itemCount !== 1 ? "s" : ""}
+              {itemCount} item{itemCount !== 1 ? "s" : ""} · View cart
             </span>
             <span className="flex items-center gap-1">
               {pkr(total)}
@@ -1000,7 +1052,7 @@ export default function PosPage() {
       )}
 
       {showTablePicker && mode === "DINE_IN" && (
-        <div className="fixed inset-0 z-[90] flex items-end justify-center bg-stone-950/50 p-4 sm:items-center">
+        <div className="fixed inset-0 z-[110] flex items-end justify-center bg-stone-950/50 p-4 sm:items-center">
           <div className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-4 shadow-xl dark:bg-stone-900">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-stone-900 dark:text-stone-50">Dine-in table</h3>
@@ -1119,10 +1171,120 @@ export default function PosPage() {
         saving={false}
         onClose={() => setPriceEditLine(null)}
         onConfirm={(v) => {
-          if (priceEditLine) setLinePrice(priceEditLine.id, Number(v));
+          if (!priceEditLine) return;
+          const n = Number(v);
+          if (!isManager) {
+            setPriceOverridePending({ id: priceEditLine.id, price: n });
+            setPriceEditLine(null);
+            setApprovalFlow("price");
+            return;
+          }
+          setLinePrice(priceEditLine.id, n);
           setPriceEditLine(null);
         }}
       />
+
+      <PosCustomerSheet
+        open={showDetails}
+        onClose={() => setShowDetails(false)}
+        mode={mode}
+        areas={areas}
+        areaId={areaId}
+        onAreaId={setAreaId}
+        deliveryAddress={deliveryAddress}
+        onDeliveryAddress={setDeliveryAddress}
+        customerName={customerName}
+        onCustomerName={setCustomerName}
+        customerPhone={customerPhone}
+        onCustomerPhone={setCustomerPhone}
+      />
+
+      {holdsOpen && (
+        <div className="fixed inset-0 z-[110] flex items-end justify-center bg-stone-950/50 p-4 sm:items-center">
+          <div className="max-h-[80vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-4 shadow-xl dark:bg-stone-900">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold">Held orders</h3>
+              <button type="button" className="text-sm text-stone-500" onClick={() => setHoldsOpen(false)}>Close</button>
+            </div>
+            <ul className="mt-3 space-y-2">
+              {holds.length === 0 ? (
+                <li className="text-sm text-stone-500">No held orders.</li>
+              ) : (
+                holds.map((h) => (
+                  <li key={h.id} className="flex items-center justify-between rounded-xl border border-stone-200 p-3 dark:border-stone-600">
+                    <div>
+                      <p className="text-sm font-semibold">{h.label ?? "Held order"}</p>
+                      <p className="text-[11px] text-stone-500">{new Date(h.createdAt).toLocaleString()}</p>
+                    </div>
+                    <button type="button" className="btn-primary text-xs" onClick={() => void resumeHold(h.id)}>Resume</button>
+                  </li>
+                ))
+              )}
+            </ul>
+            {lines.length > 0 && (
+              <button type="button" className="btn-ghost mt-3 w-full" onClick={() => void parkCurrentOrder()}>
+                Park current cart
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      <PosItemActionSheet
+        item={actionItem}
+        pinned={actionItem ? pinnedIds.includes(actionItem.id) : false}
+        canMark86={canMark86}
+        canPin={isManager}
+        onClose={() => setActionItem(null)}
+        onMarkSoldOut={() => actionItem && void updateItemAvailability(actionItem, false)}
+        onMarkAvailable={() => actionItem && void updateItemAvailability(actionItem, true)}
+        onTogglePin={() => {
+          if (!actionItem) return;
+          togglePinnedMenuId(branchKey, actionItem.id);
+          setPinnedIds(readPinnedMenuIds(branchKey));
+          setActionItem(null);
+        }}
+      />
+
+      <PosLineSheet
+        open={Boolean(lineSheet)}
+        line={lineSheet}
+        onClose={() => setLineSheet(null)}
+        onNoteChange={(note) => lineSheet && setLineInstructions(lineSheet.id, note)}
+        onRemove={() => {
+          if (lineSheet) remove(lineSheet.id);
+          setLineSheet(null);
+        }}
+        onEditPrice={() => {
+          if (lineSheet) beginPriceOverride(lineSheet);
+          setLineSheet(null);
+        }}
+        canEditModifiers={Boolean(lineSheet?.menuItemId)}
+        onEditModifiers={
+          lineSheet?.menuItemId
+            ? () => {
+                const item = menu.find((m) => m.id === lineSheet.menuItemId);
+                if (item) setConfigItem(item);
+                setLineSheet(null);
+              }
+            : undefined
+        }
+      />
+
+      {clearUndoUntil > Date.now() && clearedSnapshot && (
+        <div className="fixed bottom-20 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-xl bg-stone-900 px-4 py-2 text-sm text-white shadow-lg lg:bottom-6">
+          Cart cleared
+          <button type="button" className="font-bold text-brand-300" onClick={undoClear}>Undo</button>
+        </div>
+      )}
+
+      {successToast && (
+        <div className="fixed left-1/2 top-4 z-50 -translate-x-1/2 rounded-xl bg-stone-900 px-4 py-3 text-sm text-white shadow-lg" role="status">
+          Order {successToast.orderNumber} saved
+          {successToast.change != null && successToast.change > 0 ? ` · Change ${pkr(successToast.change)}` : ""}
+          <button type="button" className="ml-3 text-brand-300" onClick={() => setSuccessToast(null)}>OK</button>
+        </div>
+      )}
 
       {approvalFlow === "checkout" && (
         <ManagerApprovalModal
@@ -1135,6 +1297,27 @@ export default function PosPage() {
           onReasonNoteChange={setDiscountReasonNote}
           onCancel={() => setApprovalFlow(null)}
           onApproved={(r) => void placeOrder({ approverId: r.approverId, pin: r.pin })}
+        />
+      )}
+
+      {approvalFlow === "price" && priceOverridePending && (
+        <ManagerApprovalModal
+          open
+          title="Manager approval for price override"
+          reasonOptions={discountReasons}
+          reasonCode={discountReasonCode}
+          reasonNote={discountReasonNote}
+          onReasonCodeChange={setDiscountReasonCode}
+          onReasonNoteChange={setDiscountReasonNote}
+          onCancel={() => {
+            setApprovalFlow(null);
+            setPriceOverridePending(null);
+          }}
+          onApproved={() => {
+            setLinePrice(priceOverridePending.id, priceOverridePending.price);
+            setPriceOverridePending(null);
+            setApprovalFlow(null);
+          }}
         />
       )}
 

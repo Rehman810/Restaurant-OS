@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Banknote, DoorClosed, DoorOpen, Minus, Plus } from "lucide-react";
+import { Banknote, DoorClosed, DoorOpen, Minus, MoreHorizontal, Plus } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { pkr } from "@/lib/format";
 import { InputSheet } from "@/components/admin/InputSheet";
 import { enqueueCashMovement, saveShiftSnapshot } from "@/lib/offline/pos-db";
 import { getDeviceLabel } from "@/lib/offline/device-label";
+import { PosShiftSummarySheet } from "@/components/admin/pos/PosShiftSummarySheet";
 
 type ShiftReport = {
   expectedCash: number;
@@ -36,24 +37,39 @@ const DENOMS = [
 export function CashShiftPanel({
   paymentMethod,
   onShiftChange,
+  compact = false,
+  cashierNameFallback = "Cashier",
 }: {
   paymentMethod: "CASH" | "CARD";
   onShiftChange: (open: boolean) => void;
+  compact?: boolean;
+  cashierNameFallback?: string;
 }) {
   const [shift, setShift] = useState<Shift | null>(null);
   const [report, setReport] = useState<ShiftReport | null>(null);
+  const [cashierName, setCashierName] = useState(cashierNameFallback);
+  const [orderCount, setOrderCount] = useState(0);
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const [openSheet, setOpenSheet] = useState(false);
   const [closeSheet, setCloseSheet] = useState(false);
   const [movementSheet, setMovementSheet] = useState<"in" | "out" | null>(null);
   const [denoms, setDenoms] = useState<Record<string, string>>({});
   const [managerNote, setManagerNote] = useState("");
   const [error, setError] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const data = await api<{ shift: Shift | null; report?: ShiftReport }>("/pos/shift/current");
+      const data = await api<{
+        shift: Shift | null;
+        report?: ShiftReport;
+        cashier?: { name: string };
+        orderCount?: number;
+      }>("/pos/shift/current");
       setShift(data.shift);
       setReport(data.report ?? null);
+      setCashierName(data.cashier?.name ?? cashierNameFallback);
+      setOrderCount(data.orderCount ?? 0);
       onShiftChange(Boolean(data.shift));
       if (data.shift) {
         void saveShiftSnapshot({ shift: data.shift, report: data.report ?? null });
@@ -62,7 +78,7 @@ export function CashShiftPanel({
       setShift(null);
       onShiftChange(false);
     }
-  }, [onShiftChange]);
+  }, [cashierNameFallback, onShiftChange]);
 
   useEffect(() => {
     void load();
@@ -172,6 +188,122 @@ export function CashShiftPanel({
     );
   }
 
+  const cashSales = report?.byType?.SALE_CASH ?? 0;
+  const paidIn = report?.byType?.PAID_IN ?? 0;
+  const paidOut = report?.byType?.PAID_OUT ?? 0;
+  const openingCash = Number(shift.openingCash);
+
+  if (compact) {
+    return (
+      <>
+      <div className="relative rounded-lg bg-stone-50/90 ring-1 ring-stone-200/80 dark:bg-stone-800/40 dark:ring-stone-600">
+        <div className="flex items-start justify-between gap-2 p-2">
+          <button
+            type="button"
+            className="min-h-10 min-w-0 flex-1 text-left"
+            onClick={() => setSummaryOpen(true)}
+          >
+            <span className="block text-[10px] font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">
+              Shift open
+            </span>
+            <span className="mt-0.5 block text-sm font-semibold leading-tight tabular-nums text-stone-800 dark:text-stone-100">
+              Expected {pkr(report?.expectedCash ?? shift.openingCash)}
+            </span>
+          </button>
+          <button
+            type="button"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-white ring-1 ring-stone-200 dark:bg-stone-900 dark:ring-stone-600"
+            aria-label="Shift actions"
+            onClick={() => setMenuOpen((v) => !v)}
+          >
+            <MoreHorizontal size={18} />
+          </button>
+        </div>
+        {error && <p className="border-t border-rose-100 px-2 py-1.5 text-xs text-rose-600 dark:border-rose-900/40">{error}</p>}
+        {menuOpen && (
+          <div className="absolute right-2 top-full z-30 mt-1 w-44 rounded-xl border border-stone-200 bg-white p-1 shadow-lg dark:border-stone-600 dark:bg-stone-900">
+            <button type="button" className="flex w-full rounded-lg px-3 py-2 text-left text-xs font-semibold hover:bg-stone-50 dark:hover:bg-stone-800" onClick={() => { setMovementSheet("in"); setMenuOpen(false); }}>
+              Paid in
+            </button>
+            <button type="button" className="flex w-full rounded-lg px-3 py-2 text-left text-xs font-semibold hover:bg-stone-50 dark:hover:bg-stone-800" onClick={() => { setMovementSheet("out"); setMenuOpen(false); }}>
+              Paid out
+            </button>
+            <button type="button" className="flex w-full rounded-lg px-3 py-2 text-left text-xs font-semibold hover:bg-stone-50 dark:hover:bg-stone-800" onClick={() => { setCloseSheet(true); setMenuOpen(false); }}>
+              Close shift
+            </button>
+          </div>
+        )}
+      </div>
+        <PosShiftSummarySheet
+          open={summaryOpen}
+          onClose={() => setSummaryOpen(false)}
+          cashierName={cashierName}
+          openedAt={shift.openedAt}
+          openingCash={openingCash}
+          expectedCash={report?.expectedCash ?? openingCash}
+          cashSales={cashSales}
+          paidIn={paidIn}
+          paidOut={paidOut}
+          orderCount={orderCount}
+          onPaidIn={() => {
+            setSummaryOpen(false);
+            setMovementSheet("in");
+          }}
+          onPaidOut={() => {
+            setSummaryOpen(false);
+            setMovementSheet("out");
+          }}
+          onCloseShift={() => {
+            setSummaryOpen(false);
+            setCloseSheet(true);
+          }}
+        />
+        <InputSheet
+          open={movementSheet !== null}
+          title={movementSheet === "in" ? "Paid in" : "Paid out"}
+          label="Amount (Rs)"
+          saving={false}
+          onClose={() => setMovementSheet(null)}
+          onConfirm={(amount) => movement(amount, movementSheet === "in" ? "Paid in" : "Paid out")}
+        />
+        {closeSheet && (
+          <div className="fixed inset-0 z-[110] flex items-end justify-center bg-stone-950/50 p-4 sm:items-center">
+            <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl border border-stone-200 bg-white p-5 shadow-xl dark:border-stone-600 dark:bg-stone-900">
+              <h2 className="text-lg font-semibold">Close shift</h2>
+              <p className="mt-1 text-sm text-stone-500">Count bills in the drawer.</p>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {DENOMS.map((d) => (
+                  <label key={d.key} className="text-xs">
+                    {d.label}
+                    <input
+                      className="input mt-0.5 w-full"
+                      type="number"
+                      min={0}
+                      value={denoms[d.key] ?? ""}
+                      onChange={(e) => setDenoms((prev) => ({ ...prev, [d.key]: e.target.value }))}
+                    />
+                  </label>
+                ))}
+              </div>
+              <p className="mt-3 font-bold">Counted: {pkr(denomTotal)}</p>
+              <p className="text-sm text-stone-600">Expected: {pkr(report?.expectedCash ?? 0)}</p>
+              <textarea
+                className="input mt-3 w-full text-sm"
+                placeholder="Manager note (required if variance is high)"
+                value={managerNote}
+                onChange={(e) => setManagerNote(e.target.value)}
+              />
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <button type="button" className="btn-ghost" onClick={() => setCloseSheet(false)}>Cancel</button>
+                <button type="button" className="btn-primary" onClick={() => void closeShift()}>Close shift</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
+
   return (
     <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 py-2 text-sm dark:border-emerald-900/40 dark:bg-emerald-950/20">
       <div className="flex items-center justify-between gap-2">
@@ -205,7 +337,7 @@ export function CashShiftPanel({
       />
 
       {closeSheet && (
-        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-stone-950/50 p-4 sm:items-center">
+        <div className="fixed inset-0 z-[110] flex items-end justify-center bg-stone-950/50 p-4 sm:items-center">
           <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl border border-stone-200 bg-white p-5 shadow-xl dark:border-stone-600 dark:bg-stone-900">
             <h2 className="text-lg font-semibold">Close shift</h2>
             <p className="mt-1 text-sm text-stone-500">Count bills in the drawer.</p>

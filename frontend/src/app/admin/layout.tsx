@@ -21,6 +21,7 @@ import { PublicStore } from "@/lib/types";
 import { OpsKitchenAlertBanner } from "@/components/admin/OpsKitchenAlertBanner";
 import { chefAdminPathAllowed } from "@/lib/kitchen/chef-access";
 import { readKitchenKiosk } from "@/lib/kitchen/display";
+import { readPosFullscreen } from "@/lib/pos/display";
 
 const SIDEBAR_KEY = "uff-admin-sidebar-collapsed";
 
@@ -38,6 +39,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [lowStockCount, setLowStockCount] = useState(0);
   const [syncConflictCount, setSyncConflictCount] = useState(0);
   const [kitchenKiosk, setKitchenKiosk] = useState(false);
+  const [posFullscreen, setPosFullscreen] = useState(false);
   const { theme, toggle: toggleTheme } = useAdminTheme();
 
   useEffect(() => {
@@ -46,8 +48,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     const syncKiosk = () => setKitchenKiosk(readKitchenKiosk());
+    const syncPosFs = () => setPosFullscreen(readPosFullscreen());
     syncKiosk();
+    syncPosFs();
     window.addEventListener("kitchen-kiosk-change", syncKiosk);
+    window.addEventListener("pos-fullscreen-change", syncPosFs);
     const onFs = () => {
       if (!document.fullscreenElement) {
         syncKiosk();
@@ -56,6 +61,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     document.addEventListener("fullscreenchange", onFs);
     return () => {
       window.removeEventListener("kitchen-kiosk-change", syncKiosk);
+      window.removeEventListener("pos-fullscreen-change", syncPosFs);
       document.removeEventListener("fullscreenchange", onFs);
     };
   }, []);
@@ -224,11 +230,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const sidebarSections = navSectionsForRole(user.role, {
     offlinePosEnabled: store?.settings.offlinePosEnabled === true,
   });
+  const allSidebarHrefs = sidebarSections.flatMap((section) => section.items.map((item) => item.href));
   const mobileNav = MOBILE_NAV_FOR_ROLE[user.role];
   const isPos = path.startsWith("/admin/pos");
   const isKitchen = path.startsWith("/admin/kitchen");
   const isDashboard = path === "/admin";
-  const hideChrome = isKitchen && kitchenKiosk;
+  const hideChrome = (isKitchen && kitchenKiosk) || (isPos && posFullscreen);
   const storeTimezone = store?.settings.timezone ?? "Asia/Karachi";
 
   return (
@@ -238,7 +245,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       className="min-h-screen bg-[#fffaf5] dark:bg-stone-950 lg:flex"
     >
       <aside
-        className={`${hideChrome ? "hidden" : isPos ? "hidden lg:flex" : ""} lg:fixed lg:inset-y-0 lg:z-30 lg:flex-col lg:transition-[width] lg:duration-300 ${
+        className={`${hideChrome ? "hidden" : isPos ? "hidden lg:flex" : ""} ${hideChrome && isPos ? "!hidden" : ""} lg:fixed lg:inset-y-0 lg:z-30 lg:flex-col lg:transition-[width] lg:duration-300 ${
           collapsed ? "lg:w-[4.75rem]" : "lg:w-72"
         }`}
       >
@@ -271,8 +278,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   {section.title}
                 </p>
                 {section.items.map((n) => {
-                  const peerHrefs = section.items.map((i) => i.href);
-                  const active = isAdminNavActive(path, n.href, peerHrefs);
+                  const active = isAdminNavActive(path, n.href, allSidebarHrefs);
                   const Icon = n.icon;
                   return (
                     <Link
@@ -370,7 +376,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       >
         <header
           className={`sticky top-0 z-20 flex items-center justify-between border-b border-orange-100/80 bg-[#fffaf5]/90 px-4 py-3 backdrop-blur-md dark:border-stone-700 dark:bg-stone-950/90 sm:px-6 lg:px-8 ${
-            hideChrome ? "hidden" : isPos ? "hidden lg:flex" : ""
+            hideChrome ? "hidden" : isPos ? "hidden" : ""
           }`}
         >
           <div className="flex items-center gap-3">
@@ -435,7 +441,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <main
           className={
             isPos
-              ? "flex min-h-0 flex-1 flex-col overflow-y-auto p-0 lg:p-8 lg:pb-8"
+              ? `flex min-h-0 flex-1 flex-col overflow-hidden p-0 ${posFullscreen ? "" : "lg:p-8 lg:pb-8"}`
               : isKitchen
                 ? hideChrome
                   ? "fixed inset-0 z-40 flex min-h-0 flex-col overflow-hidden bg-[#fffaf5] p-2 dark:bg-stone-950"

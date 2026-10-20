@@ -1,5 +1,5 @@
 import { Router, type Request } from "express";
-import { CashMovementType, Role } from "@prisma/client";
+import { CashMovementType, OrderSource, OrderStatus, Role } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { ADMIN_LIKE } from "../lib/roles";
@@ -33,7 +33,21 @@ posShiftRouter.get("/current", requireAuth, requireRole(...POS_SHIFT_ROLES), asy
     const shift = await findOpenShift(branchId, req.user!.id);
     if (!shift) return res.json({ shift: null });
     const report = buildShiftReport(shift);
-    res.json({ shift, report });
+    const orderCount = await prisma.order.count({
+      where: {
+        branchId,
+        createdById: req.user!.id,
+        orderSource: OrderSource.POS,
+        createdAt: { gte: shift.openedAt },
+        status: { not: OrderStatus.CANCELLED },
+      },
+    });
+    res.json({
+      shift,
+      report,
+      cashier: shift.cashier,
+      orderCount,
+    });
   } catch (err) {
     return branchScopeError(res, err);
   }
