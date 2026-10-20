@@ -70,7 +70,7 @@ export function AdminSelect({
 
     setMenuRect({
       left: rect.left,
-      width: rect.width,
+      width: Math.max(rect.width, 200),
       maxHeight,
       placement: openUp ? "top" : "bottom",
       ...(openUp
@@ -141,7 +141,7 @@ export function AdminSelect({
                 ? { bottom: menuRect.bottom }
                 : { top: menuRect.top }),
             }}
-            className="overflow-y-auto overscroll-contain rounded-xl border border-stone-200/80 bg-white p-1.5 shadow-2xl shadow-stone-900/15 ring-1 ring-stone-900/5"
+            className="overflow-y-auto overscroll-contain rounded-xl border border-stone-200/80 bg-white p-1.5 shadow-2xl shadow-stone-900/15 ring-1 ring-stone-900/5 dark:border-stone-600 dark:bg-stone-900 dark:ring-stone-700"
           >
             {options.map((opt) => {
               const active = opt.value === value;
@@ -152,12 +152,12 @@ export function AdminSelect({
                     type="button"
                     disabled={opt.disabled}
                     onClick={() => pick(opt.value)}
-                    className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left text-xs font-medium transition ${
+                    className={`flex min-h-11 w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition ${
                       opt.disabled
                         ? "cursor-not-allowed text-stone-300"
                         : active
-                          ? "bg-brand-50 text-brand-900"
-                          : "text-stone-700 hover:bg-stone-50"
+                          ? "bg-brand-50 text-brand-900 dark:bg-brand-950/50 dark:text-brand-100"
+                          : "text-stone-700 hover:bg-stone-50 dark:text-stone-200 dark:hover:bg-stone-800"
                     }`}
                   >
                     <span className="flex min-w-0 items-center gap-2.5">
@@ -189,11 +189,11 @@ export function AdminSelect({
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className={`flex w-full items-center justify-between gap-2 rounded-xl border bg-white py-2.5 pl-3 pr-2.5 text-left text-xs font-semibold shadow-sm outline-none transition ${
+        className={`flex min-h-11 w-full items-center justify-between gap-2 rounded-xl border bg-white py-2.5 pl-3 pr-2.5 text-left text-sm font-semibold shadow-sm outline-none transition dark:bg-stone-900 ${
           open
-            ? "border-brand-400 ring-2 ring-brand-100"
-            : "border-stone-200 hover:border-stone-300 hover:shadow"
-        } ${selected ? "text-stone-800" : "text-stone-400"}`}
+            ? "border-brand-400 ring-2 ring-brand-100 dark:ring-brand-900"
+            : "border-stone-200 hover:border-stone-300 hover:shadow dark:border-stone-600"
+        } ${selected ? "text-stone-800 dark:text-stone-100" : "text-stone-400"}`}
       >
         <span className="flex min-w-0 items-center gap-2">
           {selectedTheme && (

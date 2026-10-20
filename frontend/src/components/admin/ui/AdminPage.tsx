@@ -7,10 +7,18 @@ import { HTMLAttributes, ReactNode } from "react";
 export function AdminPage({
   children,
   className = "",
+  fill = false,
   ...rest
-}: { children: ReactNode; className?: string } & HTMLAttributes<HTMLDivElement>) {
+}: { children: ReactNode; className?: string; fill?: boolean } & HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={`min-w-0 w-full space-y-5 ${className}`} {...rest}>
+    <div
+      className={`min-w-0 w-full ${
+        fill
+          ? "flex min-h-0 flex-1 flex-col overflow-hidden max-lg:min-h-[calc(100dvh-10.5rem)] lg:h-full"
+          : "space-y-5"
+      } ${className}`}
+      {...rest}
+    >
       {children}
     </div>
   );
@@ -50,8 +58,8 @@ export function AdminPageHeader({
 }) {
   const grad = ICON_GRADIENTS[iconAccent];
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div className="flex min-w-0 items-start gap-3">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex min-w-0 items-center gap-3">
         {Icon && (
           <span
             className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br ${grad} text-white shadow-md`}

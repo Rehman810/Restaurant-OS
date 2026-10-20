@@ -155,3 +155,15 @@ export function emitKitchenAlert(alert: KitchenAlertPayload) {
   if (!io) return;
   io.to("ops").emit("kitchen:alert", { ...alert, at: Date.now() });
 }
+
+/** Broadcast menu/catalog changes (storefront, POS, kitchen refetch). */
+export function emitMenuCatalogChanged(branchIds?: string[]) {
+  if (!io) return;
+  const payload = { at: Date.now() };
+  io.emit("menu:catalog-changed", payload);
+  io.to("ops").emit("menu:catalog-changed", payload);
+  const ids = branchIds?.length ? [...new Set(branchIds)] : [];
+  for (const branchId of ids) {
+    io.to(`branch:${branchId}`).emit("menu:availability-changed", { branchId, ...payload });
+  }
+}

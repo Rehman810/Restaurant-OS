@@ -7,7 +7,9 @@ import {
   Building2,
   ClipboardList,
   DoorClosed,
+  FolderTree,
   Flame,
+  Sparkles,
   LayoutDashboard,
   LayoutGrid,
   Map,
@@ -57,7 +59,9 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
   {
     title: "Catalog",
     items: [
-      { href: "/admin/menu", label: "Menu", icon: UtensilsCrossed },
+      { href: "/admin/catalog/dishes", label: "Dishes", icon: UtensilsCrossed },
+      { href: "/admin/catalog/deals", label: "Deals", icon: Sparkles },
+      { href: "/admin/catalog/categories", label: "Categories", icon: FolderTree },
       { href: "/admin/coupons", label: "Coupons", icon: Tag },
       { href: "/admin/inventory", label: "Inventory", icon: Package },
       { href: "/admin/areas", label: "Areas", icon: MapPinned },

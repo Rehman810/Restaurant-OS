@@ -205,6 +205,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         "/admin/pos",
         "/admin/orders",
         "/admin/tracking",
+        "/admin/catalog",
         "/admin/menu",
         "/admin/areas",
         "/admin/customers",
@@ -326,13 +327,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                       <Icon size={18} className={active ? "text-brand-600" : ""} />
                       <span className={collapsed ? "lg:hidden" : ""}>{n.label}</span>
                       {n.href === "/admin/inventory" && lowStockCount > 0 && (
-                        <span
-                          className={`ml-auto grid min-w-[1.25rem] place-items-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold text-white ${
+                        <Link
+                          href="/admin/inventory?stock=low"
+                          title={`${lowStockCount} low stock item${lowStockCount === 1 ? "" : "s"}`}
+                          className={`ml-auto grid min-w-[1.25rem] place-items-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold text-white hover:bg-rose-600 ${
                             collapsed ? "lg:absolute lg:right-1 lg:top-1 lg:ml-0" : ""
                           }`}
+                          onClick={(e) => e.stopPropagation()}
                         >
                           {lowStockCount > 99 ? "99+" : lowStockCount}
-                        </span>
+                        </Link>
                       )}
                       {n.href === "/admin/sync-conflicts" && syncConflictCount > 0 && (
                         <span

@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { Role } from "@prisma/client";
 import { defaultsForCategory, enrichCategory } from "../lib/category-meta";
+import { parseCategoryScheduleBody } from "../lib/admin-menu/category-mutations";
+import { notifyMenuChanged } from "../lib/admin-menu/emit";
 import { prisma } from "../lib/prisma";
 import { ADMIN_LIKE } from "../lib/roles";
 import { requireAuth, requireRole } from "../middleware/auth";
@@ -43,14 +45,20 @@ categoriesRouter.post("/", requireAuth, requireRole(...ADMIN_LIKE), async (req, 
 
   const defaults = defaultsForCategory(name);
   const maxOrder = await prisma.category.aggregate({ _max: { sortOrder: true } });
+  const schedule = parseCategoryScheduleBody(req.body);
   const category = await prisma.category.create({
     data: {
       name,
       tagline: String(req.body.tagline || defaults.tagline).trim(),
       imageUrl: String(req.body.imageUrl || defaults.imageUrl).trim(),
       sortOrder: (maxOrder._max.sortOrder ?? 0) + 1,
+      isVisible: req.body.isVisible !== false,
+      ...(schedule.scheduleDays !== undefined ? { scheduleDays: schedule.scheduleDays } : {}),
+      ...(schedule.scheduleStartMinutes !== undefined ? { scheduleStartMinutes: schedule.scheduleStartMinutes } : {}),
+      ...(schedule.scheduleEndMinutes !== undefined ? { scheduleEndMinutes: schedule.scheduleEndMinutes } : {}),
     },
   });
+  notifyMenuChanged();
   res.status(201).json(enrichCategory(category));
 });
 
@@ -75,26 +83,32 @@ categoriesRouter.put("/:id", requireAuth, requireRole(...ADMIN_LIKE), async (req
     });
   }
 
+  const schedule = parseCategoryScheduleBody(req.body);
   const updated = await prisma.category.update({
     where: { id: req.params.id },
     data: {
       ...(name !== undefined ? { name } : {}),
       ...(tagline !== undefined ? { tagline } : {}),
       ...(imageUrl !== undefined ? { imageUrl } : {}),
+      ...(req.body.isVisible !== undefined ? { isVisible: req.body.isVisible !== false } : {}),
+      ...(schedule.scheduleDays !== undefined ? { scheduleDays: schedule.scheduleDays } : {}),
+      ...(schedule.scheduleStartMinutes !== undefined ? { scheduleStartMinutes: schedule.scheduleStartMinutes } : {}),
+      ...(schedule.scheduleEndMinutes !== undefined ? { scheduleEndMinutes: schedule.scheduleEndMinutes } : {}),
     },
   });
+  notifyMenuChanged();
   res.json(enrichCategory(updated));
 });
 
 categoriesRouter.delete("/:id", requireAuth, requireRole(...ADMIN_LIKE), async (req, res) => {
-  const category = await prisma.category.findUnique({ where: { id: req.params.id } });
-  if (!category) return res.status(404).json({ error: "Category not found." });
-
-  const inUse = await prisma.menuItem.count({ where: { category: category.name } });
-  if (inUse > 0) {
-    return res.status(400).json({ error: `Cannot delete — ${inUse} dish(es) use this category.` });
+  const { deleteCategory } = await import("../lib/admin-menu/category-mutations");
+  const moveToCategoryId = req.body?.moveToCategoryId ? String(req.body.moveToCategoryId) : undefined;
+  const result = await deleteCategory(req, req.params.id, moveToCategoryId);
+  if (result.status !== 200) {
+    return res.status(result.status).json({
+      error: result.error,
+      ...(result.requiresMoveTo ? { requiresMoveTo: true, dishCount: result.dishCount } : {}),
+    });
   }
-
-  await prisma.category.delete({ where: { id: req.params.id } });
   res.json({ ok: true });
 });

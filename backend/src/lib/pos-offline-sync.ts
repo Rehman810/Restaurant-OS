@@ -97,7 +97,10 @@ export async function syncPosOrderFromOffline(
     return { order: existing, created: false, conflict: existing.needsReview };
   }
 
-  const built = await buildOrderLines(body.items ?? [], body.deals ?? [], { skipUnavailable: true });
+  const built = await buildOrderLines(body.items ?? [], body.deals ?? [], {
+    skipUnavailable: true,
+    branchId,
+  });
   const reviewReasons: string[] = [];
   if (!built.ok) {
     throw Object.assign(new Error(built.error), { status: built.status });

@@ -10,6 +10,7 @@ type Props = {
   rangeEnd: number;
   onPageChange: (page: number) => void;
   className?: string;
+  docked?: boolean;
 };
 
 export function Pagination({
@@ -20,12 +21,17 @@ export function Pagination({
   rangeEnd,
   onPageChange,
   className = "",
+  docked = false,
 }: Props) {
-  if (totalItems === 0 || totalPages <= 1) return null;
+  if (totalItems === 0) return null;
 
   return (
     <nav
-      className={`flex flex-col gap-3 rounded-2xl border border-stone-200/80 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between ${className}`}
+      className={`flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between ${
+        docked
+          ? "px-0 py-3"
+          : "rounded-2xl border border-stone-200/80 bg-white px-4 py-3 shadow-sm"
+      } ${className}`}
       aria-label="Pagination"
     >
       <p className="text-xs font-medium text-stone-500">

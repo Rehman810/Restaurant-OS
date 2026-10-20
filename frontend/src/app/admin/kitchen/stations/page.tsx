@@ -203,7 +203,7 @@ export default function PrintStationsPage() {
       </div>
 
       <Link
-        href="/admin/menu"
+        href="/admin/catalog/dishes"
         className="flex items-center justify-between gap-3 rounded-2xl border border-dashed border-brand-200 bg-brand-50/50 px-4 py-3 text-sm font-semibold text-brand-900 transition hover:bg-brand-50 dark:border-brand-800 dark:bg-brand-950/30 dark:text-brand-100 dark:hover:bg-brand-950/50"
       >
         <span className="inline-flex items-center gap-2">

@@ -11,14 +11,28 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { ImageIcon, Layers, Loader2, Upload, X } from "lucide-react";
+import { Check, ImageIcon, Layers, Loader2, Upload, X } from "lucide-react";
 
 const CLOSE_MS = 340;
+
+export const CATEGORY_WEEKDAYS: { value: number; label: string }[] = [
+  { value: 0, label: "Sun" },
+  { value: 1, label: "Mon" },
+  { value: 2, label: "Tue" },
+  { value: 3, label: "Wed" },
+  { value: 4, label: "Thu" },
+  { value: 5, label: "Fri" },
+  { value: 6, label: "Sat" },
+];
 
 export type CategoryFormData = {
   name: string;
   tagline: string;
   imageUrl: string;
+  isVisible: boolean;
+  scheduleDays: number[];
+  scheduleStartTime: string;
+  scheduleEndTime: string;
 };
 
 function BannerImage({ src, alt }: { src: string; alt: string }) {
@@ -186,10 +200,71 @@ export function CategoryFormSheet({
               />
               <p className="mt-1 text-xs text-stone-400">Shown above the category name on the storefront menu.</p>
             </div>
+
+            <div className="space-y-2 rounded-xl border border-stone-200 p-3 dark:border-stone-700">
+              <p className="text-xs font-semibold uppercase text-stone-500">Weekly hours (optional)</p>
+              <p className="text-xs text-stone-500">Leave days empty to show this category all week.</p>
+              <div className="flex flex-wrap gap-2">
+                {CATEGORY_WEEKDAYS.map((d) => {
+                  const on = form.scheduleDays.includes(d.value);
+                  return (
+                    <button
+                      key={d.value}
+                      type="button"
+                      onClick={() =>
+                        setForm((f) => ({
+                          ...f,
+                          scheduleDays: on ? f.scheduleDays.filter((x) => x !== d.value) : [...f.scheduleDays, d.value],
+                        }))
+                      }
+                      className={`min-h-10 rounded-full px-3 text-xs font-semibold ring-1 ${
+                        on ? "bg-brand-600 text-white ring-brand-600" : "bg-white ring-stone-200 dark:bg-stone-900"
+                      }`}
+                    >
+                      {d.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-stone-500">From</label>
+                  <input
+                    className="input"
+                    type="time"
+                    value={form.scheduleStartTime}
+                    onChange={(e) => setForm((f) => ({ ...f, scheduleStartTime: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-stone-500">Until</label>
+                  <input
+                    className="input"
+                    type="time"
+                    value={form.scheduleEndTime}
+                    onChange={(e) => setForm((f) => ({ ...f, scheduleEndTime: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setForm((f) => ({ ...f, isVisible: !f.isVisible }))}
+              className={`flex min-h-11 w-full items-center justify-between rounded-xl border px-4 py-3 text-sm font-medium ${
+                form.isVisible ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-stone-200 bg-stone-50 text-stone-600"
+              }`}
+            >
+              <span>{form.isVisible ? "Visible on storefront" : "Hidden from customers"}</span>
+              {form.isVisible && <Check size={16} />}
+            </button>
           </div>
 
-          <footer className="shrink-0 border-t border-stone-100 bg-stone-50/80 px-6 py-4">
-            <button type="submit" disabled={saving} className="btn-primary w-full">
+          <footer className="flex shrink-0 gap-2 border-t border-stone-100 bg-stone-50/80 px-6 py-4">
+            <button type="button" onClick={close} className="min-h-11 flex-1 rounded-xl border border-stone-200 text-sm font-semibold">
+              Cancel
+            </button>
+            <button type="submit" disabled={saving} className="btn-primary min-h-11 flex-1">
               {saving ? "Saving…" : editingId ? "Save category" : "Create category"}
             </button>
           </footer>

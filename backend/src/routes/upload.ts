@@ -22,11 +22,18 @@ uploadRouter.post(
       }
 
       reencodeImage(req.file.path)
-        .then((filename) => {
+        .then((processed) => {
           const host = req.get("host");
           const protocol = req.protocol;
-          const url = `${protocol}://${host}/uploads/${filename}`;
-          res.status(201).json({ url, filename });
+          const url = `${protocol}://${host}/uploads/${processed.filename}`;
+          const thumbnailUrl = `${protocol}://${host}/uploads/${processed.thumbnailFilename}`;
+          res.status(201).json({
+            url,
+            thumbnailUrl,
+            filename: processed.filename,
+            width: processed.width,
+            height: processed.height,
+          });
         })
         .catch((encodeErr: unknown) => {
           const message = encodeErr instanceof Error ? encodeErr.message : "Upload failed.";

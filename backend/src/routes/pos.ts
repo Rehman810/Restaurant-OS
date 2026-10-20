@@ -180,7 +180,15 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
     if (existing) return res.status(200).json(existing);
   }
 
-  const built = await buildOrderLines(items ?? [], deals ?? []);
+  let scope;
+  try {
+    scope = await resolveBranchScope(req);
+  } catch (err) {
+    return branchScopeError(res, err);
+  }
+  const resolvedBranchId = scope.allBranches ? await getDefaultBranchId() : scope.branchId!;
+
+  const built = await buildOrderLines(items ?? [], deals ?? [], { branchId: resolvedBranchId });
   if (!built.ok) return res.status(built.status).json({ error: built.error });
 
   if (built.hadPriceOverride) {
@@ -195,14 +203,6 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
       return res.status(resolved.status).json({ error: resolved.error, code: resolved.code });
     }
   }
-
-  let scope;
-  try {
-    scope = await resolveBranchScope(req);
-  } catch (err) {
-    return branchScopeError(res, err);
-  }
-  const resolvedBranchId = scope.allBranches ? await getDefaultBranchId() : scope.branchId!;
 
   let deliveryCharge = 0;
   let areaId: string | null = null;

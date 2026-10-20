@@ -7,6 +7,12 @@ import { requireAuth, requireRole } from "../middleware/auth";
 import { writeAudit } from "../lib/audit";
 import { AuditAction } from "../lib/audit-actions";
 import { clientIp } from "../lib/client-ip";
+import { getDefaultBranchId } from "../lib/branch-scope";
+import { getStoreSettings } from "../lib/settings-data";
+import { evaluateCategorySchedule } from "../lib/admin-menu/category-schedule";
+import { categoryOrderMap, compareMenuItems } from "../lib/admin-menu/menu-sort";
+import { resolveAvailability } from "../lib/admin-menu/availability";
+import { notifyMenuChanged } from "../lib/admin-menu/emit";
 
 export const menuRouter = Router();
 
@@ -108,32 +114,76 @@ menuRouter.get("/", async (req, res) => {
   const offset = Math.max(0, Number(req.query.offset) || 0);
   const search = String(req.query.search || "").trim();
   const category = String(req.query.category || "").trim();
+  const branchId = String(req.query.branchId || "").trim() || await getDefaultBranchId();
+  const settings = await getStoreSettings();
+  const branch = await prisma.branch.findUnique({ where: { id: branchId }, select: { timezone: true } });
+  const timezone = branch?.timezone || settings.timezone || "Asia/Karachi";
+
+  const categories = await prisma.category.findMany({
+    where: { archivedAt: null, isVisible: true },
+    select: {
+      name: true,
+      sortOrder: true,
+      isVisible: true,
+      archivedAt: true,
+      scheduleDays: true,
+      scheduleStartMinutes: true,
+      scheduleEndMinutes: true,
+    },
+  });
+  const now = new Date();
+  const activeCategories = categories.filter((c) => evaluateCategorySchedule(c, now, timezone) === "active");
+  const activeCategoryNames = activeCategories.map((c) => c.name);
+
+  if (category && category !== "All" && !activeCategoryNames.includes(category)) {
+    return res.json({ items: [], total: 0, limit, offset, branchId });
+  }
 
   const where = {
-    ...(category && category !== "All" ? { category } : {}),
+    archivedAt: null,
+    isVisible: true,
+    ...(category && category !== "All"
+      ? { category }
+      : activeCategoryNames.length
+        ? { category: { in: activeCategoryNames } }
+        : { category: { in: [] as string[] } }),
     ...(search
       ? {
           OR: [
             { name: { contains: search, mode: "insensitive" as const } },
             { description: { contains: search, mode: "insensitive" as const } },
             { category: { contains: search, mode: "insensitive" as const } },
+            { sku: { contains: search, mode: "insensitive" as const } },
           ],
         }
       : {}),
   };
 
-  const [items, total] = await Promise.all([
+  const [overrides, items, total] = await Promise.all([
+    prisma.menuItemBranchAvailability.findMany({ where: { branchId } }),
     prisma.menuItem.findMany({
       where,
       include: menuInclude,
-      orderBy: { createdAt: "desc" },
       take: limit,
       skip: offset,
     }),
     prisma.menuItem.count({ where }),
   ]);
+  const catOrder = categoryOrderMap(activeCategories);
+  const overrideMap = new Map(overrides.map((o) => [o.menuItemId, o]));
+  items.sort((a, b) => compareMenuItems(a, b, catOrder));
 
-  res.json({ items: items.map(serializeMenuItem), total, limit, offset });
+  res.json({
+    items: items.map((item) => {
+      const avail = resolveAvailability(overrideMap.get(item.id) ?? null, timezone, !item.isAvailable);
+      const serialized = serializeMenuItem(item);
+      return { ...serialized, isAvailable: avail.state === "available" };
+    }),
+    total,
+    limit,
+    offset,
+    branchId,
+  });
 });
 
 menuRouter.get("/:id", async (req, res) => {
@@ -231,6 +281,7 @@ menuRouter.post("/", requireAuth, requireRole(...ADMIN_LIKE), async (req, res) =
   await syncOptionGroups(item.id, optionGroups);
   await syncAddons(item.id, addons);
   const full = await prisma.menuItem.findUnique({ where: { id: item.id }, include: menuInclude });
+  notifyMenuChanged();
   res.status(201).json(serializeMenuItem(full!));
 });
 
@@ -312,6 +363,7 @@ menuRouter.put("/:id", requireAuth, requireRole(...ADMIN_LIKE), async (req, res)
     }
     if (addons !== undefined) await syncAddons(item.id, addons);
     const full = await prisma.menuItem.findUnique({ where: { id: item.id }, include: menuInclude });
+    notifyMenuChanged();
     res.json(serializeMenuItem(full!));
   } catch {
     res.status(404).json({ error: "Item not found" });
@@ -321,6 +373,7 @@ menuRouter.put("/:id", requireAuth, requireRole(...ADMIN_LIKE), async (req, res)
 menuRouter.delete("/:id", requireAuth, requireRole(...ADMIN_LIKE), async (req, res) => {
   try {
     await prisma.menuItem.delete({ where: { id: req.params.id } });
+    notifyMenuChanged();
     res.json({ ok: true });
   } catch {
     res.status(404).json({ error: "Item not found" });

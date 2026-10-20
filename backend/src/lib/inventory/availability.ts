@@ -1,9 +1,15 @@
+import { SoldOutUntilKind } from "@prisma/client";
 import { prisma } from "../prisma";
+import { getStoreSettings } from "../settings-data";
 
-/** Mark menu items unavailable when recipe ingredients cannot cover one portion. */
+/** Mark menu items sold out at a branch when recipe ingredients cannot cover one portion. */
 export async function refreshMenuAvailabilityForBranch(branchId: string) {
   const settings = await prisma.storeSettings.findUnique({ where: { id: "default" } });
   if (!settings?.inventoryAutoHideMenu) return;
+
+  const storeSettings = await getStoreSettings();
+  const branch = await prisma.branch.findUnique({ where: { id: branchId }, select: { timezone: true } });
+  const timezone = branch?.timezone || storeSettings.timezone || "Asia/Karachi";
 
   const recipes = await prisma.recipeLine.findMany({
     include: { item: true },
@@ -30,9 +36,29 @@ export async function refreshMenuAvailabilityForBranch(branchId: string) {
         break;
       }
     }
-    await prisma.menuItem.update({
-      where: { id: menuItemId },
-      data: { isAvailable: ok },
-    });
+    if (!ok) {
+      await prisma.menuItemBranchAvailability.upsert({
+        where: { menuItemId_branchId: { menuItemId, branchId } },
+        create: {
+          menuItemId,
+          branchId,
+          soldOut: true,
+          untilKind: SoldOutUntilKind.INDEFINITE,
+          reason: "auto_inventory",
+        },
+        update: {
+          soldOut: true,
+          untilKind: SoldOutUntilKind.INDEFINITE,
+          reason: "auto_inventory",
+          setAt: new Date(),
+        },
+      });
+    } else {
+      await prisma.menuItemBranchAvailability.deleteMany({
+        where: { menuItemId, branchId, reason: "auto_inventory" },
+      });
+    }
   }
+
+  void timezone;
 }

@@ -2,7 +2,12 @@ import { Router, type Request } from "express";
 import { OrderStatus, Role } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { requireAuth, requireRole } from "../middleware/auth";
-import { branchScopeError, isOrderOutsideUserBranch, resolveBranchScope } from "../lib/branch-scope";
+import {
+  branchScopeError,
+  getDefaultBranchId,
+  isOrderOutsideUserBranch,
+  resolveBranchScope,
+} from "../lib/branch-scope";
 import { emitKitchenAlert, emitOrderChange } from "../lib/realtime";
 import { writeAudit } from "../lib/audit";
 import { AuditAction } from "../lib/audit-actions";
@@ -164,32 +169,51 @@ kitchenRouter.patch("/menu/:menuItemId/stock", requireAuth, requireRole(...KITCH
   const prior = await prisma.menuItem.findUnique({ where: { id: req.params.menuItemId } });
   if (!prior) return res.status(404).json({ error: "Menu item not found." });
 
-  const item = await prisma.menuItem.update({
-    where: { id: prior.id },
-    data: { isAvailable: available },
+  let scope;
+  try {
+    scope = await resolveBranchScope(req);
+  } catch (err) {
+    return branchScopeError(res, err);
+  }
+  const branchId = scope.branchId ?? await getDefaultBranchId();
+
+  const before = await prisma.menuItemBranchAvailability.findUnique({
+    where: { menuItemId_branchId: { menuItemId: prior.id, branchId } },
   });
 
-  if (prior.isAvailable !== item.isAvailable) {
-    await writeAudit(prisma, {
-      actorId: req.user!.id,
-      actorRole: req.user!.role,
-      action: AuditAction.ITEM_AVAILABILITY_CHANGED,
-      entityType: "menu_item",
-      entityId: item.id,
-      before: { isAvailable: prior.isAvailable },
-      after: { isAvailable: item.isAvailable },
-      ip: clientIp(req),
+  if (available) {
+    await prisma.menuItemBranchAvailability.deleteMany({ where: { menuItemId: prior.id, branchId } });
+  } else {
+    await prisma.menuItemBranchAvailability.upsert({
+      where: { menuItemId_branchId: { menuItemId: prior.id, branchId } },
+      create: { menuItemId: prior.id, branchId, soldOut: true, reason: "kitchen_86", setById: req.user!.id },
+      update: { soldOut: true, reason: "kitchen_86", setById: req.user!.id, setAt: new Date() },
     });
   }
+
+  await writeAudit(prisma, {
+    actorId: req.user!.id,
+    actorRole: req.user!.role,
+    branchId,
+    action: AuditAction.ITEM_AVAILABILITY_CHANGED,
+    entityType: "menu_item",
+    entityId: prior.id,
+    before: before ?? { available: true },
+    after: { available, branchId },
+    ip: clientIp(req),
+  });
+
+  const { notifyMenuChanged } = await import("../lib/admin-menu/emit");
+  notifyMenuChanged([branchId]);
 
   emitKitchenAlert({
     type: "menu_86",
     orderId: "",
     orderNumber: "",
-    message: available ? `${item.name} is back on the menu` : `86 — ${item.name} marked out of stock`,
+    message: available ? `${prior.name} is back on the menu` : `86 — ${prior.name} marked out of stock`,
   });
 
-  res.json({ id: item.id, name: item.name, isAvailable: item.isAvailable });
+  res.json({ id: prior.id, name: prior.name, isAvailable: available, branchId });
 });
 
 kitchenRouter.post("/stale/close", requireAuth, requireRole(...KITCHEN_MANAGERS), async (req, res) => {

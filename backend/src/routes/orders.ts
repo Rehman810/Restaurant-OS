@@ -35,6 +35,7 @@ import {
   resolveBranchScope,
 } from "../lib/branch-scope";
 import { buildOrderLines, nextOrderNumber } from "../lib/order-lines";
+import { loadMenuOrderableMap } from "../lib/admin-menu/orderable";
 import {
   canTransitionStatus,
   chefKitchenUndoStatus,
@@ -259,6 +260,10 @@ ordersRouter.post("/", optionalAuth, async (req, res) => {
     },
   });
   const byId = new Map(menuItems.map((m) => [m.id, m]));
+  const orderable = await loadMenuOrderableMap(
+    resolvedBranchId,
+    cartItems.map((i) => i.menuItemId)
+  );
 
   const lines: {
     menuItemId: string;
@@ -272,8 +277,10 @@ ordersRouter.post("/", optionalAuth, async (req, res) => {
 
   for (const row of cartItems) {
     const menu = byId.get(row.menuItemId);
-    if (!menu || !menu.isAvailable) {
-      return res.status(400).json({ error: `Item unavailable: ${row.menuItemId}` });
+    if (!menu || !orderable.get(menu.id)) {
+      return res.status(400).json({
+        error: `Item unavailable: ${menu?.name ?? row.menuItemId}`,
+      });
     }
     const qty = Math.max(1, Number(row.quantity) || 1);
     const labels: string[] = [];
@@ -347,8 +354,12 @@ ordersRouter.post("/", optionalAuth, async (req, res) => {
       0
     );
 
+    const dealOrderable = await loadMenuOrderableMap(
+      resolvedBranchId,
+      deal.items.map((i) => i.menuItemId)
+    );
     for (const item of deal.items) {
-      if (!item.menuItem.isAvailable) {
+      if (!dealOrderable.get(item.menuItemId)) {
         return res.status(400).json({ error: `${item.menuItem.name} in this deal is unavailable.` });
       }
       const share =

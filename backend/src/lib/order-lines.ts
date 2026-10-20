@@ -1,5 +1,7 @@
 import { prisma } from "./prisma";
 import { effectiveItemPrice } from "./store-settings";
+import { getDefaultBranchId } from "./branch-scope";
+import { loadMenuOrderableMap } from "./admin-menu/orderable";
 
 export type CartItemInput = {
   menuItemId: string;
@@ -29,6 +31,7 @@ type BuildResult =
 export type BuildOrderLinesOptions = {
   /** Skip unavailable items/deals and return warnings (offline POS sync). */
   skipUnavailable?: boolean;
+  branchId?: string;
 };
 
 export async function buildOrderLines(
@@ -37,6 +40,7 @@ export async function buildOrderLines(
   options?: BuildOrderLinesOptions
 ): Promise<BuildResult> {
   const skipUnavailable = options?.skipUnavailable === true;
+  const branchId = options?.branchId ?? (await getDefaultBranchId());
   const warnings: string[] = [];
   if (!cartItems.length && !cartDeals.length) {
     return { ok: false, error: "Cart is empty. Add items first.", status: 400 };
@@ -51,6 +55,10 @@ export async function buildOrderLines(
     },
   });
   const byId = new Map(menuItems.map((m) => [m.id, m]));
+  const orderable = await loadMenuOrderableMap(
+    branchId,
+    cartItems.map((i) => i.menuItemId)
+  );
 
   const lines: OrderLine[] = [];
   let subtotal = 0;
@@ -58,7 +66,8 @@ export async function buildOrderLines(
 
   for (const row of cartItems) {
     const menu = byId.get(row.menuItemId);
-    if (!menu || !menu.isAvailable) {
+    const canOrder = menu && orderable.get(menu.id) === true;
+    if (!canOrder) {
       const label = menu?.name || row.menuItemId;
       if (skipUnavailable) {
         warnings.push(`Item unavailable: ${label}`);
@@ -132,8 +141,12 @@ export async function buildOrderLines(
       }
       return { ok: false, error: "Deal unavailable.", status: 400 };
     }
+    const dealOrderable = await loadMenuOrderableMap(
+      branchId,
+      deal.items.map((i) => i.menuItemId)
+    );
     if (skipUnavailable) {
-      const missing = deal.items.filter((item) => !item.menuItem.isAvailable);
+      const missing = deal.items.filter((item) => !dealOrderable.get(item.menuItemId));
       if (missing.length) {
         warnings.push(
           `${missing.map((i) => i.menuItem.name).join(", ")} in deal ${deal.title} unavailable — deal skipped.`
@@ -151,7 +164,7 @@ export async function buildOrderLines(
     );
 
     for (const item of deal.items) {
-      if (!item.menuItem.isAvailable) {
+      if (!dealOrderable.get(item.menuItemId)) {
         return { ok: false, error: `${item.menuItem.name} in this deal is unavailable.`, status: 400 };
       }
       const share =

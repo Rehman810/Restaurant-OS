@@ -124,7 +124,9 @@ export function InventoryModule() {
     { id: string; type: string; itemName: string; quantityDelta: number; createdAt: string }[]
   >([]);
   const [searchQ, setSearchQ] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState(() =>
+    search.get("stock") === "low" ? "low" : "all"
+  );
   const [categoryFilter, setCategoryFilter] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [stockPage, setStockPage] = useState(1);

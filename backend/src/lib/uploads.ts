@@ -27,7 +27,14 @@ export const imageUpload = multer({
   },
 });
 
-export async function reencodeImage(filePath: string) {
+export type ProcessedImage = {
+  filename: string;
+  thumbnailFilename: string;
+  width: number;
+  height: number;
+};
+
+export async function reencodeImage(filePath: string): Promise<ProcessedImage> {
   const buf = fs.readFileSync(filePath);
   const kind = sniffImage(buf);
   if (!kind) {
@@ -36,10 +43,16 @@ export async function reencodeImage(filePath: string) {
   }
   const sharp = (await import("sharp")).default;
   const pipeline = sharp(buf, { failOn: "error" }).rotate();
-  const out = kind === "png" ? await pipeline.png().toBuffer() : await pipeline.jpeg({ quality: 82 }).toBuffer();
-  const ext = kind === "png" ? ".png" : ".jpg";
-  const next = filePath.replace(/\.[^.]+$/, ext);
-  if (next !== filePath) fs.unlinkSync(filePath);
-  fs.writeFileSync(next, out);
-  return path.basename(next);
+  const meta = await pipeline.metadata();
+  const width = meta.width ?? 0;
+  const height = meta.height ?? 0;
+  const card = await pipeline.clone().resize({ width: 1200, height: 1200, fit: "inside", withoutEnlargement: true }).webp({ quality: 82 }).toBuffer();
+  const thumb = await pipeline.clone().resize({ width: 320, height: 320, fit: "cover" }).webp({ quality: 78 }).toBuffer();
+  const base = filePath.replace(/\.[^.]+$/, "");
+  const filename = `${path.basename(base)}.webp`;
+  const thumbnailFilename = `${path.basename(base)}-thumb.webp`;
+  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  fs.writeFileSync(path.join(UPLOAD_DIR, filename), card);
+  fs.writeFileSync(path.join(UPLOAD_DIR, thumbnailFilename), thumb);
+  return { filename, thumbnailFilename, width, height };
 }

@@ -38,16 +38,20 @@ describe.skipIf(!hasDb)("[INV-11] inventoryAutoHideMenu", () => {
     });
 
     await refreshMenuAvailabilityForBranch(branch.id);
-    const hidden = await prisma.menuItem.findUnique({ where: { id: menuItem.id } });
-    expect(hidden?.isAvailable).toBe(false);
+    const hidden = await prisma.menuItemBranchAvailability.findUnique({
+      where: { menuItemId_branchId: { menuItemId: menuItem.id, branchId: branch.id } },
+    });
+    expect(hidden?.soldOut).toBe(true);
 
     await prisma.branchStock.update({
       where: { branchId_itemId: { branchId: branch.id, itemId: invItem.id } },
       data: { quantity: new Prisma.Decimal(200) },
     });
     await refreshMenuAvailabilityForBranch(branch.id);
-    const shown = await prisma.menuItem.findUnique({ where: { id: menuItem.id } });
-    expect(shown?.isAvailable).toBe(true);
+    const shown = await prisma.menuItemBranchAvailability.findUnique({
+      where: { menuItemId_branchId: { menuItemId: menuItem.id, branchId: branch.id } },
+    });
+    expect(shown).toBeNull();
 
     await prisma.storeSettings.update({
       where: { id: "default" },
