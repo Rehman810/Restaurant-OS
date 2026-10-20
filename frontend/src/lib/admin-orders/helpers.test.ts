@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   csvEscape,
   dispatchStatusLabel,
+  formatAgeCompact,
   formatAgeSeconds,
   normalizeAddressDisplay,
+  paymentBadgeLabel,
   paymentCellLabel,
 } from "./helpers";
 import type { AdminOrderRow } from "./types";
@@ -13,6 +15,17 @@ describe("admin orders helpers", () => {
     expect(formatAgeSeconds(45)).toBe("<1m ago");
     expect(formatAgeSeconds(120)).toBe("2m ago");
     expect(formatAgeSeconds(3700)).toBe("1h 1m ago");
+  });
+
+  it("formatAgeCompact omits ago suffix", () => {
+    expect(formatAgeCompact(300)).toBe("5m");
+  });
+
+  it("paymentBadgeLabel for COD due", () => {
+    const row = {
+      payment: { status: "cod" as const, label: "", methods: [], amountDue: 1920, codAmount: 1920 },
+    } as Pick<AdminOrderRow, "payment"> as AdminOrderRow;
+    expect(paymentBadgeLabel(row)).toContain("due");
   });
 
   it("dispatchStatusLabel uses Completed for terminals", () => {

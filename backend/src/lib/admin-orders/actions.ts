@@ -11,7 +11,7 @@ import {
   sendOrderOnTheWayEmail,
   sendRiderAssignedEmail,
 } from "../email";
-import { emitOrderChange } from "../realtime";
+import { emitOrderChange, emitTrackingBoardDelta } from "../realtime";
 
 export async function assignRiderToOrder(
   user: AuthUser,
@@ -86,6 +86,10 @@ export async function assignRiderToOrder(
   }
   void sendRiderAssignedEmail(rider.email, rider.name, order);
   emitOrderChange("order:updated", order);
+  emitTrackingBoardDelta(existing.branchId, "rider_assigned", {
+    orderId: order.id,
+    riderId,
+  });
 
   return { ok: true as const, order };
 }

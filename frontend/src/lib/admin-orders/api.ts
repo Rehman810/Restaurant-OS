@@ -55,6 +55,7 @@ export async function transitionAdminOrder(
     voidReasonCode?: string;
     voidReasonNote?: string;
     approval?: { approverId: string; pin: string };
+    boardUndo?: boolean;
   }
 ) {
   return api<{ ok: boolean; orderId: string; status: OrderStatus }>(`/admin/orders/${id}/transition`, {

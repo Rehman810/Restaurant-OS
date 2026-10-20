@@ -1,6 +1,6 @@
 import { FulfillmentType, OrderSource, OrderStatus, Role } from "@prisma/client";
 import { prisma } from "../prisma";
-import { canTransitionStatus, chefNextStatus } from "../order-status";
+import { canTransitionStatus, chefKitchenUndoStatus, chefNextStatus } from "../order-status";
 import { deliveryNeedsRider, pickLeastBusyRider } from "../rider-assign";
 import { getStoreSettings } from "../settings-data";
 import { writeAudit } from "../audit";
@@ -41,6 +41,8 @@ export type TransitionInput = {
   collectedAmount?: number;
   varianceReason?: string;
   ip?: string;
+  /** One-step pipeline undo (live board / kitchen). */
+  boardUndo?: boolean;
 };
 
 export async function transitionOrder(user: AuthUser, input: TransitionInput) {
@@ -93,7 +95,15 @@ export async function transitionOrder(user: AuthUser, input: TransitionInput) {
     user.role === Role.CASHIER ||
     user.role === Role.WAITER
   ) {
-    if (!canTransitionStatus(existing.status, status, existing.fulfillmentType)) {
+    if (input.boardUndo) {
+      if (!chefKitchenUndoStatus(existing.status, status, existing.fulfillmentType)) {
+        return {
+          ok: false as const,
+          status: 400,
+          error: "That status change cannot be undone.",
+        };
+      }
+    } else if (!canTransitionStatus(existing.status, status, existing.fulfillmentType)) {
       return {
         ok: false as const,
         status: 400,

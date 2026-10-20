@@ -52,6 +52,11 @@ export type AdminOrderRow = {
   print: { receiptPrinted: boolean; kotPrinted: boolean; kotPrintCount: number };
   notes: { hasNotes: boolean; hasAllergyHint: boolean };
   isRush: boolean;
+  /** Tracking board extras (optional on list rows). */
+  zoneWarning?: boolean;
+  needsRider?: boolean;
+  outcome?: "delivered" | "picked_up" | "served" | null;
+  riderOutSinceSeconds?: number | null;
 };
 
 export type AdminOrderDetail = {

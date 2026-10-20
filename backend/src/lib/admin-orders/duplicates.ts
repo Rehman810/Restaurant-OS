@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { prisma } from "../prisma";
 
 export function normalizeOrderPhone(phone: string): string {
   const digits = phone.replace(/\D/g, "");
@@ -47,6 +48,48 @@ export function findPossibleDuplicateOf(
     }
   }
   return best?.id ?? null;
+}
+
+export type DuplicateOrderShape = {
+  id: string;
+  createdAt: Date;
+  customerPhone: string;
+  items: { menuItemId: string; quantity: number }[];
+};
+
+/** One candidate query + in-memory match (used by list + tracking board). */
+export async function loadDuplicateMapBatched(
+  orders: DuplicateOrderShape[],
+  branchWhere: Prisma.OrderWhereInput,
+  windowMinutes: number
+): Promise<Map<string, string | null>> {
+  const map = new Map<string, string | null>();
+  if (!orders.length) return map;
+
+  const minCreated = new Date(
+    Math.min(...orders.map((o) => o.createdAt.getTime())) - windowMinutes * 60_000
+  );
+  const maxCreated = new Date(Math.max(...orders.map((o) => o.createdAt.getTime())));
+
+  const pool = await prisma.order.findMany({
+    where: {
+      ...branchWhere,
+      createdAt: { gte: minCreated, lte: maxCreated },
+    },
+    select: {
+      id: true,
+      createdAt: true,
+      customerPhone: true,
+      items: { select: { menuItemId: true, quantity: true } },
+    },
+    take: 4000,
+    orderBy: { createdAt: "asc" },
+  });
+
+  for (const order of orders) {
+    map.set(order.id, findPossibleDuplicateOf(order, pool, windowMinutes));
+  }
+  return map;
 }
 
 export function duplicateCandidateWhere(

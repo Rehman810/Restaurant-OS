@@ -104,6 +104,9 @@ export type StoreSettings = {
   lateConfirmMinutes?: number;
   latePrepMinutes?: number;
   lateDeliveryMinutes?: number;
+  ordersStaleHours?: number;
+  duplicateOrderWindowMinutes?: number;
+  trackingCompletedWindowHours?: number;
   shiftOpenWarningHours?: number;
   lowRatingThreshold?: number;
   twoFaReminderDays?: number;

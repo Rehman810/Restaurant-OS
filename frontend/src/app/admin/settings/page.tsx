@@ -1256,6 +1256,54 @@ export default function AdminSettingsPage() {
               }
             />
           </SettingsField>
+          <SettingsField
+            label="Stale order threshold (hours)"
+            hint="Live board flags orders in the same pipeline status longer than this."
+          >
+            <input
+              type="number"
+              min={1}
+              className="input w-full max-w-xs"
+              value={settings.ordersStaleHours ?? 2}
+              onChange={(e) =>
+                setSettings({ ...settings, ordersStaleHours: Number(e.target.value) || 2 })
+              }
+            />
+          </SettingsField>
+          <SettingsField
+            label="Duplicate order window (minutes)"
+            hint="Board and dispatch list show a possible-duplicate hint within this window."
+          >
+            <input
+              type="number"
+              min={1}
+              className="input w-full max-w-xs"
+              value={settings.duplicateOrderWindowMinutes ?? 10}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  duplicateOrderWindowMinutes: Number(e.target.value) || 10,
+                })
+              }
+            />
+          </SettingsField>
+          <SettingsField
+            label="Completed column window (hours)"
+            hint="0 = store calendar day only. Greater than 0 = rolling hours on the live board."
+          >
+            <input
+              type="number"
+              min={0}
+              className="input w-full max-w-xs"
+              value={settings.trackingCompletedWindowHours ?? 0}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  trackingCompletedWindowHours: Math.max(0, Number(e.target.value) || 0),
+                })
+              }
+            />
+          </SettingsField>
           <SettingsField label="Shift open warning (hours)">
             <input
               type="number"

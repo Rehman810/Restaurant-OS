@@ -162,7 +162,7 @@ export function OrdersDetailDrawer({
         role="dialog"
         aria-modal="true"
         aria-label={detail ? `Order ${detail.shortDisplay}` : "Order details"}
-        className={`drawer-panel relative flex h-full w-full flex-col bg-white shadow-2xl dark:bg-stone-900 sm:max-w-[640px] sm:rounded-l-2xl max-sm:min-h-0 max-sm:flex-1 ${
+        className={`drawer-panel relative flex h-full w-full flex-col bg-white shadow-2xl dark:bg-stone-900 sm:max-w-[640px] sm:rounded-l-2xl max-sm:min-h-0 max-sm:flex-1 max-sm:pb-[env(safe-area-inset-bottom)] ${
           visible && !closing ? "translate-x-0 max-sm:translate-y-0" : "translate-x-full max-sm:translate-y-full"
         }`}
       >

@@ -908,6 +908,8 @@ model StoreSettings {
   lateDeliveryMinutes   Int      @default(45)
   ordersStaleHours      Int      @default(2)
   duplicateOrderWindowMinutes Int @default(10)
+  // 0 = store calendar day; >0 = rolling hours for tracking board Completed column
+  trackingCompletedWindowHours Int @default(0)
   shiftOpenWarningHours Int      @default(12)
   lowRatingThreshold    Int      @default(2)
   twoFaReminderDays     Int      @default(7)

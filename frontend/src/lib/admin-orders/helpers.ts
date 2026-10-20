@@ -4,17 +4,53 @@ import { pkr } from "@/lib/format";
 
 const COMPLETED: OrderStatus[] = ["DELIVERED", "COLLECTED", "SERVED"];
 
-export function formatAgeSeconds(totalSeconds: number): string {
+export function formatAgeSeconds(totalSeconds: number, opts?: { compact?: boolean }): string {
   const secs = Math.max(0, Math.floor(totalSeconds));
-  if (secs < 60) return "<1m ago";
+  const compact = opts?.compact ?? false;
+  const suffix = compact ? "" : " ago";
+  if (secs < 60) return compact ? "<1m" : "<1m ago";
   const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 60) return `${mins}m${suffix}`;
   const hrs = Math.floor(mins / 60);
   const rem = mins % 60;
-  if (hrs < 48) return rem > 0 ? `${hrs}h ${rem}m ago` : `${hrs}h ago`;
+  if (hrs < 48) return compact ? (rem > 0 ? `${hrs}h ${rem}m` : `${hrs}h`) : rem > 0 ? `${hrs}h ${rem}m ago` : `${hrs}h ago`;
   const days = Math.floor(hrs / 24);
   const rh = hrs % 24;
-  return rh > 0 ? `${days}d ${rh}h ago` : `${days}d ago`;
+  return compact
+    ? rh > 0
+      ? `${days}d ${rh}h`
+      : `${days}d`
+    : rh > 0
+      ? `${days}d ${rh}h ago`
+      : `${days}d ago`;
+}
+
+export function formatAgeCompact(totalSeconds: number) {
+  return formatAgeSeconds(totalSeconds, { compact: true });
+}
+
+export function paymentBadgeLabel(row: AdminOrderRow): string {
+  if (!row.payment) return "—";
+  if (row.payment.status === "cod" && row.payment.codAmount != null) {
+    return `COD ${pkr(row.payment.codAmount)} due`;
+  }
+  if (row.payment.status === "partial") return "Partly paid";
+  if (row.payment.status === "paid") return row.payment.label || "Paid";
+  if (row.payment.status === "unpaid") return "Unpaid";
+  return row.payment.label;
+}
+
+export function completedOutcomeLabel(
+  outcome: AdminOrderRow["outcome"],
+  status: OrderStatus
+): string {
+  if (outcome === "served") return "Served";
+  if (outcome === "picked_up") return "Picked up";
+  if (outcome === "delivered") return "Delivered";
+  if (status === "SERVED") return "Served";
+  if (status === "COLLECTED") return "Picked up";
+  if (status === "DELIVERED") return "Delivered";
+  return "Completed";
 }
 
 /** 12-hour clock in store timezone (e.g. 8:47 PM). */

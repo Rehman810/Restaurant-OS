@@ -2,6 +2,7 @@ import type { AdminOrderRow } from "./types";
 import type { FulfillmentType, OrderStatus } from "@/lib/types";
 
 export type BoardColumnId =
+  | "PENDING_CONFIRMATION"
   | "CONFIRMED"
   | "PREPARING"
   | "READY"

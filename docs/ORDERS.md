@@ -34,7 +34,7 @@ Legacy `GET /orders` remains for older clients.
 ## Frontend (`/admin/orders`)
 
 - **Table** (desktop): sortable dispatch table, bulk actions, CSV export.
-- **Board** (`view=board`): status columns on `lg+`, tabbed lanes on smaller screens.
+- **Board** (`view=board`): uses **`GET /admin/tracking/board`** and shared **`OrderBoard`** (same as `/admin/tracking`). Desktop columns at `xl+`, tablet snap (`md`–`xl`), phone tabs.
 - **Mobile:** filter sheet, card list (table view), long-press to multi-select, primary action button per card.
 - **Detail drawer:** timeline, payment, reprint, rider picker; cancel via manager void or cashier approval.
 - **Live:** socket `order:created` refreshes list and flashes the new row when `orderId` is present.
@@ -45,7 +45,8 @@ Local storage: `uff-orders-view` (`table` | `board`). URL `view=grid` is migrate
 
 - Backend: `backend/test/admin-orders.unit.test.ts`, `admin-orders.integration.test.ts`
 - Frontend: `frontend/src/lib/admin-orders/helpers.test.ts`, `board-columns.test.ts`
-- E2E: `frontend/e2e/orders-dispatch.spec.ts` (`E2E_RUN=1`, screenshots under `docs/screenshots/orders/`)
+- E2E: `frontend/e2e/orders-dispatch.spec.ts`, `frontend/e2e/tracking-board.spec.ts` (`E2E_RUN=1`)
+- Live board docs: `docs/TRACKING.md`, screenshots `docs/screenshots/tracking/`
 
 ## Manual QA checklist
 

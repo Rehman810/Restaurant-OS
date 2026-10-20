@@ -21,6 +21,11 @@ export function canSeeIpLocation(role: Role) {
   return role === Role.ADMIN;
 }
 
+/** Rider live GPS on tracking board (not customer IP geolocation). */
+export function canSeeRiderLocation(role: Role) {
+  return role === Role.ADMIN || role === Role.MANAGER || role === Role.WAITER;
+}
+
 export function filterNextActionsForRole(actions: NextAction[], role: Role): NextAction[] {
   if (role === Role.RIDER) return [];
   if (role === Role.CHEF) {

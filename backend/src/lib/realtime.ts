@@ -42,7 +42,7 @@ export function initRealtime(httpServer: HttpServer) {
     }
   });
 
-  io.on("connection", (socket) => {
+  io.on("connection", async (socket) => {
     const user = socket.data.user as SocketUser | undefined;
     if (
       user?.role === Role.ADMIN ||
@@ -52,6 +52,13 @@ export function initRealtime(httpServer: HttpServer) {
       user?.role === Role.WAITER
     ) {
       socket.join("ops");
+      if (user) {
+        const memberships = await prisma.branchMember.findMany({
+          where: { userId: user.id },
+          select: { branchId: true },
+        });
+        for (const m of memberships) socket.join(`branch:${m.branchId}`);
+      }
     }
     if (user?.role === Role.RIDER) {
       socket.join(`rider:${user.id}`);
@@ -98,13 +105,43 @@ export function shutdownRealtime(): Promise<void> {
   });
 }
 
-export function emitOrderChange(event: "order:created" | "order:updated", order: { id: string; riderId?: string | null; customerId?: string | null }) {
+export function emitOrderChange(
+  event: "order:created" | "order:updated",
+  order: {
+    id: string;
+    branchId?: string | null;
+    riderId?: string | null;
+    customerId?: string | null;
+  }
+) {
   if (!io) return;
   const payload = { event, orderId: order.id, at: Date.now() };
   io.to("ops").emit(event, payload);
   io.to(`order:${order.id}`).emit(event, payload);
   if (order.customerId) io.to(`customer:${order.customerId}`).emit(event, payload);
   if (order.riderId) io.to(`rider:${order.riderId}`).emit(event, payload);
+  emitTrackingBoardDelta(
+    order.branchId,
+    event === "order:created" ? "order_created" : "order_transitioned",
+    { orderId: order.id }
+  );
+}
+
+export type TrackingBoardDeltaKind =
+  | "order_created"
+  | "order_transitioned"
+  | "rider_assigned"
+  | "rider_location";
+
+export function emitTrackingBoardDelta(
+  branchId: string | null | undefined,
+  kind: TrackingBoardDeltaKind,
+  payload: { orderId: string; riderId?: string }
+) {
+  if (!io) return;
+  const body = { kind, at: Date.now(), ...payload };
+  io.to("ops").emit("tracking:board-delta", body);
+  if (branchId) io.to(`branch:${branchId}`).emit("tracking:board-delta", body);
 }
 
 export type KitchenAlertPayload = {

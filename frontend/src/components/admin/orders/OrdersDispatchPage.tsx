@@ -33,8 +33,16 @@ import { OrdersDetailDrawer } from "./OrdersDetailDrawer";
 import { OrdersActiveFilters, type ActiveFilterChip } from "./OrdersActiveFilters";
 import { OrdersBulkBar } from "./OrdersBulkBar";
 import { RiderPickerSheet } from "./RiderPickerSheet";
-import { OrdersStatusBoard } from "./OrdersStatusBoard";
-import { OrdersBoardTabs } from "./OrdersBoardTabs";
+import { OrderBoard } from "@/components/admin/order-board";
+import {
+  cancelledFromTracking,
+  columnsFromTrackingResponse,
+  fetchTrackingBoard,
+  fetchTrackingSummary,
+} from "@/lib/admin-orders/tracking";
+import { KitchenUndoToast } from "@/components/admin/kitchen/KitchenUndoToast";
+import { targetStatusForBoardColumn } from "@/lib/admin-orders/board-dnd";
+import type { BoardColumnId } from "@/lib/admin-orders/board-columns";
 import { OrdersMobileCardList } from "./OrdersMobileCardList";
 import { OrdersMobileFilterSheet } from "./OrdersMobileFilterSheet";
 import { printKotForOrder } from "@/lib/print-kot";
@@ -114,6 +122,14 @@ export function OrdersDispatchPage() {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [tabHidden, setTabHidden] = useState(false);
+  const [riderPickRow, setRiderPickRow] = useState<AdminOrderRow | null>(null);
+  const [boardUndo, setBoardUndo] = useState<{
+    orderId: string;
+    label: string;
+    from: OrderStatus;
+    to: OrderStatus;
+    expiresAt: number;
+  } | null>(null);
 
   const setQuery = useCallback(
     (patch: Record<string, string | undefined>) => {
@@ -161,25 +177,39 @@ export function OrdersDispatchPage() {
   const pollEnabled = !tabHidden && !drawerId && !menuOpen;
 
   const load = useCallback(async () => {
-    const [list, riders] = await Promise.all([
-      fetchAdminOrdersDispatch({
-        from,
-        to,
-        statuses: statusesForChip(statusChip),
-        types: typeFilter === "ALL" ? undefined : [typeFilter],
-        sources: sourceFilter === "ALL" ? undefined : [sourceFilter],
-        payment: paymentFilter === "ALL" ? undefined : [paymentFilter],
-        riderId: riderFilter || undefined,
-        q,
-        sort,
-        page,
-        pageSize,
-      }),
+    const [riders, liveSummary] = await Promise.all([
       fetchRidersSummary(),
+      fetchTrackingSummary().catch(() => null),
     ]);
+    if (view === "board") {
+      const board = await fetchTrackingBoard({
+        types: typeFilter === "ALL" ? undefined : [typeFilter],
+        riderId: riderFilter || undefined,
+      });
+      setLastUpdated(board.serverTime);
+      return { list: null as null, board, riders, liveSummary: board.summary };
+    }
+    const list = await fetchAdminOrdersDispatch({
+      from,
+      to,
+      statuses: statusesForChip(statusChip),
+      types: typeFilter === "ALL" ? undefined : [typeFilter],
+      sources: sourceFilter === "ALL" ? undefined : [sourceFilter],
+      payment: paymentFilter === "ALL" ? undefined : [paymentFilter],
+      riderId: riderFilter || undefined,
+      q,
+      sort,
+      page,
+      pageSize,
+    });
     setLastUpdated(list.serverTime);
-    return { list, riders };
-  }, [from, to, statusChip, typeFilter, paymentFilter, sourceFilter, riderFilter, q, sort, page, pageSize]);
+    return {
+      list,
+      board: null as null,
+      riders,
+      liveSummary: liveSummary?.summary ?? null,
+    };
+  }, [from, to, statusChip, typeFilter, paymentFilter, sourceFilter, riderFilter, q, sort, page, pageSize, view]);
 
   useEffect(() => {
     setSelected(new Set());
@@ -234,8 +264,47 @@ export function OrdersDispatchPage() {
       setCancelOrderId(row.id);
       return;
     }
+    const from = row.status;
     await transitionAdminOrder(row.id, { targetStatus: action.targetStatus });
+    if (view === "board" && action.targetStatus && action.targetStatus !== from) {
+      setBoardUndo({
+        orderId: row.id,
+        label: row.shortDisplay,
+        from,
+        to: action.targetStatus,
+        expiresAt: Date.now() + 8000,
+      });
+    }
     refresh();
+  }
+
+  async function runMoveCard(orderId: string, columnId: BoardColumnId) {
+    const row = boardColumns.flatMap((c) => c.cards).find((c) => c.id === orderId);
+    if (!row) return;
+    const target = targetStatusForBoardColumn(columnId, row);
+    if (!target || target === row.status) return;
+    const from = row.status;
+    await transitionAdminOrder(orderId, { targetStatus: target });
+    setBoardUndo({
+      orderId,
+      label: row.shortDisplay,
+      from,
+      to: target,
+      expiresAt: Date.now() + 8000,
+    });
+    refresh();
+  }
+
+  async function undoBoardMove() {
+    if (!boardUndo) return;
+    const snap = boardUndo;
+    setBoardUndo(null);
+    try {
+      await transitionAdminOrder(snap.orderId, { targetStatus: snap.from, boardUndo: true });
+      refresh();
+    } catch (e) {
+      setBulkResults(e instanceof Error ? e.message : "Could not undo move");
+    }
   }
 
   async function submitCancel(approval?: { approverId: string; pin: string }) {
@@ -370,7 +439,7 @@ export function OrdersDispatchPage() {
   }
 
   function exportCsv() {
-    if (!data?.list.rows.length) return;
+    if (!data?.list?.rows.length) return;
     const csv = buildOrdersCsv(data.list.rows, {
       from,
       to,
@@ -386,25 +455,49 @@ export function OrdersDispatchPage() {
     URL.revokeObjectURL(url);
   }
 
-  const summary = data?.list.summary;
-  const rows = data?.list.rows ?? [];
-  const total = data?.list.pagination.total ?? 0;
-  const totalPages = data?.list.pagination.totalPages ?? 1;
+  const livePipeline = data?.board?.summary ?? data?.liveSummary ?? null;
+  const summary =
+    view === "board"
+      ? livePipeline
+      : livePipeline
+        ? {
+            ...data?.list?.summary,
+            active: livePipeline.active,
+            late: livePipeline.late,
+            stale: livePipeline.stale,
+            pipelineValue: livePipeline.pipelineValue,
+            pipelineValueDefinition: livePipeline.pipelineValueDefinition,
+          }
+        : data?.list?.summary;
+  const rows = data?.list?.rows ?? [];
+  const total = view === "board" ? summary?.active ?? 0 : data?.list?.pagination.total ?? 0;
+  const totalPages = view === "board" ? 1 : data?.list?.pagination.totalPages ?? 1;
+  const boardColumns = useMemo(
+    () => (data?.board ? columnsFromTrackingResponse(data.board) : []),
+    [data?.board]
+  );
+  const boardCancelled = useMemo(
+    () => (data?.board ? cancelledFromTracking(data.board) : []),
+    [data?.board]
+  );
   const rangeStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const rangeEnd = Math.min(page * pageSize, total);
 
   const mobileFilterLabel =
     activeFilterChips.length > 0 ? `Filters (${activeFilterChips.length})` : "Filters & view";
-  const tz = data?.list.timezone ?? "Asia/Karachi";
+  const tz = data?.board?.timezone ?? data?.list?.timezone ?? "Asia/Karachi";
 
   const statusCounts = useMemo(() => {
-    const c = summary?.statusCounts ?? {};
+    if (view === "board" || !data?.list?.summary) {
+      return { ALL: summary?.active ?? 0, COMPLETED: 0 } as Record<string, number>;
+    }
+    const c = data.list.summary.statusCounts ?? {};
     return {
-      ALL: Object.values(c).reduce((s, n) => s + n, 0),
+      ALL: Object.values(c).reduce((s, n) => s + (n as number), 0),
       ...c,
-      COMPLETED: summary ? completedStatusCount(summary) : 0,
+      COMPLETED: completedStatusCount(data.list.summary),
     } as Record<string, number>;
-  }, [summary]);
+  }, [summary, data?.list, view]);
 
   const statusChips: { id: StatusChip; label: string }[] = [
     { id: "ALL", label: "All" },
@@ -437,11 +530,27 @@ export function OrdersDispatchPage() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <HeaderTile label="Active" value={String(summary?.active ?? "—")} accent="sky" />
         <HeaderTile label="Late" value={String(summary?.late ?? "—")} tone="danger" />
-        <HeaderTile label="Unpaid" value={String(summary?.unpaid ?? "—")} accent="amber" />
         <HeaderTile
-          label="Booked"
-          value={summary?.booked != null ? pkr(summary.booked) : "—"}
-          title={summary?.bookedDefinition}
+          label={livePipeline ? "Stale" : "Unpaid"}
+          value={String(
+            livePipeline ? summary?.stale ?? "—" : (summary as { unpaid?: number })?.unpaid ?? "—"
+          )}
+          accent="amber"
+        />
+        <HeaderTile
+          label={livePipeline ? "Pipeline value" : "Booked"}
+          value={
+            livePipeline
+              ? pkr((summary as { pipelineValue?: number })?.pipelineValue ?? 0)
+              : (summary as { booked?: number | null })?.booked != null
+                ? pkr((summary as { booked: number }).booked)
+                : "—"
+          }
+          title={
+            livePipeline
+              ? (summary as { pipelineValueDefinition?: string })?.pipelineValueDefinition
+              : summary?.bookedDefinition
+          }
           accent="brand"
         />
       </div>
@@ -603,11 +712,19 @@ export function OrdersDispatchPage() {
 
       {showSkeleton && <div className="skeleton h-80 rounded-2xl" />}
 
-      {!showSkeleton && total === 0 && (
+      {!showSkeleton && total === 0 && view !== "board" && (
         <AdminEmptyState
           icon={Sparkles}
           title="No orders match"
           description="Try a different date range or filter."
+        />
+      )}
+
+      {!showSkeleton && view === "board" && data?.board && summary?.active === 0 && (
+        <AdminEmptyState
+          icon={Sparkles}
+          title="Pipeline clear"
+          description="No active orders right now. Completed today appear in the Completed column."
         />
       )}
 
@@ -618,7 +735,7 @@ export function OrdersDispatchPage() {
               rows={rows}
               riders={data?.riders ?? []}
               timeZone={tz}
-              serverTime={data?.list.serverTime ?? new Date().toISOString()}
+              serverTime={data?.list?.serverTime ?? new Date().toISOString()}
               role={user?.role}
               flashIds={flashIds}
               onAction={runAction}
@@ -638,7 +755,7 @@ export function OrdersDispatchPage() {
           </div>
           <OrdersMobileCardList
             rows={rows}
-            serverTime={data?.list.serverTime ?? new Date().toISOString()}
+            serverTime={data?.list?.serverTime ?? new Date().toISOString()}
             role={user?.role}
             flashIds={flashIds}
             selectedIds={selected}
@@ -669,51 +786,33 @@ export function OrdersDispatchPage() {
         </>
       )}
 
-      {!showSkeleton && total > 0 && view === "board" && (
-        <>
-          <div className={`hidden lg:block ${refreshing ? "opacity-60" : ""}`}>
-            <OrdersStatusBoard
-              rows={rows}
-              timeZone={tz}
-              serverTime={data?.list.serverTime ?? new Date().toISOString()}
-              role={user?.role}
-              flashIds={flashIds}
-              onOpen={openDrawer}
-              onAction={runAction}
-            />
-          </div>
-          <OrdersBoardTabs
-            rows={rows}
+      {!showSkeleton && view === "board" && data?.board && (
+        <div className={refreshing ? "opacity-60" : ""}>
+          <OrderBoard
+            columns={boardColumns}
+            cancelledToday={boardCancelled}
             timeZone={tz}
-            serverTime={data?.list.serverTime ?? new Date().toISOString()}
+            serverTime={data.board.serverTime}
             role={user?.role}
             flashIds={flashIds}
             onOpen={openDrawer}
             onAction={runAction}
+            onAssignRider={(row) => setRiderPickRow(row)}
             onLongPress={(row) => toggleSelect(row.id)}
+            onMoveCard={runMoveCard}
+            onOpenDuplicate={(id) => setDrawerId(id)}
             selectedIds={selected}
           />
-          {totalPages > 1 && (
-            <>
-              <p className="text-center text-xs text-stone-500 lg:hidden">
-                Showing {rangeStart}–{rangeEnd} of {total}
-              </p>
-              <Pagination
-                page={page}
-                totalPages={totalPages}
-                totalItems={total}
-                rangeStart={rangeStart}
-                rangeEnd={rangeEnd}
-                onPageChange={(p) => setQuery({ page: String(p) })}
-              />
-            </>
-          )}
-          {totalPages > 1 && (
-            <p className="hidden text-center text-xs text-stone-500 lg:block">
-              Showing up to {BOARD_PAGE_SIZE} orders per page ({rangeStart}–{rangeEnd} of {total})
-            </p>
-          )}
-        </>
+        </div>
+      )}
+
+      {boardUndo && (
+        <KitchenUndoToast
+          message={`${boardUndo.label} moved`}
+          expiresAt={boardUndo.expiresAt}
+          onUndo={() => void undoBoardMove()}
+          onDone={() => setBoardUndo(null)}
+        />
       )}
 
       {drawerId && (
@@ -747,6 +846,18 @@ export function OrdersDispatchPage() {
         onSelect={(riderId) => {
           setRiderPickerBulk(false);
           void runBulk("assignRider", { riderId });
+        }}
+      />
+
+      <RiderPickerSheet
+        open={Boolean(riderPickRow)}
+        title="Assign rider"
+        riders={data?.riders ?? []}
+        onClose={() => setRiderPickRow(null)}
+        onSelect={(riderId) => {
+          const row = riderPickRow;
+          setRiderPickRow(null);
+          if (row) void assign(row, riderId);
         }}
       />
 

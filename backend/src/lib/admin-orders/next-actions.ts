@@ -1,22 +1,26 @@
 import { FulfillmentType, OrderStatus, Role } from "@prisma/client";
 import { canTransitionStatus, chefNextStatus } from "../order-status";
-import { terminalLabel } from "../order-machine";
-import type { Fulfillment } from "../order-machine";
-
-function asFulfillment(type: FulfillmentType): Fulfillment {
-  if (type === FulfillmentType.PICKUP) return "PICKUP";
-  if (type === FulfillmentType.DINE_IN) return "DINE_IN";
-  return "DELIVERY";
+export function primaryNextAction(
+  role: Role,
+  status: OrderStatus,
+  fulfillmentType: FulfillmentType
+): NextAction | null {
+  const actions = nextActionsForRole(role, status, fulfillmentType);
+  return actions.find((a) => a.primary) ?? actions[0] ?? null;
 }
 
 function stepLabel(target: OrderStatus, fulfillment: FulfillmentType): string {
   if (target === OrderStatus.CONFIRMED) return "Confirm order";
-  if (target === OrderStatus.PREPARING) return "Mark preparing";
-  if (target === OrderStatus.READY) return "Mark ready";
+  if (target === OrderStatus.PREPARING) return "Start preparing";
+  if (target === OrderStatus.READY) {
+    if (fulfillment === FulfillmentType.DINE_IN) return "Mark ready";
+    if (fulfillment === FulfillmentType.PICKUP) return "Mark ready";
+    return "Mark ready";
+  }
   if (target === OrderStatus.OUT_FOR_DELIVERY) return "Out for delivery";
-  if (target === OrderStatus.DELIVERED) return "Mark completed";
-  if (target === OrderStatus.COLLECTED) return "Mark completed";
-  if (target === OrderStatus.SERVED) return "Mark completed";
+  if (target === OrderStatus.DELIVERED) return "Complete";
+  if (target === OrderStatus.COLLECTED) return "Picked up";
+  if (target === OrderStatus.SERVED) return "Mark served";
   if (target === OrderStatus.CANCELLED) return "Cancel order";
   return target;
 }
@@ -34,7 +38,6 @@ export function nextActionsForRole(
   fulfillmentType: FulfillmentType
 ): NextAction[] {
   const actions: NextAction[] = [];
-  const fulfillment = asFulfillment(fulfillmentType);
 
   if (role === Role.CHEF) {
     const next = chefNextStatus(status, fulfillmentType);
@@ -75,14 +78,7 @@ export function nextActionsForRole(
   }
 
   if (next) {
-    let label = stepLabel(next, fulfillmentType);
-    if (
-      next === OrderStatus.DELIVERED ||
-      next === OrderStatus.COLLECTED ||
-      next === OrderStatus.SERVED
-    ) {
-      label = `Mark completed (${terminalLabel(fulfillment)})`;
-    }
+    const label = stepLabel(next, fulfillmentType);
     actions.push({
       action: "transition",
       targetStatus: next,

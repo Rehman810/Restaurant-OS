@@ -72,6 +72,7 @@ export function useLiveOrders(
     }) => {
       optionsRef.current?.onKitchenAlert?.(payload);
     };
+    const onBoardDelta = () => onChangeRef.current();
     void ensureSocket().then((sock) => {
       s = sock;
       if (!s) {
@@ -80,6 +81,7 @@ export function useLiveOrders(
       }
       s.on("order:created", onCreated);
       s.on("order:updated", onUpdated);
+      s.on("tracking:board-delta", onBoardDelta);
       s.on("kitchen:alert", onKitchenAlert);
       s.on("connect", onConnect);
       s.on("disconnect", onDisconnect);
@@ -92,6 +94,7 @@ export function useLiveOrders(
       if (!s) return;
       s.off("order:created", onCreated);
       s.off("order:updated", onUpdated);
+      s.off("tracking:board-delta", onBoardDelta);
       s.off("kitchen:alert", onKitchenAlert);
       s.off("connect", onConnect);
       s.off("disconnect", onDisconnect);

@@ -70,6 +70,13 @@ describe("admin orders helpers", () => {
     ).toBeNull();
   });
 
+  it("next action labels use verbs by type", () => {
+    const prep = nextActionsForRole(Role.MANAGER, OrderStatus.CONFIRMED, FulfillmentType.DELIVERY);
+    expect(prep[0]?.label).toBe("Start preparing");
+    const pickup = nextActionsForRole(Role.MANAGER, OrderStatus.READY, FulfillmentType.PICKUP);
+    expect(pickup[0]?.label).toBe("Picked up");
+  });
+
   it("next action for dine-in skips out for delivery", () => {
     const actions = nextActionsForRole(Role.MANAGER, OrderStatus.READY, FulfillmentType.DINE_IN);
     expect(actions[0]?.targetStatus).toBe(OrderStatus.SERVED);

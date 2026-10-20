@@ -524,7 +524,7 @@ async function main() {
     });
   }
 
-  const [customer, admin, rider, chef, cashier] = await Promise.all([
+  const [customer, admin, rider, chef, cashier, manager] = await Promise.all([
     prisma.user.create({
       data: {
         name: "Demo Customer",
@@ -570,11 +570,21 @@ async function main() {
         phone: "0311-2233445",
       },
     }),
+    prisma.user.create({
+      data: {
+        name: "Shift Manager",
+        email: "manager@demo.restaurant",
+        passwordHash: hash,
+        role: Role.MANAGER,
+        phone: "0300-5551212",
+      },
+    }),
   ]);
 
   void admin;
   void chef;
   void cashier;
+  void manager;
 
   const items: { id: string; name: string; imageUrl: string; price: number }[] = [];
   for (const m of MENU) {
@@ -688,7 +698,7 @@ async function main() {
   await prisma.order.updateMany({ where: { branchId: null }, data: { branchId: mainBranch.id } });
 
   const staffForBranches = await prisma.user.findMany({
-    where: { role: { in: [Role.CHEF, Role.RIDER, Role.CASHIER] } },
+    where: { role: { in: [Role.CHEF, Role.RIDER, Role.CASHIER, Role.MANAGER] } },
     select: { id: true },
   });
   if (staffForBranches.length) {
@@ -958,6 +968,7 @@ async function main() {
   console.log("  rider@demo.restaurant");
   console.log("  chef@demo.restaurant");
   console.log("  cashier@demo.restaurant");
+  console.log("  manager@demo.restaurant");
   console.log(`Admin password: ${adminPassword}`);
 }
 

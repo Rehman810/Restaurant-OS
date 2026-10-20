@@ -3,7 +3,7 @@ import { prisma } from "../prisma";
 import type { BranchScope } from "../branch-scope";
 import { deriveShortOrderNumber } from "../order-number";
 import { deriveOrderPayment } from "./payment";
-import { findPossibleDuplicateOf } from "./duplicates";
+import { loadDuplicateMapBatched } from "./duplicates";
 import { nextActionsForRole } from "./next-actions";
 import {
   buildAdminOrdersWhere,
@@ -169,47 +169,6 @@ function mapRow(
   };
 }
 
-async function loadDuplicateMap(
-  orders: ListOrder[],
-  branchWhere: object,
-  windowMinutes: number
-) {
-  const map = new Map<string, string | null>();
-  for (const order of orders) {
-    const candidates = await prisma.order.findMany({
-      where: {
-        ...branchWhere,
-        createdAt: {
-          gte: new Date(order.createdAt.getTime() - windowMinutes * 60_000),
-          lt: order.createdAt,
-        },
-        customerPhone: { contains: order.customerPhone.replace(/\D/g, "").slice(-10) || "0000" },
-      },
-      select: {
-        id: true,
-        createdAt: true,
-        customerPhone: true,
-        items: { select: { menuItemId: true, quantity: true } },
-      },
-      take: 20,
-    });
-    map.set(
-      order.id,
-      findPossibleDuplicateOf(
-        {
-          id: order.id,
-          createdAt: order.createdAt,
-          customerPhone: order.customerPhone,
-          items: order.items.map((i) => ({ menuItemId: i.menuItemId, quantity: i.quantity })),
-        },
-        candidates,
-        windowMinutes
-      )
-    );
-  }
-  return map;
-}
-
 export async function listAdminOrders(
   req: Request,
   scope: BranchScope,
@@ -317,8 +276,13 @@ export async function listAdminOrders(
     });
   }
 
-  const dupMap = await loadDuplicateMap(
-    orders,
+  const dupMap = await loadDuplicateMapBatched(
+    orders.map((o) => ({
+      id: o.id,
+      createdAt: o.createdAt,
+      customerPhone: o.customerPhone,
+      items: o.items.map((i) => ({ menuItemId: i.menuItemId, quantity: i.quantity })),
+    })),
     scope.where,
     settings.duplicateOrderWindowMinutes
   );

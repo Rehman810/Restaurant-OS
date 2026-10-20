@@ -113,6 +113,7 @@ adminOrdersRouter.post("/:id/transition", requireAuth, requireRole(...ACTION_ROL
     collectedAmount: req.body?.collectedAmount,
     varianceReason: req.body?.varianceReason,
     ip: clientIp(req) ?? undefined,
+    boardUndo: req.body?.boardUndo === true,
   });
 
   if (!result.ok) {

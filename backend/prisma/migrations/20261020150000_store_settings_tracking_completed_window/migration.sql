@@ -1,0 +1,1 @@
+ALTER TABLE "StoreSettings" ADD COLUMN IF NOT EXISTS "trackingCompletedWindowHours" INTEGER NOT NULL DEFAULT 0;

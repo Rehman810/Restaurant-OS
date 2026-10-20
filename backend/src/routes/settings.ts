@@ -140,6 +140,25 @@ settingsRouter.patch("/", requireAuth, requireRole(Role.ADMIN), async (req, res)
       ...(body.lateDeliveryMinutes !== undefined
         ? { lateDeliveryMinutes: Math.max(1, Math.floor(Number(body.lateDeliveryMinutes) || 45)) }
         : {}),
+      ...(body.ordersStaleHours !== undefined
+        ? { ordersStaleHours: Math.max(1, Math.floor(Number(body.ordersStaleHours) || 2)) }
+        : {}),
+      ...(body.duplicateOrderWindowMinutes !== undefined
+        ? {
+            duplicateOrderWindowMinutes: Math.max(
+              1,
+              Math.floor(Number(body.duplicateOrderWindowMinutes) || 10)
+            ),
+          }
+        : {}),
+      ...(body.trackingCompletedWindowHours !== undefined
+        ? {
+            trackingCompletedWindowHours: Math.max(
+              0,
+              Math.floor(Number(body.trackingCompletedWindowHours) || 0)
+            ),
+          }
+        : {}),
       ...(body.shiftOpenWarningHours !== undefined
         ? { shiftOpenWarningHours: Math.max(1, Math.floor(Number(body.shiftOpenWarningHours) || 12)) }
         : {}),

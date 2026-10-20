@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, type PointerEvent } from "react";
+
+/** Clicks on nested controls should not trigger the card's tap / long-press / drag handlers. */
+export function isNestedInteractive(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return Boolean(
+    target.closest("button, a, input, select, textarea, [role='button'], [data-drag-handle]")
+  );
+}
 
 export function useLongPress({
   onClick,
@@ -22,7 +30,8 @@ export function useLongPress({
   }, []);
 
   const handlers = {
-    onPointerDown: () => {
+    onPointerDown: (e: PointerEvent) => {
+      if (isNestedInteractive(e.target)) return;
       longFired.current = false;
       clear();
       timer.current = setTimeout(() => {
@@ -30,7 +39,8 @@ export function useLongPress({
         onLongPress();
       }, delayMs);
     },
-    onPointerUp: () => {
+    onPointerUp: (e: PointerEvent) => {
+      if (isNestedInteractive(e.target)) return;
       clear();
       if (!longFired.current) onClick();
     },

@@ -21,11 +21,15 @@ export function RiderPickerSheet({
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    if (!needle) return riders;
-    return riders.filter(
-      (r) =>
-        r.name.toLowerCase().includes(needle) ||
-        (r.phone && r.phone.includes(needle))
+    const list = !needle
+      ? riders
+      : riders.filter(
+          (r) =>
+            r.name.toLowerCase().includes(needle) ||
+            (r.phone && r.phone.includes(needle))
+        );
+    return [...list].sort(
+      (a, b) => (a.activeDeliveries ?? 0) - (b.activeDeliveries ?? 0)
     );
   }, [q, riders]);
 

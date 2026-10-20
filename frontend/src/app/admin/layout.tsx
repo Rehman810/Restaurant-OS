@@ -22,6 +22,8 @@ import { OpsKitchenAlertBanner } from "@/components/admin/OpsKitchenAlertBanner"
 import { chefAdminPathAllowed } from "@/lib/kitchen/chef-access";
 import { readKitchenKiosk } from "@/lib/kitchen/display";
 import { readPosFullscreen } from "@/lib/pos/display";
+import { readTrackingTv } from "@/lib/tracking/display";
+import { fetchTrackingSummary } from "@/lib/admin-orders/tracking";
 
 const SIDEBAR_KEY = "uff-admin-sidebar-collapsed";
 
@@ -40,6 +42,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [syncConflictCount, setSyncConflictCount] = useState(0);
   const [kitchenKiosk, setKitchenKiosk] = useState(false);
   const [posFullscreen, setPosFullscreen] = useState(false);
+  const [trackingTv, setTrackingTv] = useState(false);
+  const [trackingBadge, setTrackingBadge] = useState(0);
   const { theme, toggle: toggleTheme } = useAdminTheme();
 
   useEffect(() => {
@@ -49,10 +53,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   useEffect(() => {
     const syncKiosk = () => setKitchenKiosk(readKitchenKiosk());
     const syncPosFs = () => setPosFullscreen(readPosFullscreen());
+    const syncTrackingTv = () => setTrackingTv(readTrackingTv());
     syncKiosk();
     syncPosFs();
+    syncTrackingTv();
     window.addEventListener("kitchen-kiosk-change", syncKiosk);
     window.addEventListener("pos-fullscreen-change", syncPosFs);
+    window.addEventListener("tracking-tv-change", syncTrackingTv);
     const onFs = () => {
       if (!document.fullscreenElement) {
         syncKiosk();
@@ -62,9 +69,25 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return () => {
       window.removeEventListener("kitchen-kiosk-change", syncKiosk);
       window.removeEventListener("pos-fullscreen-change", syncPosFs);
+      window.removeEventListener("tracking-tv-change", syncTrackingTv);
       document.removeEventListener("fullscreenchange", onFs);
     };
   }, []);
+
+  useEffect(() => {
+    if (!user || user.role === "CHEF" || user.role === "RIDER") {
+      setTrackingBadge(0);
+      return;
+    }
+    const refresh = () => {
+      void fetchTrackingSummary()
+        .then((r) => setTrackingBadge(r.badge ?? 0))
+        .catch(() => setTrackingBadge(0));
+    };
+    refresh();
+    const id = window.setInterval(refresh, 45_000);
+    return () => window.clearInterval(id);
+  }, [user, path]);
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(new Date()), 30_000);
@@ -151,9 +174,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       return;
     }
     if (user.role === "CASHIER") {
-      const allowedPath = ["/admin", "/admin/pos", "/admin/kitchen", "/admin/orders", "/admin/customers"].some(
-        (prefix) => path === prefix || path.startsWith(`${prefix}/`)
-      );
+      const allowedPath = [
+        "/admin",
+        "/admin/pos",
+        "/admin/kitchen",
+        "/admin/orders",
+        "/admin/tracking",
+        "/admin/customers",
+      ].some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
       if (!allowedPath) router.replace("/admin/pos");
       return;
     }
@@ -235,7 +263,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const isPos = path.startsWith("/admin/pos");
   const isKitchen = path.startsWith("/admin/kitchen");
   const isDashboard = path === "/admin";
-  const hideChrome = (isKitchen && kitchenKiosk) || (isPos && posFullscreen);
+  const isTracking = path.startsWith("/admin/tracking");
+  const hideChrome =
+    (isKitchen && kitchenKiosk) || (isPos && posFullscreen) || (isTracking && trackingTv);
   const storeTimezone = store?.settings.timezone ?? "Asia/Karachi";
 
   return (
@@ -311,6 +341,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                           }`}
                         >
                           {syncConflictCount > 99 ? "99+" : syncConflictCount}
+                        </span>
+                      )}
+                      {n.href === "/admin/tracking" && trackingBadge > 0 && (
+                        <span
+                          className={`ml-auto grid min-w-[1.25rem] place-items-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold text-white ${
+                            collapsed ? "lg:absolute lg:right-1 lg:top-1 lg:ml-0" : ""
+                          }`}
+                        >
+                          {trackingBadge > 99 ? "99+" : trackingBadge}
                         </span>
                       )}
                       {n.href === "/admin/dine-in" && pendingDineIn > 0 && (

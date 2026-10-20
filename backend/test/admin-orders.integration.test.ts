@@ -125,5 +125,29 @@ describe.skipIf(!hasDb)("admin orders API", () => {
     expect(detailBody.payment).toBeNull();
     expect(detailBody.location).toBeNull();
     expect(detailBody.customer.phone).toContain("*");
+
+    const board = await appRequest(app, "GET", "/admin/tracking/board", {
+      headers: { ...authHeader(managerToken), "X-Branch-Id": branchId },
+    });
+    expect(board.status).toBe(200);
+    const boardBody = board.body as {
+      columns: { id: string; count: number; cards: { id: string }[] }[];
+      summary: { active: number; pipelineValue: number };
+    };
+    const confirmed = boardBody.columns.find((c) => c.id === "CONFIRMED");
+    expect(confirmed?.cards.some((c) => c.id === deliveryId)).toBe(true);
+    const outCol = boardBody.columns.find((c) => c.id === "OUT_FOR_DELIVERY");
+    expect(outCol?.cards.some((c) => c.id === dineInId)).toBe(false);
+    expect(boardBody.summary.active).toBeGreaterThanOrEqual(2);
+
+    const riders = await appRequest(app, "GET", "/admin/tracking/riders", {
+      headers: { ...authHeader(managerToken), "X-Branch-Id": branchId },
+    });
+    expect(riders.status).toBe(200);
+    const ridersBody = riders.body as { riders: { name: string; location: { locationAvailable: boolean } }[] };
+    expect(Array.isArray(ridersBody.riders)).toBe(true);
+    if (ridersBody.riders[0]) {
+      expect(ridersBody.riders[0].location.locationAvailable).toBe(false);
+    }
   });
 });
