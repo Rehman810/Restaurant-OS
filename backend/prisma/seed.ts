@@ -436,6 +436,10 @@ async function main() {
       const { seedInventoryDemo } = await import("../src/lib/inventory/seed-demo");
       const inv = await seedInventoryDemo(mainBranch.id);
       console.log(`Inventory demo refreshed: ${inv.ingredients} ingredients, ${inv.recipes} menu recipes.`);
+      const riderUser = await prisma.user.findFirst({ where: { email: "rider@demo.restaurant" }, select: { id: true } });
+      const { seedAnalyticsDemo } = await import("../src/lib/analytics/seed-demo");
+      const analytics = await seedAnalyticsDemo(prisma, mainBranch.id, riderUser?.id);
+      console.log(`Analytics demo: ${analytics.created} orders (numbers ANL-*). Run npm run seed:analytics anytime to refresh.`);
     }
     await seedDemoCoupons();
     console.log("Demo data already present. Passwords and existing store settings were not changed.");
@@ -941,6 +945,9 @@ async function main() {
 
   const { seedInventoryDemo } = await import("../src/lib/inventory/seed-demo");
   await seedInventoryDemo(mainBranch.id);
+  const { seedAnalyticsDemo } = await import("../src/lib/analytics/seed-demo");
+  const analytics = await seedAnalyticsDemo(prisma, mainBranch.id, rider.id);
+  console.log(`Analytics demo: ${analytics.created} historical orders (ANL-*).`);
   await seedDemoCoupons();
 
   console.log(`Seeded ${BRAND_NAME} in ${CITY}.`);

@@ -18,8 +18,9 @@ import { scheduleFor, isStoreOpen } from "../store-settings";
 import { lowStockForBranch } from "../inventory/stock";
 import { branchQueueDate } from "../dine-in/waitlist";
 import { buildShiftReport } from "../cash-shift";
-import { effectiveItemPrice } from "../store-settings";
 import { compareKpi, roundMoney } from "./kpi";
+import { aggregatePeriodOrderMetrics } from "../metrics/period-stats";
+import { recipeUnitCostByMenuId } from "../metrics/menu-recipe-cost";
 import {
   COMPLETED_STATUSES,
   PIPELINE_STATUSES,
@@ -71,30 +72,16 @@ function pipelineLabel(status: OrderStatus) {
   return status;
 }
 
-async function dayOrderStats(
-  bw: { branchId?: string },
-  start: Date,
-  end: Date
-) {
-  const base = { ...bw, createdAt: { gte: start, lte: end }, status: { not: OrderStatus.CANCELLED } };
-  const [ordersToday, bookedAgg, completedCount, completedAgg, cancelledToday] = await Promise.all([
-    prisma.order.count({ where: base }),
-    prisma.order.aggregate({ where: base, _sum: { total: true } }),
-    prisma.order.count({
-      where: { ...bw, createdAt: { gte: start, lte: end }, status: { in: COMPLETED_STATUSES } },
-    }),
-    prisma.order.aggregate({
-      where: { ...bw, createdAt: { gte: start, lte: end }, status: { in: COMPLETED_STATUSES } },
-      _sum: { total: true },
-    }),
-    prisma.order.count({
-      where: { ...bw, createdAt: { gte: start, lte: end }, status: OrderStatus.CANCELLED },
-    }),
-  ]);
-  const booked = Number(bookedAgg._sum.total ?? 0);
-  const collected = Number(completedAgg._sum.total ?? 0);
-  const aov = ordersToday ? roundMoney(booked / ordersToday) : 0;
-  return { ordersToday, booked, collected, aov, completedToday: completedCount, cancelledToday };
+async function dayOrderStats(bw: { branchId?: string }, start: Date, end: Date) {
+  const m = await aggregatePeriodOrderMetrics(bw, start, end);
+  return {
+    ordersToday: m.ordersCount,
+    booked: m.booked,
+    collected: m.collected,
+    aov: m.avgOrderValue,
+    completedToday: m.completedCount,
+    cancelledToday: m.cancelledCount,
+  };
 }
 
 async function buildTopSellers(bw: { branchId?: string }, start: Date, end: Date, branchId: string | null) {
@@ -128,45 +115,13 @@ async function buildTopSellers(bw: { branchId?: string }, start: Date, end: Date
   const byRevenue = [...mapped].sort((a, b) => b.revenue - a.revenue).slice(0, 5);
   const ids = [...new Set([...byQuantity, ...byRevenue].map((r) => r.menuItemId).filter(Boolean))] as string[];
 
-  const costMap = new Map<string, { foodCostPercent: number | null; marginPercent: number | null; costKnown: boolean }>();
-  if (branchId && ids.length) {
-    const stocks = await prisma.branchStock.findMany({
-      where: { branchId },
-      select: { itemId: true, avgCost: true },
-    });
-    const costByIngredient = new Map(stocks.map((s) => [s.itemId, Number(s.avgCost)]));
-    const menus = await prisma.menuItem.findMany({
-      where: { id: { in: ids } },
-      include: {
-        recipeLines: { include: { item: { select: { id: true, defaultCost: true, name: true } } } },
-        menuRecipe: true,
-      },
-    });
-    for (const menu of menus) {
-      const price = effectiveItemPrice(menu);
-      const yieldPortions = Math.max(1, menu.menuRecipe?.yieldPortions ?? 1);
-      let recipeCost = 0;
-      let missing = false;
-      for (const line of menu.recipeLines) {
-        const unit =
-          costByIngredient.get(line.itemId) ??
-          (line.item.defaultCost != null ? Number(line.item.defaultCost) : null);
-        if (unit == null || !Number.isFinite(unit) || unit <= 0) {
-          missing = true;
-          continue;
-        }
-        recipeCost += Number(line.quantity) * unit;
-      }
-      recipeCost /= yieldPortions;
-      if (!menu.recipeLines.length || missing) {
-        costMap.set(menu.id, { foodCostPercent: null, marginPercent: null, costKnown: false });
-      } else {
-        const foodCostPercent = price > 0 ? Math.round((recipeCost / price) * 1000) / 10 : null;
-        const marginPercent = price > 0 ? Math.round(((price - recipeCost) / price) * 1000) / 10 : null;
-        costMap.set(menu.id, { foodCostPercent, marginPercent, costKnown: true });
-      }
-    }
-  }
+  const recipeCosts = await recipeUnitCostByMenuId(branchId, ids);
+  const costMap = new Map(
+    [...recipeCosts.entries()].map(([id, c]) => [
+      id,
+      { foodCostPercent: c.foodCostPercent, marginPercent: c.marginPercent, costKnown: c.costKnown },
+    ])
+  );
 
   const enrich = (list: typeof byQuantity): TopSellerRow[] =>
     list.map((r) => {

@@ -78,6 +78,7 @@ export default function AdminSettingsPage() {
   const [bannerDeleting, setBannerDeleting] = useState(false);
   const [leavePromptOpen, setLeavePromptOpen] = useState(false);
   const [pendingLeaveHref, setPendingLeaveHref] = useState<string | null>(null);
+  const [analyticsEmailTesting, setAnalyticsEmailTesting] = useState(false);
 
   async function load() {
     const data = await api<SettingsPayload>("/settings");
@@ -1288,6 +1289,100 @@ export default function AdminSettingsPage() {
                 setSettings({ ...settings, twoFaReminderDays: Number(e.target.value) || 7 })
               }
             />
+          </SettingsField>
+          <h3 className="pt-4 font-display text-lg font-bold text-stone-900 dark:text-stone-50">Analytics</h3>
+          <SettingsField label="Week starts on (0=Sun, 1=Mon)">
+            <input
+              type="number"
+              min={0}
+              max={6}
+              className="input w-full max-w-xs"
+              value={settings.weekStartDay ?? 1}
+              onChange={(e) => setSettings({ ...settings, weekStartDay: Number(e.target.value) || 1 })}
+            />
+          </SettingsField>
+          <SettingsField label="Insight minimum days">
+            <input
+              type="number"
+              min={1}
+              className="input w-full max-w-xs"
+              value={settings.analyticsInsightMinDays ?? 7}
+              onChange={(e) =>
+                setSettings({ ...settings, analyticsInsightMinDays: Number(e.target.value) || 7 })
+              }
+            />
+          </SettingsField>
+          <SettingsField label="Insight minimum orders">
+            <input
+              type="number"
+              min={1}
+              className="input w-full max-w-xs"
+              value={settings.analyticsInsightMinOrders ?? 20}
+              onChange={(e) =>
+                setSettings({ ...settings, analyticsInsightMinOrders: Number(e.target.value) || 20 })
+              }
+            />
+          </SettingsField>
+          <SettingsField label="Scheduled analytics email">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={Boolean(settings.analyticsEmailEnabled)}
+                onChange={(e) => setSettings({ ...settings, analyticsEmailEnabled: e.target.checked })}
+              />
+              Send summary email (daily or weekly)
+            </label>
+          </SettingsField>
+          <SettingsField label="Email frequency">
+            <select
+              className="input w-full max-w-xs"
+              value={settings.analyticsEmailFrequency ?? "weekly"}
+              onChange={(e) => setSettings({ ...settings, analyticsEmailFrequency: e.target.value })}
+            >
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+            </select>
+          </SettingsField>
+          <SettingsField label="Email recipients (comma-separated)">
+            <input
+              className="input w-full"
+              value={settings.analyticsEmailRecipients ?? ""}
+              onChange={(e) => setSettings({ ...settings, analyticsEmailRecipients: e.target.value })}
+            />
+          </SettingsField>
+          <SettingsField label="Send hour (store timezone, 0–23)">
+            <input
+              type="number"
+              min={0}
+              max={23}
+              className="input w-full max-w-xs"
+              value={settings.analyticsEmailSendHour ?? 8}
+              onChange={(e) =>
+                setSettings({ ...settings, analyticsEmailSendHour: Number(e.target.value) || 8 })
+              }
+            />
+          </SettingsField>
+          <SettingsField label="Test analytics email">
+            <button
+              type="button"
+              className="btn-secondary inline-flex items-center gap-2"
+              disabled={analyticsEmailTesting}
+              onClick={async () => {
+                setAnalyticsEmailTesting(true);
+                setMsg("");
+                try {
+                  await api("/admin/analytics/email/test", { method: "POST" });
+                  setMsg("Analytics summary email job triggered. Check recipient inbox if SMTP is configured.");
+                } catch (err) {
+                  setMsg(err instanceof ApiError ? err.message : "Could not send test email");
+                } finally {
+                  setAnalyticsEmailTesting(false);
+                }
+              }}
+            >
+              <Mail size={16} aria-hidden />
+              {analyticsEmailTesting ? "Sending…" : "Send test email now"}
+            </button>
           </SettingsField>
           <SettingsField label="Refund reasons (one per line)">
             <textarea

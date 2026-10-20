@@ -149,6 +149,36 @@ settingsRouter.patch("/", requireAuth, requireRole(Role.ADMIN), async (req, res)
       ...(body.twoFaReminderDays !== undefined
         ? { twoFaReminderDays: Math.max(1, Math.floor(Number(body.twoFaReminderDays) || 7)) }
         : {}),
+      ...(body.weekStartDay !== undefined
+        ? { weekStartDay: Math.min(6, Math.max(0, Math.floor(Number(body.weekStartDay) || 1))) }
+        : {}),
+      ...(body.analyticsInsightMinDays !== undefined
+        ? { analyticsInsightMinDays: Math.max(1, Math.floor(Number(body.analyticsInsightMinDays) || 7)) }
+        : {}),
+      ...(body.analyticsInsightMinOrders !== undefined
+        ? { analyticsInsightMinOrders: Math.max(1, Math.floor(Number(body.analyticsInsightMinOrders) || 20)) }
+        : {}),
+      ...(body.analyticsLowMarginPercent !== undefined
+        ? { analyticsLowMarginPercent: Math.min(100, Math.max(0, Math.floor(Number(body.analyticsLowMarginPercent) || 15))) }
+        : {}),
+      ...(body.analyticsSlowMoverDays !== undefined
+        ? { analyticsSlowMoverDays: Math.max(1, Math.floor(Number(body.analyticsSlowMoverDays) || 30)) }
+        : {}),
+      ...(body.analyticsEmailEnabled !== undefined
+        ? { analyticsEmailEnabled: Boolean(body.analyticsEmailEnabled) }
+        : {}),
+      ...(body.analyticsEmailFrequency !== undefined
+        ? {
+            analyticsEmailFrequency:
+              String(body.analyticsEmailFrequency) === "daily" ? "daily" : "weekly",
+          }
+        : {}),
+      ...(body.analyticsEmailRecipients !== undefined
+        ? { analyticsEmailRecipients: String(body.analyticsEmailRecipients) }
+        : {}),
+      ...(body.analyticsEmailSendHour !== undefined
+        ? { analyticsEmailSendHour: Math.min(23, Math.max(0, Math.floor(Number(body.analyticsEmailSendHour) || 8))) }
+        : {}),
       ...(body.offlinePosEnabled !== undefined
         ? { offlinePosEnabled: Boolean(body.offlinePosEnabled) }
         : {}),

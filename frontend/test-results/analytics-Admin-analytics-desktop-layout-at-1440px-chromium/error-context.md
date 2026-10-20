@@ -6,8 +6,8 @@
 
 # Test info
 
-- Name: smoke.spec.ts >> storefront smoke >> home → menu → cart → checkout form
-- Location: e2e/smoke.spec.ts:6:7
+- Name: analytics.spec.ts >> Admin analytics >> desktop layout at 1440px
+- Location: e2e/analytics.spec.ts:27:7
 
 # Error details
 

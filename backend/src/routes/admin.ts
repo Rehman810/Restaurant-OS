@@ -31,8 +31,16 @@ import { branchDayRangeUtc } from "../lib/dine-in/branch-time";
 import { storeTodayUtcRange } from "../lib/reports/time-range";
 import { canAccess, type AppRole } from "../lib/access";
 import { buildDashboardSummary, resolveDashboardTimezone } from "../lib/dashboard/summary";
+import { registerAnalyticsOverviewRoutes } from "./analytics-overview";
+import { legacyPeriodToPreset, resolvePresetRange } from "../lib/analytics/range";
+import { aggregatePeriodOrderMetrics } from "../lib/metrics/period-stats";
+import { formatChartDayLabel, shiftStoreDateKey } from "../lib/dashboard/dates";
+import { utcRangeForStoreDateKey } from "../lib/dashboard/dates";
+import { COMPLETED_STATUSES } from "../lib/dashboard/order-completion";
 
 export const adminRouter = Router();
+
+registerAnalyticsOverviewRoutes(adminRouter, requireAuth, requireRole, ADMIN_LIKE);
 
 const orderInclude = {
   items: true,
@@ -437,16 +445,12 @@ adminRouter.get("/analytics", requireAuth, requireRole(...ADMIN_LIKE), async (re
 
   const period = parsePeriod(req.query.period);
   const timezone = await resolveStoreTimezone(scope);
-  const today = storeTodayUtcRange(timezone);
-  const { start, end } =
-    period === "today" ? { start: today.start, end: today.end } : periodRange(period);
-  const rangeWhere = { ...bw, createdAt: { gte: start, lte: end } };
-  const orderWhere = { ...rangeWhere, status: { not: OrderStatus.CANCELLED } };
+  const preset = legacyPeriodToPreset(period);
+  const resolved = resolvePresetRange(preset, timezone);
+  const metrics = await aggregatePeriodOrderMetrics(bw, resolved.startUtc, resolved.endUtc);
 
-  const [orders, revenueAgg, delivered, orderItems, statusCounts, customersInPeriod] = await Promise.all([
-    prisma.order.count({ where: orderWhere }),
-    prisma.order.aggregate({ _sum: { total: true }, where: orderWhere }),
-    prisma.order.count({ where: { ...rangeWhere, status: OrderStatus.DELIVERED } }),
+  const orderWhere = { ...bw, createdAt: { gte: resolved.startUtc, lte: resolved.endUtc }, status: { not: OrderStatus.CANCELLED } };
+  const [orderItems, statusCounts, customersInPeriod] = await Promise.all([
     prisma.orderItem.findMany({
       where: { order: orderWhere },
       select: {
@@ -458,18 +462,16 @@ adminRouter.get("/analytics", requireAuth, requireRole(...ADMIN_LIKE), async (re
     }),
     prisma.order.groupBy({
       by: ["status"],
-      where: rangeWhere,
+      where: { ...bw, createdAt: { gte: resolved.startUtc, lte: resolved.endUtc } },
       _count: { status: true },
     }),
     prisma.order.findMany({
       where: orderWhere,
-      select: { customerId: true },
-      distinct: ["customerId"],
+      select: { customerId: true, customerPhone: true },
     }),
   ]);
 
-  const revenue = Number(revenueAgg._sum.total || 0);
-  const chart = await buildChart(period, start, end, bw);
+  const chart = await buildLegacyChart(period, resolved.fromKey, resolved.toKey, timezone, bw);
 
   const itemMap = new Map<string, { name: string; qty: number; revenue: number }>();
   const catMap = new Map<string, { revenue: number; orders: number }>();
@@ -486,6 +488,10 @@ adminRouter.get("/analytics", requireAuth, requireRole(...ADMIN_LIKE), async (re
     catMap.set(cat, c);
   }
 
+  const uniqueCustomers = new Set(
+    customersInPeriod.map((c) => c.customerId ?? `guest:${c.customerPhone}`)
+  ).size;
+
   const periodLabels: Record<AnalyticsPeriod, string> = {
     today: "Today",
     week: "This week",
@@ -497,14 +503,15 @@ adminRouter.get("/analytics", requireAuth, requireRole(...ADMIN_LIKE), async (re
     period,
     periodLabel: periodLabels[period],
     range: {
-      from: start.toISOString().slice(0, 10),
-      to: end.toISOString().slice(0, 10),
+      from: resolved.fromKey,
+      to: resolved.toKey,
     },
-    revenue,
-    orders,
-    avgOrderValue: orders ? Math.round(revenue / orders) : 0,
-    delivered,
-    customers: customersInPeriod.length,
+    revenue: metrics.collected,
+    booked: metrics.booked,
+    orders: metrics.ordersCount,
+    avgOrderValue: metrics.avgOrderValue,
+    delivered: metrics.completedCount,
+    customers: uniqueCustomers,
     chart,
     topItems: [...itemMap.values()].sort((a, b) => b.qty - a.qty).slice(0, 8),
     categoryBreakdown: [...catMap.entries()]
@@ -513,6 +520,72 @@ adminRouter.get("/analytics", requireAuth, requireRole(...ADMIN_LIKE), async (re
     statusBreakdown: Object.fromEntries(statusCounts.map((s) => [s.status, s._count.status])),
   });
 });
+
+async function buildLegacyChart(
+  period: AnalyticsPeriod,
+  fromKey: string,
+  toKey: string,
+  timezone: string,
+  branchWhere: { branchId?: string }
+) {
+  const notCancelled = { status: { not: OrderStatus.CANCELLED }, ...branchWhere };
+  if (period === "today") {
+    const { startUtc } = utcRangeForStoreDateKey(fromKey, timezone);
+    const buckets = [];
+    for (let h = 0; h < 24; h += 2) {
+      const from = new Date(startUtc);
+      from.setUTCHours(from.getUTCHours() + h);
+      const to = new Date(from);
+      to.setUTCHours(to.getUTCHours() + 2);
+      const [count, sum, collectedSum] = await Promise.all([
+        prisma.order.count({ where: { createdAt: { gte: from, lt: to }, ...notCancelled } }),
+        prisma.order.aggregate({ _sum: { total: true }, where: { createdAt: { gte: from, lt: to }, ...notCancelled } }),
+        prisma.order.aggregate({
+          _sum: { total: true },
+          where: { createdAt: { gte: from, lt: to }, status: { in: COMPLETED_STATUSES }, ...branchWhere },
+        }),
+      ]);
+      const label = h === 0 ? "12am" : h < 12 ? `${h}am` : h === 12 ? "12pm" : `${h - 12}pm`;
+      buckets.push({
+        date: from.toISOString(),
+        label,
+        orders: count,
+        revenue: Number(collectedSum._sum.total || 0),
+        booked: Number(sum._sum.total || 0),
+      });
+    }
+    return buckets;
+  }
+
+  const keys: string[] = [];
+  let cur = fromKey;
+  while (cur <= toKey) {
+    keys.push(cur);
+    if (cur === toKey) break;
+    cur = shiftStoreDateKey(cur, 1, timezone);
+  }
+
+  const buckets = [];
+  for (const key of keys) {
+    const { startUtc, endUtc } = utcRangeForStoreDateKey(key, timezone);
+    const [count, bookedAgg, collectedAgg] = await Promise.all([
+      prisma.order.count({ where: { createdAt: { gte: startUtc, lte: endUtc }, ...notCancelled } }),
+      prisma.order.aggregate({ _sum: { total: true }, where: { createdAt: { gte: startUtc, lte: endUtc }, ...notCancelled } }),
+      prisma.order.aggregate({
+        _sum: { total: true },
+        where: { createdAt: { gte: startUtc, lte: endUtc }, status: { in: COMPLETED_STATUSES }, ...branchWhere },
+      }),
+    ]);
+    buckets.push({
+      date: key,
+      label: period === "year" ? key.slice(0, 7) : formatChartDayLabel(key, timezone),
+      orders: count,
+      revenue: Number(collectedAgg._sum.total || 0),
+      booked: Number(bookedAgg._sum.total || 0),
+    });
+  }
+  return buckets;
+}
 
 function customerContactKey(phone: string, email: string | null | undefined) {
   const phoneKey = normalizeBlockPhone(phone);

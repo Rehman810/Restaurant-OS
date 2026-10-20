@@ -6,8 +6,8 @@
 
 # Test info
 
-- Name: phase2.spec.ts >> phase 2 flows >> coupon validate API via checkout UI
-- Location: e2e/phase2.spec.ts:6:7
+- Name: analytics.spec.ts >> Admin analytics >> no horizontal overflow at 390px
+- Location: e2e/analytics.spec.ts:50:7
 
 # Error details
 

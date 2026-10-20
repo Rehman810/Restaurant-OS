@@ -907,6 +907,16 @@ model StoreSettings {
   shiftOpenWarningHours Int      @default(12)
   lowRatingThreshold    Int      @default(2)
   twoFaReminderDays     Int      @default(7)
+  weekStartDay          Int      @default(1)
+  analyticsInsightMinDays   Int  @default(7)
+  analyticsInsightMinOrders Int  @default(20)
+  analyticsLowMarginPercent Int  @default(15)
+  analyticsSlowMoverDays    Int  @default(30)
+  analyticsEmailEnabled     Boolean @default(false)
+  analyticsEmailFrequency   String  @default("weekly")
+  analyticsEmailRecipients  String  @default("")
+  analyticsEmailSendHour    Int     @default(8)
+  analyticsEmailLastSentAt  DateTime?
   updatedAt           DateTime @updatedAt
 }
 
@@ -1180,6 +1190,8 @@ model Order {
   feedback              OrderFeedback?
 
   @@index([branchId, needsReview])
+  @@index([branchId, createdAt])
+  @@index([branchId, status, createdAt])
 }
 
 model OrderFeedback {

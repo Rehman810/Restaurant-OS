@@ -236,7 +236,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
           </div>
 
-          <nav className={`flex gap-1 overflow-x-auto py-2 lg:flex-1 lg:flex-col lg:gap-0 lg:overflow-y-auto ${collapsed ? "px-2 lg:px-2" : "px-3"}`}>
+          <nav className={`relative flex gap-1 overflow-x-auto py-2 lg:flex-1 lg:flex-col lg:gap-0 lg:overflow-y-auto ${collapsed ? "px-2 lg:px-2" : "px-3"}`}>
             {sidebarSections.map((section, sectionIdx) => (
               <div
                 key={section.title}
@@ -301,6 +301,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 })}
               </div>
             ))}
+            <div
+              className="pointer-events-none sticky bottom-0 hidden h-10 bg-gradient-to-t from-white via-white/80 to-transparent dark:from-stone-900 dark:via-stone-900/80 lg:block"
+              aria-hidden
+            />
           </nav>
 
           <div className={`hidden border-t border-orange-100/80 p-3 dark:border-stone-700 lg:block ${collapsed ? "px-2" : ""}`}>

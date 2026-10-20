@@ -107,6 +107,15 @@ export type StoreSettings = {
   shiftOpenWarningHours?: number;
   lowRatingThreshold?: number;
   twoFaReminderDays?: number;
+  weekStartDay?: number;
+  analyticsInsightMinDays?: number;
+  analyticsInsightMinOrders?: number;
+  analyticsLowMarginPercent?: number;
+  analyticsSlowMoverDays?: number;
+  analyticsEmailEnabled?: boolean;
+  analyticsEmailFrequency?: string;
+  analyticsEmailRecipients?: string;
+  analyticsEmailSendHour?: number;
   autoPrintKitchenTickets?: boolean;
   offlinePosEnabled?: boolean;
   offlineClockSkewThresholdMinutes?: number;

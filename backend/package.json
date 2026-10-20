@@ -11,6 +11,7 @@
     "prisma:migrate": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts",
     "prisma:seed-inventory": "tsx scripts/seed-inventory.ts",
+    "seed:analytics": "tsx scripts/seed-analytics.ts",
     "prisma:studio": "prisma studio",
     "routes:doc": "tsx scripts/generate-route-table.ts",
     "test": "tsx scripts/run-tests.ts",

@@ -6,6 +6,7 @@ dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
 import { createApp } from "./app";
 import { startDineInJobScheduler, stopDineInJobScheduler } from "./lib/dine-in/jobs";
+import { startAnalyticsEmailScheduler, stopAnalyticsEmailScheduler } from "./lib/analytics/scheduled-email";
 import { databaseHelpText, verifyDatabaseConnection } from "./lib/db-health";
 import { initRealtime, shutdownRealtime } from "./lib/realtime";
 import { prisma } from "./lib/prisma";
@@ -42,6 +43,7 @@ async function gracefulShutdown(signal: string) {
   shuttingDown = true;
   console.log(`[shutdown] ${signal} received — closing server`);
   stopDineInJobScheduler();
+  stopAnalyticsEmailScheduler();
 
   const forceTimer = setTimeout(() => {
     console.error("[shutdown] timeout — forcing exit");
@@ -80,5 +82,6 @@ server.listen(PORT, () => {
       }
     }
     startDineInJobScheduler();
+    startAnalyticsEmailScheduler();
   })();
 });

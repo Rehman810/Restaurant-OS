@@ -6,8 +6,8 @@
 
 # Test info
 
-- Name: phase2.spec.ts >> phase 2 flows >> admin coupons page loads for manager
-- Location: e2e/phase2.spec.ts:17:7
+- Name: analytics.spec.ts >> Admin analytics >> dark theme at 390px
+- Location: e2e/analytics.spec.ts:38:7
 
 # Error details
 
