@@ -1017,8 +1017,10 @@ export default function PosPage() {
           />
         </section>
 
-        <aside className="hidden h-full min-h-0 w-full shrink-0 border-stone-200 bg-white dark:border-stone-700 dark:bg-stone-900 md:flex md:w-[min(380px,38vw)] md:min-h-0 md:flex-col md:border-l">
-          {renderCartPanel(false)}
+        <aside className="hidden h-full min-h-0 w-full shrink-0 border-stone-200 bg-white dark:border-stone-700 dark:bg-stone-900 md:flex md:h-full md:w-[min(400px,36vw)] md:min-h-0 md:flex-col md:border-l">
+          <div className="flex h-full min-h-0 w-full flex-1 flex-col">
+            {renderCartPanel(false)}
+          </div>
         </aside>
       </div>
 

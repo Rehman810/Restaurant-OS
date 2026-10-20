@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, BadgeDollarSign, Minus, Plus, Printer, ShoppingBag, Trash2 } from "lucide-react";
+import { ArrowLeft, Minus, Plus, Printer, ShoppingBag } from "lucide-react";
 import type { DeliveryArea, FulfillmentType, Order, PaymentMethod } from "@/lib/types";
 import type { PosLine } from "@/lib/pos-cart";
 import { pkr } from "@/lib/format";
@@ -9,7 +9,6 @@ import { PosDiscountFields } from "@/components/admin/pos/PosDiscountFields";
 import { PosPaymentPanel } from "@/components/admin/pos/PosPaymentPanel";
 import type { PosPaymentRow } from "@/lib/pos/checkout-helpers";
 import { deliveryCheckoutIncomplete } from "@/lib/pos/delivery-customer";
-import { PosDeliveryFields } from "@/components/admin/pos/PosDeliveryFields";
 
 type ModeInfo = { id: FulfillmentType; label: string };
 
@@ -114,7 +113,6 @@ export function PosCartPanel(props: Props) {
     onCharge,
     lastOrder,
     onReprint,
-    onOverridePrice,
     sheetMode,
     deliveryAreas = [],
     deliveryAreaId = "",
@@ -136,16 +134,19 @@ export function PosCartPanel(props: Props) {
       customerPhone,
     });
 
-  const checkoutMaxH = sheetMode ? "max-h-[min(44dvh,18rem)]" : "max-h-[min(58vh,28rem)]";
+  const checkoutMaxH = sheetMode
+    ? "max-h-[min(44dvh,20rem)]"
+    : "max-h-[min(32vh,17rem)] md:max-h-[min(36vh,19rem)]";
 
   return (
     <div className={`flex h-full min-h-0 flex-1 flex-col overflow-hidden ${sheetMode ? "max-h-[inherit]" : ""}`}>
+      <div className="shrink-0">
       {sheetMode && (
         <div className="flex shrink-0 justify-center py-2 md:hidden" aria-hidden>
           <span className="h-1 w-10 rounded-full bg-stone-300 dark:bg-stone-600" />
         </div>
       )}
-      <div className="shrink-0 border-b border-stone-200 bg-stone-50/80 px-3 py-2.5 dark:border-stone-700 dark:bg-stone-800/80 sm:px-4">
+      <div className="border-b border-stone-200 bg-stone-50/80 px-3 py-2.5 dark:border-stone-700 dark:bg-stone-800/80 sm:px-4 md:py-2">
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -164,11 +165,11 @@ export function PosCartPanel(props: Props) {
             </p>
           </div>
         </div>
-        <div className="mt-2 flex flex-wrap gap-1.5">
+        <div className="mt-2 flex flex-wrap gap-1.5 md:mt-1.5 md:flex-nowrap">
           <button
             type="button"
             onClick={onHold}
-            className="min-h-10 flex-1 rounded-lg px-2 text-[11px] font-semibold text-stone-700 ring-1 ring-stone-200 dark:text-stone-200 dark:ring-stone-600 sm:min-h-11 sm:flex-none sm:px-2.5"
+            className="min-h-10 flex-1 rounded-lg px-2 text-[11px] font-semibold text-stone-700 ring-1 ring-stone-200 dark:text-stone-200 dark:ring-stone-600 md:min-h-9 md:flex-none md:px-2.5"
           >
             Hold
           </button>
@@ -176,7 +177,7 @@ export function PosCartPanel(props: Props) {
             <button
               type="button"
               onClick={onShowHolds}
-              className="min-h-10 flex-1 rounded-lg px-2 text-[11px] font-semibold text-brand-800 ring-1 ring-brand-200 sm:min-h-11 sm:flex-none sm:px-2.5"
+              className="min-h-10 flex-1 rounded-lg px-2 text-[11px] font-semibold text-brand-800 ring-1 ring-brand-200 md:min-h-9 md:flex-none md:px-2.5"
             >
               Held ({holdCount})
             </button>
@@ -185,7 +186,7 @@ export function PosCartPanel(props: Props) {
             <button
               type="button"
               onClick={onClearRequest}
-              className="min-h-10 flex-1 rounded-lg px-2 text-[11px] font-semibold text-rose-600 ring-1 ring-rose-100 sm:min-h-11 sm:flex-none sm:px-2.5"
+              className="min-h-10 flex-1 rounded-lg px-2 text-[11px] font-semibold text-rose-600 ring-1 ring-rose-100 md:min-h-9 md:flex-none md:px-2.5"
             >
               Clear
             </button>
@@ -193,7 +194,7 @@ export function PosCartPanel(props: Props) {
           <button
             type="button"
             onClick={onOpenCustomer}
-            className={`min-h-10 w-full rounded-lg bg-white px-2 text-[11px] font-semibold text-stone-700 ring-1 dark:bg-stone-800 dark:text-stone-200 sm:min-h-11 sm:w-auto sm:px-2.5 ${
+            className={`min-h-10 w-full rounded-lg bg-white px-2 text-[11px] font-semibold text-stone-700 ring-1 dark:bg-stone-800 dark:text-stone-200 md:min-h-9 md:w-auto md:px-2.5 ${
               deliveryIncomplete
                 ? "ring-2 ring-amber-500 dark:ring-amber-400"
                 : "ring-stone-200 dark:ring-stone-600"
@@ -206,17 +207,19 @@ export function PosCartPanel(props: Props) {
         </div>
       </div>
 
-      {sheetMode && mode === "DELIVERY" && deliveryIncomplete && (
+      {mode === "DELIVERY" && deliveryIncomplete && (
         <button
           type="button"
           onClick={onOpenCustomer}
-          className="mx-3 mt-2 shrink-0 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs font-semibold text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+          className="mx-3 mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs font-semibold text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
         >
-          Tap to complete delivery details (name, phone, area, address)
+          {sheetMode
+            ? "Tap to complete delivery details (name, phone, area, address)"
+            : "Complete delivery details via Customer & delivery *"}
         </button>
       )}
 
-      <div className="shrink-0 border-b border-stone-200 px-3 py-2 dark:border-stone-700">
+      <div className="border-b border-stone-200 px-3 py-1.5 dark:border-stone-700 md:py-1">
         <CashShiftPanel
           paymentMethod={payment}
           onShiftChange={onShiftChange}
@@ -226,19 +229,23 @@ export function PosCartPanel(props: Props) {
       </div>
 
       {mode === "DINE_IN" && (
-        <div className="shrink-0 border-b border-stone-200 px-3 py-2 dark:border-stone-700">
+        <div className="border-b border-stone-200 px-3 py-1.5 dark:border-stone-700">
           <button
             type="button"
             onClick={onOpenTable}
-            className="flex min-h-11 w-full items-center justify-between rounded-xl border border-brand-200 bg-brand-50/50 px-3 text-sm font-semibold text-brand-900 dark:border-brand-700 dark:bg-brand-950/30 dark:text-brand-100"
+            className="flex min-h-10 w-full items-center justify-between rounded-xl border border-brand-200 bg-brand-50/50 px-3 text-sm font-semibold text-brand-900 dark:border-brand-700 dark:bg-brand-950/30 dark:text-brand-100"
           >
             {tableLabel ? `Table ${tableLabel}` : "Select table (required)"}
           </button>
         </div>
       )}
+      </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain border-b border-stone-200 dark:border-stone-700">
-        <ul className="space-y-2 px-3 py-3">
+      <div className="flex min-h-[10rem] flex-1 flex-col overflow-hidden md:min-h-[14rem]">
+        <p className="shrink-0 border-b border-stone-100 bg-stone-50/90 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-stone-500 dark:border-stone-700 dark:bg-stone-800/50">
+          Items in cart
+        </p>
+        <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-3 py-3">
         {lines.length === 0 ? (
           <li className="flex min-h-[120px] flex-col items-center justify-center rounded-2xl border border-dashed border-stone-300 bg-stone-50 px-4 py-8 text-center dark:border-stone-600 dark:bg-stone-800/50">
             <ShoppingBag size={28} className="text-stone-400" strokeWidth={1.5} />
@@ -248,52 +255,47 @@ export function PosCartPanel(props: Props) {
           lines.map((l) => (
             <li key={l.id}>
               <div className="rounded-xl border border-stone-200 bg-white p-2.5 dark:border-stone-600 dark:bg-stone-800">
-                <button
-                  type="button"
-                  onClick={() => onLineTap(l)}
-                  className="w-full text-left"
-                >
-                  <p className="text-sm font-bold leading-snug text-stone-900 dark:text-stone-50">{l.name}</p>
-                  {l.optionsLabel && l.optionsLabel !== l.name && (
-                    <p className="mt-0.5 text-[11px] text-stone-500">{l.optionsLabel}</p>
-                  )}
-                  {l.instructions && (
-                    <p className="mt-0.5 text-[11px] italic text-stone-500">Note: {l.instructions}</p>
-                  )}
-                  <p className="mt-1 text-sm font-bold tabular-nums text-brand-700 dark:text-brand-300">
-                    {pkr(l.price * l.quantity)}
-                  </p>
-                </button>
-                <div className="mt-2 flex items-center justify-between gap-2 border-t border-stone-100 pt-2 dark:border-stone-700">
-                  <div className="flex items-center gap-1">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onLineTap(l)}
+                    className="min-w-0 flex-1 text-left"
+                  >
+                    <p className="text-sm font-bold leading-snug text-stone-900 dark:text-stone-50">{l.name}</p>
+                    <p className="mt-0.5 text-sm font-bold tabular-nums text-brand-700 dark:text-brand-300">
+                      {pkr(l.price * l.quantity)}
+                    </p>
+                  </button>
+                  <div className="flex shrink-0 items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
-                      className="grid h-10 w-10 place-items-center rounded-lg border border-stone-200 bg-white dark:border-stone-600 dark:bg-stone-900"
+                      className="grid h-9 w-9 place-items-center rounded-lg border border-stone-200 bg-white dark:border-stone-600 dark:bg-stone-900"
                       aria-label="Decrease quantity"
                       onClick={() => onQty(l.id, l.quantity - 1)}
                     >
                       <Minus size={14} />
                     </button>
-                    <span className="w-8 text-center text-sm font-black tabular-nums">{l.quantity}</span>
+                    <span className="w-7 text-center text-sm font-black tabular-nums">{l.quantity}</span>
                     <button
                       type="button"
-                      className="grid h-10 w-10 place-items-center rounded-lg border border-stone-200 bg-white dark:border-stone-600 dark:bg-stone-900"
+                      className="grid h-9 w-9 place-items-center rounded-lg border border-stone-200 bg-white dark:border-stone-600 dark:bg-stone-900"
                       aria-label="Increase quantity"
                       onClick={() => onQty(l.id, l.quantity + 1)}
                     >
                       <Plus size={14} />
                     </button>
                   </div>
-                  <button
-                    type="button"
-                    className="flex h-10 items-center gap-1 rounded-lg px-2 text-[11px] font-semibold text-stone-600 ring-1 ring-stone-200 dark:text-stone-300 dark:ring-stone-600"
-                    aria-label="Override price"
-                    onClick={() => onOverridePrice(l)}
-                  >
-                    <BadgeDollarSign size={14} />
-                    <span className="sm:inline">Price</span>
-                  </button>
                 </div>
+                {(l.optionsLabel && l.optionsLabel !== l.name) || l.instructions ? (
+                  <button type="button" onClick={() => onLineTap(l)} className="mt-1.5 w-full text-left">
+                    {l.optionsLabel && l.optionsLabel !== l.name && (
+                      <p className="text-[11px] text-stone-500">{l.optionsLabel}</p>
+                    )}
+                    {l.instructions && (
+                      <p className="text-[11px] italic text-stone-500">Note: {l.instructions}</p>
+                    )}
+                  </button>
+                ) : null}
               </div>
             </li>
           ))
@@ -302,27 +304,8 @@ export function PosCartPanel(props: Props) {
       </div>
 
       <div
-        className={`min-h-0 shrink-0 overflow-y-auto overscroll-contain border-t border-stone-200 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] dark:border-stone-700 dark:bg-stone-900 sm:p-4 ${checkoutMaxH}`}
+        className={`min-h-0 overflow-y-auto overscroll-contain border-t border-stone-200 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-4px_12px_rgba(0,0,0,0.06)] dark:border-stone-700 dark:bg-stone-900 dark:shadow-none sm:p-3 ${checkoutMaxH}`}
       >
-        {mode === "DELIVERY" && onDeliveryAddress && onDeliveryAreaId && !sheetMode && (
-          <div className="mb-3">
-            <PosDeliveryFields
-              variant="card"
-              mode={mode}
-              deliveryAreas={deliveryAreas}
-              deliveryAreaId={deliveryAreaId}
-              onDeliveryAreaId={onDeliveryAreaId}
-              deliveryAddress={deliveryAddress}
-              onDeliveryAddress={onDeliveryAddress}
-              customerName={customerName}
-              onCustomerName={(v) => onCustomerName?.(v)}
-              customerPhone={customerPhone}
-              onCustomerPhone={(v) => onCustomerPhone?.(v)}
-              showValidation
-            />
-          </div>
-        )}
-
         <label className="mb-2 block text-xs font-semibold text-stone-600 dark:text-stone-300">
           Kitchen note
           <input
