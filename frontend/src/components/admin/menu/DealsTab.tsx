@@ -108,7 +108,7 @@ export function DealsTab({ header, canManage, canToggleAvailability, onAddDeal, 
     const labels = rows.map((r) => dealCategoryLabel(r.group));
     if (dgroup) labels.push(dgroup);
     return [
-      { value: "", label: "All deal groups" },
+      { value: "", label: "All offer groups" },
       ...mergeDealCategoryOptions(labels).map((g) => ({ value: g, label: g })),
     ];
   }, [rows, dgroup]);
@@ -131,39 +131,38 @@ export function DealsTab({ header, canManage, canToggleAvailability, onAddDeal, 
 
   function dealCard(row: AdminDealRow) {
     return (
-      <article key={row.id} className="flex gap-3 overflow-hidden rounded-2xl border border-stone-200/80 bg-white p-3 shadow-sm dark:border-stone-700 dark:bg-stone-900">
-        <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-stone-100">
+      <article key={row.id} className="flex flex-col overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-sm dark:border-stone-700 dark:bg-stone-900">
+        <div className="relative aspect-[16/10] bg-stone-100">
           {row.thumbnail ? (
-            <Image src={row.thumbnail} alt="" fill className="object-cover" sizes="80px" />
+            <Image src={row.thumbnail} alt="" fill className="object-cover" sizes="(max-width: 640px) 100vw, 33vw" />
           ) : (
-            <ImageIcon className="m-6 text-stone-400" size={22} />
+            <div className="grid h-full place-items-center text-stone-400">
+              <ImageIcon size={28} />
+            </div>
+          )}
+          <span className="absolute right-2.5 top-2.5 rounded-full bg-white/95 px-2.5 py-1 text-xs font-bold text-brand-700 shadow-sm">
+            {pkr(row.dealPrice)}
+          </span>
+          {row.savings > 0 && (
+            <span className="absolute left-2.5 top-2.5 rounded-full bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white">
+              Save {pkr(row.savings)}
+            </span>
           )}
         </div>
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <h3 className="font-semibold text-stone-900 dark:text-stone-50">{row.title}</h3>
-              <p className="text-xs text-stone-500">{dealCategoryLabel(row.group)}</p>
-            </div>
-            <div className="flex shrink-0 items-start gap-1">
-              <p className="text-sm font-bold text-brand-700">{pkr(row.dealPrice)}</p>
-              {canManage && (
-                <DealRowMenu onEdit={() => onEditDeal(row.id)} onDelete={() => onDeleteDeal(row)} />
-              )}
-            </div>
+        <div className="flex flex-1 flex-col gap-2 p-3.5">
+          <div className="min-w-0">
+            <h3 className="truncate font-semibold text-stone-900 dark:text-stone-50">{row.title}</h3>
+            <p className="text-xs text-stone-500">{dealCategoryLabel(row.group)}</p>
           </div>
           <p className="line-clamp-2 text-xs text-stone-600 dark:text-stone-400">
             {row.items.map((i) => `${i.quantity}× ${i.name}`).join(", ")}
           </p>
-          {row.savings > 0 && (
-            <p className="text-xs font-semibold text-emerald-700">Save {pkr(row.savings)} vs buying separately</p>
-          )}
           <p className="text-xs text-stone-500">
             <span className="font-medium text-stone-700 dark:text-stone-300">{dealScheduleStatusLabel(row.scheduleStatus)}</span>
             {" · "}
             {row.scheduleSummary}
           </p>
-          <div className="flex flex-wrap gap-2 pt-1">
+          <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-stone-100 pt-3 dark:border-stone-800">
             <DishAvailabilityToggle
               availability={row.availability}
               disabled={!canToggleAvailability}
@@ -176,9 +175,16 @@ export function DealsTab({ header, canManage, canToggleAvailability, onAddDeal, 
               />
             )}
             {canManage && (
-              <button type="button" onClick={() => onEditDeal(row.id)} className="inline-flex min-h-11 items-center gap-1 rounded-xl bg-stone-100 px-3 text-xs font-semibold dark:bg-stone-800">
-                <Pencil size={14} /> Edit
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => onEditDeal(row.id)}
+                  className="inline-flex min-h-11 flex-1 items-center justify-center gap-1 rounded-xl bg-stone-100 px-3 text-xs font-semibold dark:bg-stone-800"
+                >
+                  <Pencil size={14} /> Edit
+                </button>
+                <DealRowMenu onEdit={() => onEditDeal(row.id)} onDelete={() => onDeleteDeal(row)} />
+              </>
             )}
           </div>
         </div>
@@ -194,14 +200,14 @@ export function DealsTab({ header, canManage, canToggleAvailability, onAddDeal, 
           <input
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search deals…"
+            placeholder="Search offers…"
             className="min-h-11 min-w-[12rem] flex-1 rounded-xl border border-stone-200 bg-white px-3 text-sm dark:border-stone-600 dark:bg-stone-900 xl:max-w-xs"
           />
           <AdminSelect
             value={dgroup}
             onChange={(v) => setQuery({ dgroup: v || undefined, dpage: "1" })}
             options={groupSelectOptions}
-            aria-label="Deal group"
+            aria-label="Offer group"
             minWidth="min-w-[11rem]"
             className="shrink-0"
           />
@@ -215,7 +221,7 @@ export function DealsTab({ header, canManage, canToggleAvailability, onAddDeal, 
               { value: "expired", label: `Expired (${counts.expired})` },
               { value: "hidden", label: `Hidden (${counts.hidden})` },
             ]}
-            aria-label="Deal status"
+            aria-label="Offer status"
             minWidth="min-w-[10.5rem]"
             className="shrink-0"
           />
@@ -223,7 +229,7 @@ export function DealsTab({ header, canManage, canToggleAvailability, onAddDeal, 
           <RefreshButton busy={refreshing} onClick={() => load(true)} showLabel={false} />
           {canManage && (
             <button type="button" onClick={onAddDeal} className="min-h-11 rounded-xl bg-brand-600 px-4 text-sm font-semibold text-white">
-              Add deal
+              Create offer
             </button>
           )}
         </div>
@@ -237,13 +243,13 @@ export function DealsTab({ header, canManage, canToggleAvailability, onAddDeal, 
           {Array.from({ length: 6 }).map((_, i) => <div key={i} className="skeleton h-40 rounded-2xl" />)}
         </div>
       ) : rows.length === 0 ? (
-        <AdminEmptyState icon={Sparkles} title="No deals match" description="Adjust filters or create a deal." />
+        <AdminEmptyState icon={Sparkles} title="No offers match" description="Adjust filters or create an offer." />
       ) : view === "list" ? (
         <div className={`overflow-x-auto rounded-2xl border border-stone-200/80 bg-white dark:border-stone-700 dark:bg-stone-900 ${refreshing ? "opacity-60" : ""}`}>
           <table className="min-w-full text-left text-sm">
             <thead className="border-b border-stone-100 text-xs uppercase text-stone-500 dark:border-stone-800">
               <tr>
-                <th className="px-3 py-3">Deal</th>
+                <th className="px-3 py-3">Offer</th>
                 <th className="hidden px-3 py-3 md:table-cell">Group</th>
                 <th className="px-3 py-3">Price</th>
                 <th className="hidden px-3 py-3 lg:table-cell">Schedule</th>
@@ -281,7 +287,7 @@ export function DealsTab({ header, canManage, canToggleAvailability, onAddDeal, 
           </table>
         </div>
       ) : (
-        <div className={`grid gap-3 md:grid-cols-2 xl:grid-cols-3 ${refreshing ? "opacity-60" : ""}`}>
+        <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 ${refreshing ? "opacity-60" : ""}`}>
           {rows.map((row) => dealCard(row))}
         </div>
       )}

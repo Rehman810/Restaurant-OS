@@ -35,7 +35,7 @@ export function DealRowMenu({ onEdit, onDelete }: Props) {
       <button
         ref={btnRef}
         type="button"
-        aria-label="Deal actions"
+        aria-label="Offer actions"
         aria-expanded={open}
         aria-haspopup="menu"
         onClick={() => setOpen((v) => !v)}

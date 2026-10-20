@@ -458,7 +458,13 @@ export default function CheckoutPage() {
                     try {
                       const res = await api<{ discount: number; code: string }>("/coupons/validate", {
                         method: "POST",
-                        body: JSON.stringify({ code: couponInput, subtotal, branchId }),
+                        body: JSON.stringify({
+                          code: couponInput,
+                          subtotal,
+                          branchId,
+                          channel: "online",
+                          fulfillmentType: mode,
+                        }),
                       });
                       setCouponDiscount(res.discount);
                       setCouponApplied(res.code);

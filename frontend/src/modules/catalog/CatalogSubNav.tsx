@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FolderTree, Sparkles, UtensilsCrossed } from "lucide-react";
+import { FolderTree, Sparkles, TicketPercent, UtensilsCrossed } from "lucide-react";
 import { AdminSurface } from "@/components/admin/ui";
 
 const LINKS = [
   { href: "/admin/catalog/dishes", label: "Dishes", icon: UtensilsCrossed },
-  { href: "/admin/catalog/deals", label: "Deals", icon: Sparkles },
+  { href: "/admin/catalog/offers", label: "Offers", icon: Sparkles },
+  { href: "/admin/catalog/vouchers", label: "Vouchers", icon: TicketPercent },
   { href: "/admin/catalog/categories", label: "Categories", icon: FolderTree },
 ] as const;
 

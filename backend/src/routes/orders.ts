@@ -50,9 +50,9 @@ import { AuditAction } from "../lib/audit-actions";
 import { recalculateOrderTotals } from "../lib/order-totals";
 import { recordRiderCodOnDelivered, releaseRiderCashOnCancel } from "../lib/rider-cod";
 import {
-  computeCouponDiscount,
+  couponCustomerStats,
+  evaluateCoupon,
   normalizeCouponCode,
-  validateCouponWindow,
 } from "../lib/coupon";
 import { loyaltyRedeemDiscount } from "../lib/loyalty";
 import { maybeAwardLoyalty } from "../lib/loyalty-award";
@@ -404,16 +404,20 @@ ordersRouter.post("/", optionalAuth, async (req, res) => {
   let couponDiscount = 0;
   let couponId: string | null = null;
   let couponCodeSnap: string | null = null;
+  const customerId = isRegisteredCustomer && user ? user.id : undefined;
   const normalizedCoupon = couponCodeBody ? normalizeCouponCode(String(couponCodeBody)) : "";
   if (normalizedCoupon) {
     const coupon = await prisma.coupon.findFirst({ where: { code: normalizedCoupon, isActive: true } });
     if (!coupon) return res.status(400).json({ error: "Promo code not found." });
-    if (coupon.branchId && coupon.branchId !== resolvedBranchId) {
-      return res.status(400).json({ error: "This promo code is not valid for your branch." });
-    }
-    const windowErr = validateCouponWindow(coupon);
-    if (windowErr) return res.status(400).json({ error: windowErr });
-    const computed = computeCouponDiscount(coupon, subtotal);
+    const stats = await couponCustomerStats(customerId, coupon.id);
+    const computed = evaluateCoupon(coupon, {
+      subtotal,
+      branchId: resolvedBranchId,
+      channel: "online",
+      fulfillment: mode,
+      customerId,
+      ...stats,
+    });
     if (!computed.ok) return res.status(400).json({ error: computed.error });
     couponDiscount = computed.discount;
     couponId = computed.couponId;
@@ -450,6 +454,14 @@ ordersRouter.post("/", optionalAuth, async (req, res) => {
         if (!c) throw Object.assign(new Error("Promo code not found."), { status: 400 });
         if (c.usageLimit != null && c.usedCount >= c.usageLimit) {
           throw Object.assign(new Error("This promo code has reached its usage limit."), { status: 400 });
+        }
+        if (c.perCustomerLimit != null && customerId) {
+          const used = await tx.order.count({
+            where: { customerId, couponId, status: { not: "CANCELLED" } },
+          });
+          if (used >= c.perCustomerLimit) {
+            throw Object.assign(new Error("You have already used this promo code the maximum number of times."), { status: 400 });
+          }
         }
         await tx.coupon.update({ where: { id: couponId }, data: { usedCount: { increment: 1 } } });
       }

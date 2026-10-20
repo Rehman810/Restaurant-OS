@@ -20,8 +20,8 @@ test.describe("phase 2 flows", () => {
     await page.getByLabel(/password/i).fill("admin");
     await page.getByRole("button", { name: /sign in/i }).click();
     await page.waitForURL("**/admin**");
-    await page.goto("/admin/coupons");
-    await expect(page.getByRole("heading", { name: /promo codes/i })).toBeVisible();
+    await page.goto("/admin/catalog/vouchers");
+    await expect(page.getByRole("heading", { name: /vouchers/i })).toBeVisible();
     await expect(page.getByText(/WELCOME10/i)).toBeVisible();
   });
 });

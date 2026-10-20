@@ -10,7 +10,7 @@ export default function MenuLegacyRedirect() {
 
   useEffect(() => {
     const tab = searchParams.get("tab");
-    if (tab === "deals") router.replace("/admin/catalog/deals");
+    if (tab === "deals" || tab === "offers") router.replace("/admin/catalog/offers");
     else if (tab === "categories") router.replace("/admin/catalog/categories");
     else router.replace("/admin/catalog/dishes");
   }, [router, searchParams]);

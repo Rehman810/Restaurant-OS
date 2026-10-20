@@ -110,7 +110,7 @@ export function DealsCatalogPage() {
     e.preventDefault();
     const validItems = dealForm.items.filter((i) => i.menuItemId);
     if (validItems.length === 0) {
-      setUploadError("Add at least one menu item to the deal.");
+      setUploadError("Add at least one dish to the offer.");
       return;
     }
     setSaving(true);
@@ -183,8 +183,8 @@ export function DealsCatalogPage() {
         header={
           <>
             <AdminPageHeader
-              title="Deals"
-              description="Bundle pricing"
+              title="Offers"
+              description="Combo bundles at a set price"
               icon={Sparkles}
             />
             {loadError ? (
@@ -222,7 +222,7 @@ export function DealsCatalogPage() {
       )}
       <ConfirmSheet
         open={Boolean(deleteTarget)}
-        title={`Delete ${deleteTarget?.label ?? "deal"}?`}
+        title={`Delete ${deleteTarget?.label ?? "offer"}?`}
         message="This cannot be undone."
         confirmLabel="Delete"
         danger

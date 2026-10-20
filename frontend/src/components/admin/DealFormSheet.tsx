@@ -15,6 +15,7 @@ import { Check, ImageIcon, Loader2, Plus, Sparkles, Trash2, Upload, X } from "lu
 import { MenuItem } from "@/lib/types";
 import { pkr } from "@/lib/format";
 import { AdminSelect } from "./AdminSelect";
+import { CATEGORY_WEEKDAYS } from "./CategoryFormSheet";
 
 const CLOSE_MS = 340;
 
@@ -142,11 +143,12 @@ export function DealFormSheet({
         <header className="shrink-0 border-b border-stone-100 px-6 py-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-medium text-stone-500">{editingId ? "Edit deal" : "New deal"}</p>
-              <h2 className="mt-0.5 flex items-center gap-2 text-xl font-semibold text-stone-900">
+              <p className="text-xs font-medium text-stone-500">{editingId ? "Edit offer" : "New offer"}</p>
+              <h2 className="mt-0.5 flex items-center gap-2 text-xl font-semibold text-stone-900 dark:text-stone-50">
                 <Sparkles size={18} className="text-brand-600" />
-                {editingId ? "Edit combo deal" : "Create combo deal"}
+                {editingId ? "Update combo offer" : "Create combo offer"}
               </h2>
+              <p className="mt-1 text-sm text-stone-500">Bundle dishes at a set price for online, POS, and dine-in.</p>
             </div>
             <button type="button" onClick={close} className="grid h-9 w-9 place-items-center rounded-full border border-stone-200 text-stone-500 hover:bg-stone-100">
               <X size={18} />
@@ -157,7 +159,7 @@ export function DealFormSheet({
         <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-stone-500">Deal image</label>
+              <label className="mb-1.5 block text-xs font-medium text-stone-500">Offer image</label>
               <div className="relative aspect-[16/10] overflow-hidden rounded-xl border border-stone-200 bg-stone-50">
                 {form.imageUrl ? <DealImage src={form.imageUrl} alt="Deal" /> : (
                   <div className="absolute inset-0 grid place-items-center text-stone-400">
@@ -183,11 +185,11 @@ export function DealFormSheet({
             </div>
 
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-stone-500">Deal title</label>
+              <label className="mb-1.5 block text-xs font-medium text-stone-500">Offer title</label>
               <input className="input" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} required placeholder="e.g. Family Feast" />
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-stone-500">Deal group</label>
+              <label className="mb-1.5 block text-xs font-medium text-stone-500">Offer group</label>
               <input
                 className="input"
                 list="deal-category-suggestions"
@@ -204,10 +206,10 @@ export function DealFormSheet({
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-medium text-stone-500">Description</label>
-              <textarea className="input min-h-[72px] resize-none" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="What's included in this deal?" />
+              <textarea className="input min-h-[72px] resize-none" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="What's included in this offer?" />
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-stone-500">Deal price</label>
+              <label className="mb-1.5 block text-xs font-medium text-stone-500">Offer price</label>
               <input className="input" type="number" min={0} value={form.dealPrice} onChange={(e) => setForm((f) => ({ ...f, dealPrice: e.target.value }))} required />
               {regularTotal > 0 && form.dealPrice && (
                 <div className="mt-2 space-y-1 text-xs">
@@ -215,7 +217,7 @@ export function DealFormSheet({
                     Components {pkr(regularTotal)} · Save {pkr(Math.max(0, regularTotal - Number(form.dealPrice)))}
                   </p>
                   {Number(form.dealPrice) >= regularTotal && regularTotal > 0 && (
-                    <p className="font-semibold text-amber-800 dark:text-amber-200">Deal price is at or above component sum.</p>
+                    <p className="font-semibold text-amber-800 dark:text-amber-200">Offer price is at or above the item total.</p>
                   )}
                 </div>
               )}
@@ -223,7 +225,7 @@ export function DealFormSheet({
 
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <label className="text-xs font-medium text-stone-500">Items in deal</label>
+                <label className="text-xs font-medium text-stone-500">Items in this offer</label>
                 <button
                   type="button"
                   disabled={menuItems.length === 0}
@@ -235,7 +237,7 @@ export function DealFormSheet({
               </div>
               {menuItems.length === 0 ? (
                 <p className="rounded-xl border border-dashed border-stone-200 bg-stone-50 px-3 py-4 text-center text-xs text-stone-500">
-                  Add dishes to the menu first, then include them in a deal.
+                  Add dishes to the menu first, then include them in an offer.
                 </p>
               ) : (
               <ul className="space-y-2">
@@ -309,12 +311,59 @@ export function DealFormSheet({
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-stone-500">Schedule start date</label>
+                <label className="mb-1.5 block text-xs font-medium text-stone-500">Start date</label>
                 <input className="input" type="date" value={form.scheduleStartsAt} onChange={(e) => setForm((f) => ({ ...f, scheduleStartsAt: e.target.value }))} />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-stone-500">Schedule end date</label>
+                <label className="mb-1.5 block text-xs font-medium text-stone-500">End date</label>
                 <input className="input" type="date" value={form.scheduleEndsAt} onChange={(e) => setForm((f) => ({ ...f, scheduleEndsAt: e.target.value }))} />
+              </div>
+            </div>
+
+            <div className="space-y-2 rounded-xl border border-stone-200 p-3 dark:border-stone-700">
+              <p className="text-xs font-semibold uppercase text-stone-500">Weekly hours (optional)</p>
+              <p className="text-xs text-stone-500">Leave days empty to run this offer every day in the date range.</p>
+              <div className="flex flex-wrap gap-2">
+                {CATEGORY_WEEKDAYS.map((d) => {
+                  const on = form.scheduleDays.includes(d.value);
+                  return (
+                    <button
+                      key={d.value}
+                      type="button"
+                      onClick={() =>
+                        setForm((f) => ({
+                          ...f,
+                          scheduleDays: on ? f.scheduleDays.filter((x) => x !== d.value) : [...f.scheduleDays, d.value],
+                        }))
+                      }
+                      className={`min-h-10 rounded-full px-3 text-xs font-semibold ring-1 ${
+                        on ? "bg-brand-600 text-white ring-brand-600" : "bg-white ring-stone-200 dark:bg-stone-900"
+                      }`}
+                    >
+                      {d.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-stone-500">From</label>
+                  <input
+                    className="input"
+                    type="time"
+                    value={form.scheduleStartTime}
+                    onChange={(e) => setForm((f) => ({ ...f, scheduleStartTime: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-stone-500">Until</label>
+                  <input
+                    className="input"
+                    type="time"
+                    value={form.scheduleEndTime}
+                    onChange={(e) => setForm((f) => ({ ...f, scheduleEndTime: e.target.value }))}
+                  />
+                </div>
               </div>
             </div>
             <button
@@ -333,7 +382,7 @@ export function DealFormSheet({
               Cancel
             </button>
             <button type="submit" disabled={saving} className="btn-primary min-h-11 flex-1">
-              {saving ? "Saving…" : editingId ? "Save deal" : "Create deal"}
+              {saving ? "Saving…" : editingId ? "Save offer" : "Create offer"}
             </button>
           </footer>
         </form>

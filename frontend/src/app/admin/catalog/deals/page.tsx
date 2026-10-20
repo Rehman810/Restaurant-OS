@@ -1,5 +1,5 @@
-import { DealsCatalogPage } from "@/modules/catalog/DealsCatalogPage";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <DealsCatalogPage />;
+  redirect("/admin/catalog/offers");
 }

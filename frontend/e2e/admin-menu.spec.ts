@@ -16,8 +16,8 @@ test.describe("Admin menu catalog", () => {
     await expect(page.getByRole("heading", { name: /^dishes$/i })).toBeVisible();
     await expect(page.getByPlaceholder(/search dishes/i)).toBeVisible();
 
-    await page.goto("/admin/catalog/deals");
-    await expect(page.getByRole("heading", { name: /^deals$/i })).toBeVisible();
+    await page.goto("/admin/catalog/offers");
+    await expect(page.getByRole("heading", { name: /^offers$/i })).toBeVisible();
 
     await page.goto("/admin/catalog/categories");
     await expect(page.getByRole("heading", { name: /^categories$/i })).toBeVisible();
