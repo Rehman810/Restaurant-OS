@@ -38,7 +38,7 @@ async function ensureSocket(): Promise<Socket | null> {
 }
 
 export type LiveOrdersOptions = {
-  onCreated?: () => void;
+  onCreated?: (payload?: { orderId?: string; at?: number }) => void;
   onConnectChange?: (connected: boolean) => void;
   onKitchenAlert?: (payload: { type: string; orderId: string; orderNumber: string; message: string; at: number }) => void;
 };
@@ -59,8 +59,8 @@ export function useLiveOrders(
     const onConnect = () => optionsRef.current?.onConnectChange?.(true);
     const onDisconnect = () => optionsRef.current?.onConnectChange?.(false);
     const onUpdated = () => onChangeRef.current();
-    const onCreated = () => {
-      optionsRef.current?.onCreated?.();
+    const onCreated = (payload?: { orderId?: string; at?: number }) => {
+      optionsRef.current?.onCreated?.(payload);
       onChangeRef.current();
     };
     const onKitchenAlert = (payload: {

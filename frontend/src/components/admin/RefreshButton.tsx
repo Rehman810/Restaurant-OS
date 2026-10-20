@@ -7,11 +7,15 @@ export function RefreshButton({
   onClick,
   className = "",
   variant = "ghost",
+  showLabel = true,
+  label = "Refresh",
 }: {
   busy?: boolean;
   onClick: () => void;
   className?: string;
   variant?: "ghost" | "primary" | "dark";
+  showLabel?: boolean;
+  label?: string;
 }) {
   const styles = {
     ghost:
@@ -23,9 +27,15 @@ export function RefreshButton({
   };
 
   return (
-    <button type="button" onClick={onClick} disabled={busy} className={`${styles[variant]} ${className}`}>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy}
+      aria-label={showLabel ? undefined : label}
+      className={`${styles[variant]} ${showLabel ? "" : "!px-2.5 !py-2.5"} ${className}`}
+    >
       <RefreshCw size={15} className={busy ? "animate-spin" : ""} />
-      Refresh
+      {showLabel ? label : null}
     </button>
   );
 }

@@ -5,6 +5,7 @@ import { menuRouter } from "./routes/menu";
 import { ordersRouter } from "./routes/orders";
 import { riderRouter } from "./routes/rider";
 import { adminRouter } from "./routes/admin";
+import { adminOrdersRouter } from "./routes/admin-orders";
 import { invoicesRouter } from "./routes/invoices";
 import { uploadRouter } from "./routes/upload";
 import { categoriesRouter } from "./routes/categories";
@@ -91,6 +92,7 @@ export function createApp() {
   app.use("/admin/kot", kotRouter);
   app.use("/kitchen", kitchenRouter);
   app.use("/admin/reports", reportsRouter);
+  app.use("/admin/orders", adminOrdersRouter);
   app.use("/admin", adminRouter);
   app.use("/invoices", invoicesRouter);
 

@@ -1,4 +1,4 @@
-export type QuickDatePreset = "today" | "week" | "month";
+export type QuickDatePreset = "today" | "yesterday" | "week" | "month" | "custom";
 
 function startOfDay(d: Date) {
   const x = new Date(d);
@@ -27,6 +27,13 @@ export function quickPresetRange(preset: QuickDatePreset): { from: string; to: s
 
   if (preset === "today") {
     return { from: to, to };
+  }
+
+  if (preset === "yesterday") {
+    const y = new Date(today);
+    y.setDate(y.getDate() - 1);
+    const d = toInputDate(y);
+    return { from: d, to: d };
   }
 
   if (preset === "week") {

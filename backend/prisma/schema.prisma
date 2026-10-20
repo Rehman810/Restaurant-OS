@@ -906,6 +906,8 @@ model StoreSettings {
   lateConfirmMinutes    Int      @default(15)
   latePrepMinutes       Int      @default(30)
   lateDeliveryMinutes   Int      @default(45)
+  ordersStaleHours      Int      @default(2)
+  duplicateOrderWindowMinutes Int @default(10)
   shiftOpenWarningHours Int      @default(12)
   lowRatingThreshold    Int      @default(2)
   twoFaReminderDays     Int      @default(7)
