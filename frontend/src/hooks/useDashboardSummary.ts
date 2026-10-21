@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import type { DashboardSummary } from "@/lib/dashboard/types";
+import { isRouteMissingError, loadApiCapabilities } from "@/lib/api-capabilities";
+import { fetchDashboardSummaryFromLegacyStats } from "@/lib/legacy-api/dashboard-from-stats";
 import { useLiveOrders } from "@/hooks/useLiveOrders";
 import { playKitchenChime } from "@/lib/kitchen-chime";
 import { readDashboardSoundEnabled } from "@/lib/dashboard/sound";
@@ -28,7 +30,17 @@ export function useDashboardSummary() {
 
   const fetchSummary = useCallback(async () => {
     try {
-      const summary = await api<DashboardSummary>(path);
+      let summary: DashboardSummary;
+      try {
+        summary = await api<DashboardSummary>(path);
+      } catch (err) {
+        if (isRouteMissingError(err)) {
+          await loadApiCapabilities(true);
+          summary = await fetchDashboardSummaryFromLegacyStats(branchQuery);
+        } else {
+          throw err;
+        }
+      }
       const prevKnown = knownIdsRef.current;
       const incomingIds = summary.incomingOrders.map((o) => o.id);
       const newIds = incomingIds.filter((id) => prevKnown.size > 0 && !prevKnown.has(id));
@@ -42,7 +54,13 @@ export function useDashboardSummary() {
       setStale(false);
       setLive("live");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not refresh dashboard");
+      const msg =
+        e instanceof ApiError && e.status === 403
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : "Could not refresh dashboard";
+      setError(msg);
       setStale(true);
       setLive("offline");
     } finally {

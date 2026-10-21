@@ -20,6 +20,7 @@ import { useStore } from "@/lib/store";
 import { PublicStore } from "@/lib/types";
 import { OpsKitchenAlertBanner } from "@/components/admin/OpsKitchenAlertBanner";
 import { StaffNotificationCenter } from "@/components/admin/StaffNotificationCenter";
+import { ApiUpgradeBanner } from "@/components/admin/ApiUpgradeBanner";
 import { chefAdminPathAllowed } from "@/lib/kitchen/chef-access";
 import { readKitchenKiosk } from "@/lib/kitchen/display";
 import { readPosFullscreen } from "@/lib/pos/display";
@@ -519,6 +520,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           }
         >
           {!hideChrome ? <OpsKitchenAlertBanner /> : null}
+          {!hideChrome ? <ApiUpgradeBanner /> : null}
           {children}
         </main>
 
