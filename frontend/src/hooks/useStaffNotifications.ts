@@ -12,9 +12,15 @@ import {
   type StaffNotification,
 } from "@/lib/staff-notifications";
 import { useLiveOrders } from "@/hooks/useLiveOrders";
-import { playKitchenChime } from "@/lib/kitchen-chime";
-import { readDashboardSoundEnabled } from "@/lib/dashboard/sound";
+import { playKitchenChime, unlockKitchenAudio } from "@/lib/kitchen-chime";
+import { readStaffNotificationSoundEnabled } from "@/lib/staff-notification-sound";
 import { useBranch } from "@/modules/branches/BranchContext";
+import type { StaffNotificationSeverity } from "@/lib/staff-notifications";
+
+function playStaffNotifySound(severity: StaffNotificationSeverity) {
+  if (!readStaffNotificationSoundEnabled()) return;
+  void unlockKitchenAudio().then(() => playKitchenChime(severity === "info"));
+}
 
 function ingest(payload: StaffNotification) {
   pushStaffNotification({ ...payload, read: false });
@@ -41,9 +47,7 @@ export function useStaffNotificationsFeed() {
   useLiveOrders(() => {}, undefined, undefined, {
     onOpsNotification: (payload) => {
       ingest({ ...payload, read: false } as StaffNotification);
-      if (payload.kind === "order_created" && readDashboardSoundEnabled()) {
-        void playKitchenChime();
-      }
+      playStaffNotifySound(payload.severity as StaffNotificationSeverity);
     },
   });
 

@@ -26,6 +26,7 @@ import { readKitchenKiosk } from "@/lib/kitchen/display";
 import { readPosFullscreen } from "@/lib/pos/display";
 import { readTrackingTv } from "@/lib/tracking/display";
 import { fetchTrackingSummary } from "@/lib/admin-orders/tracking";
+import { unlockKitchenAudio } from "@/lib/kitchen-chime";
 
 const SIDEBAR_KEY = "uff-admin-sidebar-collapsed";
 
@@ -50,6 +51,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     setCollapsed(localStorage.getItem(SIDEBAR_KEY) === "1");
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+    void navigator.serviceWorker.register("/store-sw.js", { scope: "/" }).catch(() => null);
+    const unlock = () => void unlockKitchenAudio();
+    document.addEventListener("pointerdown", unlock, { once: true });
+    return () => document.removeEventListener("pointerdown", unlock);
   }, []);
 
   useEffect(() => {
@@ -442,7 +451,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         }`}
       >
         <header
-          className={`sticky top-0 z-20 flex items-center justify-between border-b border-orange-100/80 bg-[#fffaf5]/90 px-4 py-3 backdrop-blur-md dark:border-stone-700 dark:bg-stone-950/90 sm:px-6 lg:px-8 ${
+          className={`sticky top-0 z-30 flex items-center justify-between overflow-visible border-b border-orange-100/80 bg-[#fffaf5]/90 px-4 py-3 backdrop-blur-md dark:border-stone-700 dark:bg-stone-950/90 sm:px-6 lg:px-8 ${
             hideChrome ? "hidden" : isPos ? "hidden" : ""
           }`}
         >
@@ -466,7 +475,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 sm:gap-2.5">
+          <div className="flex items-center gap-2 overflow-visible sm:gap-2.5">
             <StaffNotificationCenter />
             <BranchSwitcher />
             <span

@@ -15,6 +15,7 @@ import { dealsRouter } from "./routes/deals";
 import { deliveryAreasRouter } from "./routes/delivery-areas";
 import { settingsRouter } from "./routes/settings";
 import { staffRouter } from "./routes/staff";
+import { staffNotificationsRouter } from "./routes/staff-notifications";
 import { blocklistRouter } from "./routes/blocklist";
 import { posRouter } from "./routes/pos";
 import { branchesRouter } from "./routes/branches";
@@ -95,6 +96,7 @@ export function createApp() {
   app.use("/pos", posRouter);
   app.use("/rider", riderRouter);
   app.use("/admin/staff", staffRouter);
+  app.use("/admin/notifications", staffNotificationsRouter);
   app.use("/admin/blocks", blocklistRouter);
   app.use("/admin/audit-logs", auditLogsRouter);
   app.use("/admin/approval", approvalRouter);

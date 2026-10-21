@@ -142,9 +142,13 @@ export type StoreSettings = {
   forceClosed: boolean;
   autoConfirmOrders: boolean;
   autoAssignRiders: boolean;
+  emailNotifyAdmin: boolean;
+  emailNotifyManager: boolean;
   emailNotifyChef: boolean;
   emailNotifyCashier: boolean;
+  emailNotifyWaiter: boolean;
   emailNotifyRider: boolean;
+  emailNotifyCustomer: boolean;
   facebookUrl: string;
   instagramUrl: string;
   tiktokUrl: string;

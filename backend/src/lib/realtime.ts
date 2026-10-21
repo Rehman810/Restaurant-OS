@@ -192,6 +192,7 @@ export function emitOpsNotification(notification: OpsNotificationPayload) {
   if (notification.branchId) {
     io.to(`branch:${notification.branchId}`).emit("ops:notification", notification);
   }
+  void import("./web-push").then(({ notifyStaffOpsPush }) => notifyStaffOpsPush(notification));
 }
 
 /** Broadcast menu/catalog changes (storefront, POS, kitchen refetch). */

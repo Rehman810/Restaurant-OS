@@ -46,9 +46,39 @@ const SOCIAL_FIELDS = [
   { key: "youtubeUrl" as const, label: "YouTube", icon: Youtube, placeholder: "https://youtube.com/..." },
 ];
 
+const EMAIL_NOTIFY_TOGGLES = [
+  { key: "emailNotifyAdmin" as const, label: "Admin", hint: "New order alerts" },
+  { key: "emailNotifyManager" as const, label: "Manager", hint: "New order alerts" },
+  { key: "emailNotifyChef" as const, label: "Chef", hint: "New order alerts" },
+  { key: "emailNotifyCashier" as const, label: "Cashier", hint: "New order alerts" },
+  { key: "emailNotifyWaiter" as const, label: "Waiter", hint: "New order alerts" },
+  { key: "emailNotifyRider" as const, label: "Rider", hint: "Delivery assignment emails" },
+  {
+    key: "emailNotifyCustomer" as const,
+    label: "Customer",
+    hint: "Placed, confirmed, preparing, on the way, delivered, cancelled",
+  },
+] as const;
+
+type EmailNotifyKey = (typeof EMAIL_NOTIFY_TOGGLES)[number]["key"];
+
+function withEmailNotifyDefaults(settings: StoreSettings): StoreSettings {
+  return {
+    ...settings,
+    emailNotifyAdmin: settings.emailNotifyAdmin ?? true,
+    emailNotifyManager: settings.emailNotifyManager ?? true,
+    emailNotifyChef: settings.emailNotifyChef ?? true,
+    emailNotifyCashier: settings.emailNotifyCashier ?? true,
+    emailNotifyWaiter: settings.emailNotifyWaiter ?? true,
+    emailNotifyRider: settings.emailNotifyRider ?? true,
+    emailNotifyCustomer: settings.emailNotifyCustomer ?? true,
+  };
+}
+
 const SETTINGS_TABS = [
   { id: "store", label: "Store" },
   { id: "contact", label: "Contact" },
+  { id: "notifications", label: "Notifications" },
   { id: "delivery", label: "Delivery" },
   { id: "hours", label: "Hours" },
   { id: "social", label: "Social" },
@@ -82,8 +112,9 @@ export default function AdminSettingsPage() {
 
   async function load() {
     const data = await api<SettingsPayload>("/settings");
-    setSettings(data.settings);
-    setBaseline(JSON.stringify(data.settings));
+    const normalized = withEmailNotifyDefaults(data.settings);
+    setSettings(normalized);
+    setBaseline(JSON.stringify(normalized));
     setBanners(data.banners);
     setTestimonials(data.testimonials ?? []);
   }
@@ -566,8 +597,8 @@ export default function AdminSettingsPage() {
         {tab === "contact" && (
           <SettingsSection
             icon={Phone}
-            title="Contact & notifications"
-            description="Store contact details and optional staff email alerts."
+            title="Contact"
+            description="Phone, address, and map coordinates for your storefront."
           >
             <div className="grid gap-4 sm:grid-cols-2">
               <SettingsField label="Phone">
@@ -623,44 +654,61 @@ export default function AdminSettingsPage() {
                 />
               </SettingsField>
             </div>
+            <p className="text-sm text-stone-500">
+              Order email alerts are on the{" "}
+              <button
+                type="button"
+                className="font-semibold text-brand-700 underline-offset-2 hover:underline"
+                onClick={() => setTab("notifications")}
+              >
+                Notifications
+              </button>{" "}
+              tab.
+            </p>
+          </SettingsSection>
+        )}
 
-            <div className="border-t border-stone-100 pt-5">
-              <div className="mb-3 flex items-start gap-3">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-600">
-                  <Mail size={16} />
-                </span>
-                <div>
-                  <p className="text-sm font-semibold text-stone-900">Staff email notifications</p>
-                  <p className="text-xs text-stone-500">Admin always receives new-order alerts.</p>
-                </div>
-              </div>
-              <div className="space-y-2">
-                {[
-                  { key: "emailNotifyChef" as const, label: "Chef", hint: "New order alerts" },
-                  { key: "emailNotifyCashier" as const, label: "Cashier", hint: "New order alerts" },
-                  { key: "emailNotifyRider" as const, label: "Rider", hint: "Delivery assignment emails" },
-                ].map(({ key, label, hint }) => (
+        {tab === "notifications" && (
+          <SettingsSection
+            icon={Mail}
+            title="Email notifications"
+            description="Turn order-related emails on or off per role. Password reset and staff invites still send when needed."
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              {EMAIL_NOTIFY_TOGGLES.map(({ key, label, hint }) => {
+                const on = settings[key as EmailNotifyKey] ?? true;
+                return (
                   <label
                     key={key}
-                    className={`flex cursor-pointer items-center justify-between gap-4 rounded-2xl border px-4 py-3 transition ${
-                      settings[key] ?? true
-                        ? "border-brand-200 bg-brand-50/60"
-                        : "border-stone-200 bg-stone-50"
+                    className={`flex min-h-[5.5rem] cursor-pointer items-center justify-between gap-4 rounded-2xl border px-4 py-3 transition has-[:checked]:border-brand-200 has-[:checked]:bg-brand-50/70 ${
+                      on ? "border-brand-200 bg-brand-50/70" : "border-stone-200 bg-stone-50"
                     }`}
                   >
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold text-stone-900">{label}</p>
-                      <p className="text-xs text-stone-500">{hint}</p>
+                      <p className="mt-0.5 text-xs leading-snug text-stone-500">{hint}</p>
                     </div>
-                    <input
-                      type="checkbox"
-                      className="h-5 w-5 shrink-0 rounded border-stone-300 text-brand-600 focus:ring-brand-500"
-                      checked={settings[key] ?? true}
-                      onChange={(e) => setSettings({ ...settings, [key]: e.target.checked })}
-                    />
+                    <span className="relative inline-flex h-7 w-12 shrink-0 items-center">
+                      <input
+                        type="checkbox"
+                        role="switch"
+                        aria-label={`${label} email notifications`}
+                        className="peer sr-only"
+                        checked={on}
+                        onChange={(e) => setSettings({ ...settings, [key]: e.target.checked })}
+                      />
+                      <span
+                        className="block h-7 w-12 rounded-full bg-stone-300 transition peer-checked:bg-brand-600"
+                        aria-hidden
+                      />
+                      <span
+                        className="pointer-events-none absolute left-0.5 top-0.5 h-6 w-6 rounded-full bg-white shadow transition peer-checked:translate-x-5"
+                        aria-hidden
+                      />
+                    </span>
                   </label>
-                ))}
-              </div>
+                );
+              })}
             </div>
           </SettingsSection>
         )}

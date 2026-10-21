@@ -146,8 +146,14 @@ export async function sendEmail(to: string, subject: string, html: string, text?
   });
 }
 
+async function customerOrderEmailsEnabled() {
+  const brand = await getEmailBranding();
+  return brand.emailNotifyCustomer;
+}
+
 export async function sendOrderPlacedEmail(order: OrderWithItems, autoConfirmed: boolean) {
   if (!order.customerEmail) return;
+  if (!(await customerOrderEmailsEnabled())) return;
   const brand = await getEmailBranding();
   const { html, text } = orderPlacedEmail({ storeName: brand.storeName }, order, autoConfirmed);
   await sendMail({
@@ -164,6 +170,7 @@ export async function sendOrderPlacedEmail(order: OrderWithItems, autoConfirmed:
 
 export async function sendOrderConfirmedEmail(order: OrderWithItems) {
   if (!order.customerEmail) return;
+  if (!(await customerOrderEmailsEnabled())) return;
   const brand = await getEmailBranding();
   const { html, text } = orderConfirmedEmail({ storeName: brand.storeName }, order);
   await sendMail({
@@ -178,6 +185,7 @@ export async function sendOrderConfirmedEmail(order: OrderWithItems) {
 
 export async function sendOrderDeliveredEmail(order: OrderWithItems) {
   if (!order.customerEmail) return;
+  if (!(await customerOrderEmailsEnabled())) return;
   const brand = await getEmailBranding();
   const { html, text } = orderDeliveredEmail({ storeName: brand.storeName }, order);
   await sendMail({
@@ -192,6 +200,7 @@ export async function sendOrderDeliveredEmail(order: OrderWithItems) {
 
 export async function sendOrderPreparingEmail(order: OrderWithItems) {
   if (!order.customerEmail) return;
+  if (!(await customerOrderEmailsEnabled())) return;
   const brand = await getEmailBranding();
   const { html, text } = orderPreparingEmail({ storeName: brand.storeName }, order);
   await sendMail({
@@ -206,6 +215,7 @@ export async function sendOrderPreparingEmail(order: OrderWithItems) {
 
 export async function sendOrderOnTheWayEmail(order: OrderWithItems) {
   if (!order.customerEmail) return;
+  if (!(await customerOrderEmailsEnabled())) return;
   const takeaway = order.fulfillmentType === "PICKUP";
   const brand = await getEmailBranding();
   const { html, text } = orderOnTheWayEmail({ storeName: brand.storeName }, order);
@@ -223,6 +233,7 @@ export async function sendOrderOnTheWayEmail(order: OrderWithItems) {
 
 export async function sendOrderCancelledEmail(order: OrderWithItems) {
   if (!order.customerEmail) return;
+  if (!(await customerOrderEmailsEnabled())) return;
   const brand = await getEmailBranding();
   const { html, text } = orderCancelledEmail({ storeName: brand.storeName }, order);
   await sendMail({

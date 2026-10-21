@@ -18,24 +18,37 @@ export async function getEmailBranding() {
   return {
     storeName: storeNameFrom(settings) || "Restaurant",
     storeTagline: settings.storeTagline?.trim() || DEFAULT_STORE_TAGLINE,
+    emailNotifyAdmin: settings.emailNotifyAdmin,
+    emailNotifyManager: settings.emailNotifyManager,
     emailNotifyChef: settings.emailNotifyChef,
     emailNotifyCashier: settings.emailNotifyCashier,
+    emailNotifyWaiter: settings.emailNotifyWaiter,
     emailNotifyRider: settings.emailNotifyRider,
+    emailNotifyCustomer: settings.emailNotifyCustomer,
     currencyCode: settings.currencyCode,
     currencySymbol: settings.currencySymbol,
   };
 }
 
-/** Recipients for new-order staff alert emails (admin always included). */
+/** Recipients for new-order staff alert emails (respects per-role toggles in settings). */
 export async function staffOrderAlertEmails(settings: StoreSettings) {
-  const roles: Role[] = [Role.ADMIN];
+  const roles: Role[] = [];
+  if (settings.emailNotifyAdmin) roles.push(Role.ADMIN);
+  if (settings.emailNotifyManager) roles.push(Role.MANAGER);
   if (settings.emailNotifyChef) roles.push(Role.CHEF);
   if (settings.emailNotifyCashier) roles.push(Role.CASHIER);
+  if (settings.emailNotifyWaiter) roles.push(Role.WAITER);
 
-  const staff = await prisma.user.findMany({
-    where: { role: { in: roles }, isActive: true },
-    select: { email: true },
-  });
-  const extra = [process.env.NOTIFY_EMAIL, process.env.ADMIN_EMAIL].filter(Boolean) as string[];
+  const staff =
+    roles.length > 0
+      ? await prisma.user.findMany({
+          where: { role: { in: roles }, isActive: true },
+          select: { email: true },
+        })
+      : [];
+
+  const extra = settings.emailNotifyAdmin
+    ? ([process.env.NOTIFY_EMAIL, process.env.ADMIN_EMAIL].filter(Boolean) as string[])
+    : [];
   return [...new Set([...staff.map((s) => s.email), ...extra])];
 }

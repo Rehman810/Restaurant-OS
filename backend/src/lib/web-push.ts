@@ -1,7 +1,9 @@
 import webpush from "web-push";
+import { Role } from "@prisma/client";
 import { prisma } from "./prisma";
 import { statusLabel } from "./order-machine";
 import type { FulfillmentType, OrderStatus } from "@prisma/client";
+import type { OpsNotificationPayload } from "./realtime";
 
 let configured = false;
 
@@ -52,6 +54,97 @@ export async function upsertPushSubscription(input: {
       orderIds: [...orderIds],
     },
   });
+}
+
+export async function upsertStaffPushSubscription(input: {
+  userId: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+}) {
+  const endpoint = input.endpoint.trim();
+  if (!endpoint || !input.p256dh || !input.auth) {
+    throw Object.assign(new Error("Invalid push subscription."), { status: 400 });
+  }
+  return prisma.staffPushSubscription.upsert({
+    where: { endpoint },
+    create: {
+      userId: input.userId,
+      endpoint,
+      p256dh: input.p256dh,
+      auth: input.auth,
+    },
+    update: {
+      userId: input.userId,
+      p256dh: input.p256dh,
+      auth: input.auth,
+    },
+  });
+}
+
+export async function removeStaffPushSubscription(userId: string, endpoint: string) {
+  await prisma.staffPushSubscription.deleteMany({
+    where: { userId, endpoint: endpoint.trim() },
+  });
+}
+
+const STAFF_PUSH_ROLES: Role[] = [
+  Role.ADMIN,
+  Role.MANAGER,
+  Role.CHEF,
+  Role.CASHIER,
+  Role.WAITER,
+  Role.RIDER,
+];
+
+export async function notifyStaffOpsPush(notification: OpsNotificationPayload) {
+  if (!ensureVapid()) return;
+
+  const subs = await prisma.staffPushSubscription.findMany({
+    where: {
+      user: { isActive: true, role: { in: STAFF_PUSH_ROLES } },
+    },
+    include: {
+      user: {
+        select: {
+          id: true,
+          role: true,
+          branchMembers: { select: { branchId: true } },
+        },
+      },
+    },
+  });
+
+  if (!subs.length) return;
+
+  const href = notification.href?.startsWith("/") ? notification.href : "/admin";
+  const payload = JSON.stringify({
+    title: notification.title,
+    body: notification.message,
+    url: href,
+  });
+
+  for (const sub of subs) {
+    if (notification.branchId) {
+      const user = sub.user;
+      if (user.role !== Role.ADMIN && user.role !== Role.MANAGER) {
+        const branchIds = user.branchMembers.map((m) => m.branchId);
+        if (branchIds.length && !branchIds.includes(notification.branchId)) continue;
+      }
+    }
+
+    try {
+      await webpush.sendNotification(
+        { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+        payload
+      );
+    } catch (err) {
+      const code = (err as { statusCode?: number }).statusCode;
+      if (code === 404 || code === 410) {
+        await prisma.staffPushSubscription.delete({ where: { id: sub.id } }).catch(() => null);
+      }
+    }
+  }
 }
 
 export async function notifyOrderStatusPush(orderId: string, status: OrderStatus, fulfillment: FulfillmentType) {

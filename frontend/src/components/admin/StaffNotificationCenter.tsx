@@ -1,9 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
-import { Bell, CheckCheck, Package, ShoppingBag, UtensilsCrossed, Warehouse, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import {
+  Bell,
+  CheckCheck,
+  Package,
+  ShoppingBag,
+  UtensilsCrossed,
+  Volume2,
+  VolumeX,
+  Warehouse,
+  X,
+} from "lucide-react";
 import { useStaffNotificationsFeed } from "@/hooks/useStaffNotifications";
+import { unlockKitchenAudio, playKitchenChime } from "@/lib/kitchen-chime";
+import {
+  readStaffNotificationSoundEnabled,
+  writeStaffNotificationSoundEnabled,
+} from "@/lib/staff-notification-sound";
+import {
+  readStaffPushEnabled,
+  subscribeToStaffPush,
+  unsubscribeFromStaffPush,
+  writeStaffPushEnabled,
+} from "@/lib/staff-push-subscribe";
 import type { StaffNotification, StaffNotificationKind } from "@/lib/staff-notifications";
 
 function kindIcon(kind: StaffNotificationKind) {
@@ -40,11 +62,47 @@ function formatWhen(at: number) {
   return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 }
 
+type PanelPos = { top: number; right: number; width: number };
+
 export function StaffNotificationCenter() {
   const { notifications, unread, markRead, markAllRead } = useStaffNotificationsFeed();
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState<StaffNotification | null>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [panelPos, setPanelPos] = useState<PanelPos | null>(null);
+  const [soundOn, setSoundOn] = useState(true);
+  const [pushOn, setPushOn] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushHint, setPushHint] = useState("");
+
+  useEffect(() => {
+    setSoundOn(readStaffNotificationSoundEnabled());
+    setPushOn(readStaffPushEnabled() && typeof Notification !== "undefined" && Notification.permission === "granted");
+  }, []);
+
+  useEffect(() => {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    if (!readStaffPushEnabled()) return;
+    void subscribeToStaffPush()
+      .then(() => setPushOn(true))
+      .catch(() => {
+        writeStaffPushEnabled(false);
+        setPushOn(false);
+      });
+  }, []);
+
+  const updatePanelPos = useCallback(() => {
+    const btn = buttonRef.current;
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    const width = Math.min(352, window.innerWidth - 16);
+    setPanelPos({
+      top: rect.bottom + 8,
+      right: Math.max(8, window.innerWidth - rect.right),
+      width,
+    });
+  }, []);
 
   useEffect(() => {
     let dismissId: number | null = null;
@@ -64,18 +122,33 @@ export function StaffNotificationCenter() {
 
   useEffect(() => {
     if (!open) return;
+    updatePanelPos();
     function onDoc(e: MouseEvent) {
-      if (!panelRef.current?.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (rootRef.current?.contains(target)) return;
+      if ((target as Element).closest?.("[data-staff-notification-panel]")) return;
+      setOpen(false);
+    }
+    function onLayout() {
+      updatePanelPos();
     }
     document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [open]);
+    window.addEventListener("resize", onLayout);
+    window.addEventListener("scroll", onLayout, true);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      window.removeEventListener("resize", onLayout);
+      window.removeEventListener("scroll", onLayout, true);
+    };
+  }, [open, updatePanelPos]);
 
   return (
     <>
-      {toast && (
+      {toast &&
+        createPortal(
         <div
-          className="fixed bottom-20 left-3 right-3 z-50 rounded-xl border border-stone-200 bg-white p-3 shadow-lg dark:border-stone-600 dark:bg-stone-900 sm:left-auto sm:right-6 sm:max-w-sm lg:bottom-6"
+          className="fixed left-3 right-3 z-[100] max-w-sm rounded-xl border border-stone-200 bg-white p-3 shadow-lg dark:border-stone-600 dark:bg-stone-900 sm:left-auto sm:right-6"
+          style={{ top: "calc(env(safe-area-inset-top, 0px) + 4.25rem)" }}
           role="status"
         >
           <div className="flex gap-2">
@@ -105,89 +178,153 @@ export function StaffNotificationCenter() {
               <X size={16} />
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      <div className="relative" ref={panelRef}>
+      <div className="relative overflow-visible" ref={rootRef}>
         <button
+          ref={buttonRef}
           type="button"
           aria-label={unread ? `${unread} unread notifications` : "Notifications"}
-          className="relative grid h-9 w-9 place-items-center rounded-xl border border-stone-200 bg-white text-stone-700 shadow-sm transition hover:border-brand-200 hover:text-brand-700 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-200"
-          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          className="relative grid h-9 w-9 place-items-center overflow-visible rounded-xl border border-stone-200 bg-white text-stone-700 shadow-sm transition hover:border-brand-200 hover:text-brand-700 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-200"
+          onClick={() => {
+            void unlockKitchenAudio();
+            setOpen((o) => {
+              const next = !o;
+              if (next) requestAnimationFrame(() => updatePanelPos());
+              return next;
+            });
+          }}
         >
           <Bell size={18} />
           {unread > 0 ? (
-            <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
+            <span className="absolute right-0 top-0 flex h-4 min-w-4 translate-x-1/3 -translate-y-1/3 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white ring-2 ring-[#fffaf5] dark:ring-stone-950">
               {unread > 99 ? "99+" : unread}
             </span>
           ) : null}
         </button>
 
-        {open && (
-          <div className="absolute right-0 z-50 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-stone-200 bg-white shadow-xl dark:border-stone-600 dark:bg-stone-900">
-            <div className="flex items-center justify-between border-b border-stone-100 px-3 py-2 dark:border-stone-700">
-              <p className="text-sm font-bold text-stone-900 dark:text-stone-100">Notifications</p>
-              <button
-                type="button"
-                className="flex items-center gap-1 text-xs font-semibold text-brand-700 dark:text-brand-400"
-                onClick={() => markAllRead()}
-              >
-                <CheckCheck size={14} /> Mark all read
-              </button>
-            </div>
-            <ul className="max-h-[min(24rem,60vh)] overflow-y-auto">
-              {notifications.length === 0 ? (
-                <li className="px-4 py-8 text-center text-sm text-stone-500">No notifications yet.</li>
-              ) : (
-                notifications.map((n) => {
-                  const Icon = kindIcon(n.kind);
-                  const inner = (
-                    <div
-                      className={`border-l-4 px-3 py-2.5 ${severityTone(n.severity)} ${
-                        n.read ? "opacity-70" : ""
-                      }`}
-                    >
-                      <div className="flex gap-2">
-                        <Icon size={16} className="mt-0.5 shrink-0 text-stone-500" />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-stone-900 dark:text-stone-100">{n.title}</p>
-                          <p className="text-xs text-stone-600 dark:text-stone-400">{n.message}</p>
-                          <p className="mt-1 text-[10px] font-medium uppercase tracking-wide text-stone-400">
-                            {formatWhen(n.at)}
-                          </p>
+        {open &&
+          panelPos &&
+          createPortal(
+            <div
+              data-staff-notification-panel
+              className="fixed z-[100] overflow-hidden rounded-xl border border-stone-200 bg-white shadow-xl dark:border-stone-600 dark:bg-stone-900"
+              style={{
+                top: panelPos.top,
+                right: panelPos.right,
+                width: panelPos.width,
+                maxHeight: `min(24rem, calc(100vh - ${panelPos.top}px - 1rem))`,
+              }}
+            >
+              <div className="flex items-center justify-between border-b border-stone-100 px-3 py-2 dark:border-stone-700">
+                <p className="text-sm font-bold text-stone-900 dark:text-stone-100">Notifications</p>
+                <button
+                  type="button"
+                  className="flex items-center gap-1 text-xs font-semibold text-brand-700 dark:text-brand-400"
+                  onClick={() => markAllRead()}
+                >
+                  <CheckCheck size={14} /> Mark all read
+                </button>
+              </div>
+              <div className="space-y-2 border-b border-stone-100 px-3 py-2.5 dark:border-stone-700">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-stone-600 dark:text-stone-400">Alert sound</span>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded-lg border border-stone-200 px-2 py-1 text-xs font-semibold text-stone-700 dark:border-stone-600 dark:text-stone-200"
+                    onClick={() => {
+                      const next = !soundOn;
+                      writeStaffNotificationSoundEnabled(next);
+                      setSoundOn(next);
+                      if (next) void unlockKitchenAudio().then(() => playKitchenChime(true));
+                    }}
+                  >
+                    {soundOn ? <Volume2 size={14} /> : <VolumeX size={14} />}
+                    {soundOn ? "On" : "Off"}
+                  </button>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-stone-600 dark:text-stone-400">Browser push</span>
+                  <button
+                    type="button"
+                    disabled={pushBusy}
+                    className="rounded-lg border border-stone-200 px-2 py-1 text-xs font-semibold text-brand-700 disabled:opacity-60 dark:border-stone-600 dark:text-brand-400"
+                    onClick={() => {
+                      setPushHint("");
+                      setPushBusy(true);
+                      void (pushOn ? unsubscribeFromStaffPush() : subscribeToStaffPush())
+                        .then(() => {
+                          setPushOn(!pushOn);
+                          if (!pushOn) setPushHint("Push enabled for this device.");
+                        })
+                        .catch((err) => {
+                          setPushHint(err instanceof Error ? err.message : "Could not enable push.");
+                        })
+                        .finally(() => setPushBusy(false));
+                    }}
+                  >
+                    {pushBusy ? "…" : pushOn ? "On" : "Enable"}
+                  </button>
+                </div>
+                {pushHint ? <p className="text-[11px] text-stone-500">{pushHint}</p> : null}
+              </div>
+              <ul className="overflow-y-auto" style={{ maxHeight: `min(20rem, calc(100vh - ${panelPos.top}px - 8rem))` }}>
+                {notifications.length === 0 ? (
+                  <li className="px-4 py-8 text-center text-sm text-stone-500">No notifications yet.</li>
+                ) : (
+                  notifications.map((n) => {
+                    const Icon = kindIcon(n.kind);
+                    const inner = (
+                      <div
+                        className={`border-l-4 px-3 py-2.5 ${severityTone(n.severity)} ${
+                          n.read ? "opacity-70" : ""
+                        }`}
+                      >
+                        <div className="flex gap-2">
+                          <Icon size={16} className="mt-0.5 shrink-0 text-stone-500" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-stone-900 dark:text-stone-100">{n.title}</p>
+                            <p className="text-xs text-stone-600 dark:text-stone-400">{n.message}</p>
+                            <p className="mt-1 text-[10px] font-medium uppercase tracking-wide text-stone-400">
+                              {formatWhen(n.at)}
+                            </p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                  return (
-                    <li key={n.id} className="border-b border-stone-100 last:border-0 dark:border-stone-800">
-                      {n.href ? (
-                        <Link
-                          href={n.href}
-                          className="block hover:bg-stone-50 dark:hover:bg-stone-800/50"
-                          onClick={() => {
-                            markRead(n.id);
-                            setOpen(false);
-                          }}
-                        >
-                          {inner}
-                        </Link>
-                      ) : (
-                        <button
-                          type="button"
-                          className="block w-full text-left hover:bg-stone-50 dark:hover:bg-stone-800/50"
-                          onClick={() => markRead(n.id)}
-                        >
-                          {inner}
-                        </button>
-                      )}
-                    </li>
-                  );
-                })
-              )}
-            </ul>
-          </div>
-        )}
+                    );
+                    return (
+                      <li key={n.id} className="border-b border-stone-100 last:border-0 dark:border-stone-800">
+                        {n.href ? (
+                          <Link
+                            href={n.href}
+                            className="block hover:bg-stone-50 dark:hover:bg-stone-800/50"
+                            onClick={() => {
+                              markRead(n.id);
+                              setOpen(false);
+                            }}
+                          >
+                            {inner}
+                          </Link>
+                        ) : (
+                          <button
+                            type="button"
+                            className="block w-full text-left hover:bg-stone-50 dark:hover:bg-stone-800/50"
+                            onClick={() => markRead(n.id)}
+                          >
+                            {inner}
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })
+                )}
+              </ul>
+            </div>,
+            document.body
+          )}
       </div>
     </>
   );

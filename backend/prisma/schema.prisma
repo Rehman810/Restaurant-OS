@@ -298,6 +298,7 @@ model User {
   riderSettlementsSettled   RiderSettlement[] @relation("RiderSettlementsSettledBy")
   loyaltyPoints             Int               @default(0)
   pushSubscriptions         CustomerPushSubscription[]
+  staffPushSubscriptions    StaffPushSubscription[]
   posHolds                  PosHold[]
 }
 
@@ -922,9 +923,13 @@ model StoreSettings {
   deliverySlaMinutes  Int      @default(45)
   autoConfirmOrders   Boolean  @default(false)
   autoAssignRiders    Boolean  @default(true)
+  emailNotifyAdmin    Boolean  @default(true)
+  emailNotifyManager  Boolean  @default(true)
   emailNotifyChef     Boolean  @default(true)
   emailNotifyCashier  Boolean  @default(true)
+  emailNotifyWaiter   Boolean  @default(true)
   emailNotifyRider    Boolean  @default(true)
+  emailNotifyCustomer Boolean  @default(true)
   facebookUrl         String   @default("")
   instagramUrl        String   @default("")
   tiktokUrl           String   @default("")
@@ -1349,6 +1354,19 @@ model CustomerPushSubscription {
   orderIds  String[] @default([])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model StaffPushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model OrderEvent {

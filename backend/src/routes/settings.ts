@@ -291,14 +291,26 @@ settingsRouter.patch("/", requireAuth, requireRole(Role.ADMIN), async (req, res)
       ...(body.autoAssignRiders !== undefined
         ? { autoAssignRiders: Boolean(body.autoAssignRiders) }
         : {}),
+      ...(body.emailNotifyAdmin !== undefined
+        ? { emailNotifyAdmin: Boolean(body.emailNotifyAdmin) }
+        : {}),
+      ...(body.emailNotifyManager !== undefined
+        ? { emailNotifyManager: Boolean(body.emailNotifyManager) }
+        : {}),
       ...(body.emailNotifyChef !== undefined
         ? { emailNotifyChef: Boolean(body.emailNotifyChef) }
         : {}),
       ...(body.emailNotifyCashier !== undefined
         ? { emailNotifyCashier: Boolean(body.emailNotifyCashier) }
         : {}),
+      ...(body.emailNotifyWaiter !== undefined
+        ? { emailNotifyWaiter: Boolean(body.emailNotifyWaiter) }
+        : {}),
       ...(body.emailNotifyRider !== undefined
         ? { emailNotifyRider: Boolean(body.emailNotifyRider) }
+        : {}),
+      ...(body.emailNotifyCustomer !== undefined
+        ? { emailNotifyCustomer: Boolean(body.emailNotifyCustomer) }
         : {}),
       ...(body.facebookUrl !== undefined ? { facebookUrl: String(body.facebookUrl) } : {}),
       ...(body.instagramUrl !== undefined ? { instagramUrl: String(body.instagramUrl) } : {}),
