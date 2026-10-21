@@ -31,6 +31,7 @@ import { kotRouter } from "./routes/kot";
 import { kitchenRouter } from "./routes/kitchen";
 import { couponsAdminRouter, couponsPublicRouter } from "./routes/coupons";
 import { reportsRouter } from "./routes/reports";
+import { dailySummaryRouter } from "./routes/daily-summary";
 import { UPLOAD_DIR } from "./lib/uploads";
 import { resolveRestaurantId, runWithRestaurant } from "./lib/prisma";
 import {
@@ -107,6 +108,7 @@ export function createApp() {
   app.use("/admin/kot", kotRouter);
   app.use("/kitchen", kitchenRouter);
   app.use("/admin/reports", reportsRouter);
+  app.use("/admin/daily-summary", dailySummaryRouter);
   app.use("/admin/orders", adminOrdersRouter);
   app.use("/admin/tracking", adminTrackingRouter);
   app.use("/admin/menu", adminMenuRouter);

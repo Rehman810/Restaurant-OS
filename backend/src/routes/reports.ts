@@ -9,7 +9,7 @@ import { dishCostingReportRouter } from "./dish-costing-report";
 import { buildMenuEngineeringReport } from "../lib/reports/menu-engineering";
 import { buildVarianceReport } from "../lib/reports/variance";
 import { buildSalesIntelligence } from "../lib/reports/sales-intelligence";
-import { buildDailyOwnerSummary } from "../lib/reports/daily-summary";
+import { handleDailySummaryGet } from "./daily-summary-handler";
 import {
   buildCreditNoteRegister,
   buildInvoiceRegister,
@@ -145,38 +145,14 @@ reportsRouter.get(
   "/daily-summary",
   requireAuth,
   requireRole(...ADMIN_LIKE, Role.MANAGER),
-  async (req, res) => {
-    try {
-      const { branchId, timezone } = await resolveBranch(req);
-      const date = req.query.date ? String(req.query.date) : undefined;
-      const { from, startUtc, endUtc } = parseDateRangeQuery(date, date, timezone, 1);
-      const summary = await buildDailyOwnerSummary(branchId, startUtc, endUtc);
+  handleDailySummaryGet
+);
 
-      if (req.query.format === "csv") {
-        const lines = [
-          "metric,value",
-          `date,${from}`,
-          `orders,${summary.orders}`,
-          `revenue,${summary.revenue}`,
-          `aov,${summary.aov}`,
-          `cash,${summary.cashTotal}`,
-          `card,${summary.cardTotal}`,
-          `discounts,${summary.discounts}`,
-          `voids,${summary.voids}`,
-          `refunds,${summary.refunds}`,
-          `wasteValue,${summary.wasteValue}`,
-          `lowStockCount,${summary.lowStockCount}`,
-        ];
-        res.setHeader("Content-Type", "text/csv; charset=utf-8");
-        res.setHeader("Content-Disposition", `attachment; filename="daily-summary-${from}.csv"`);
-        return res.send(lines.join("\n"));
-      }
-
-      res.json({ date: from, timezone, branchId, ...summary });
-    } catch (err) {
-      return branchScopeError(res, err);
-    }
-  }
+reportsRouter.get(
+  "/daily-summary/export.csv",
+  requireAuth,
+  requireRole(...ADMIN_LIKE, Role.MANAGER),
+  handleDailySummaryGet
 );
 
 reportsRouter.get(

@@ -23,6 +23,8 @@ test.describe("Phase 3 — admin reports", () => {
   test("daily summary and sync conflicts pages load", async ({ page }) => {
     await page.goto("/admin/daily-summary");
     await expect(page.getByRole("heading", { name: /daily summary/i })).toBeVisible();
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+    expect(overflow).toBe(true);
 
     await page.goto("/admin/sync-conflicts");
     await expect(page.getByRole("heading", { name: /sync conflicts/i })).toBeVisible();

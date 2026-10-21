@@ -1,57 +1,66 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Download, Sun } from "lucide-react";
-import { api, getApiUrl } from "@/lib/api";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { api, ApiError, getApiUrl } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { pkr } from "@/lib/format";
 import { AdminPage, AdminPageHeader } from "@/components/admin/ui";
-
-type Summary = {
-  date: string;
-  orders: number;
-  revenue: number;
-  aov: number;
-  cashTotal: number;
-  cardTotal: number;
-  discounts: number;
-  voids: number;
-  refunds: number;
-  topItems: { name: string; qty: number }[];
-  wasteValue: number;
-  lowStockCount: number;
-  pendingRiderCash: number;
-  unclosedShifts: number;
-};
+import { DailySummaryView } from "@/modules/daily-summary/DailySummaryView";
+import type { DailySummaryPayload } from "@/modules/daily-summary/types";
+import { compareParam, todayDateKeyInTz, type CompareMode } from "@/modules/daily-summary/helpers";
 
 export default function DailySummaryPage() {
   const { user } = useAuth();
   const allowed = user?.role === "ADMIN" || user?.role === "MANAGER";
-  const [date, setDate] = useState("");
-  const [data, setData] = useState<Summary | null>(null);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const [data, setData] = useState<DailySummaryPayload | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const [emailMsg, setEmailMsg] = useState<string | null>(null);
+
+  const timezone = data?.meta.timezone ?? "Asia/Karachi";
+  const dateKey = searchParams.get("date") ?? todayDateKeyInTz(timezone);
+  const compareMode = (searchParams.get("compare") as CompareMode) || "yesterday";
 
   const load = useCallback(async () => {
-    const q = date ? `?date=${date}` : "";
+    if (!allowed) return;
+    setLoading(true);
+    setError(null);
+    const q = new URLSearchParams();
+    q.set("date", dateKey);
+    q.set("compare", compareParam(compareMode));
     try {
-      setData(await api<Summary>(`/admin/reports/daily-summary${q}`));
-    } catch {
-      setData(null);
+      const res = await api<DailySummaryPayload>(`/admin/daily-summary?${q}`);
+      setData(res);
+      setUpdatedAt(new Date());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load");
+    } finally {
+      setLoading(false);
     }
-  }, [date]);
+  }, [allowed, dateKey, compareMode]);
 
   useEffect(() => {
-    if (allowed) void load();
-  }, [allowed, load]);
+    void load();
+  }, [load]);
 
-  function printPage() {
-    window.print();
-  }
+  const updatedLabel = useMemo(() => {
+    if (!updatedAt) return "";
+    return `Updated ${new Intl.DateTimeFormat("en-GB", {
+      timeZone: timezone,
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).format(updatedAt)}`;
+  }, [updatedAt, timezone]);
 
-  function exportCsv() {
-    const q = new URLSearchParams();
-    if (date) q.set("date", date);
-    q.set("format", "csv");
-    window.open(`${getApiUrl()}/admin/reports/daily-summary?${q}`, "_blank");
+  function setQuery(patch: Record<string, string>) {
+    const q = new URLSearchParams(searchParams.toString());
+    for (const [k, v] of Object.entries(patch)) q.set(k, v);
+    router.replace(`/admin/daily-summary?${q.toString()}`);
   }
 
   if (!allowed) {
@@ -63,63 +72,34 @@ export default function DailySummaryPage() {
   }
 
   return (
-    <AdminPage className="print:bg-white">
-      <AdminPageHeader
-        title="Daily summary"
-        description="Owner snapshot for the selected date (store timezone)."
-        actions={
-          <div className="flex gap-2 print:hidden">
-            <button type="button" className="btn-ghost" onClick={exportCsv}><Download size={16} /> CSV</button>
-            <button type="button" className="btn-primary" onClick={printPage}>Print</button>
-          </div>
-        }
-      />
-      <div className="mb-4 flex gap-2 print:hidden">
-        <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        <button type="button" className="btn-primary" onClick={() => void load()}>Load</button>
-      </div>
-      {!data ? (
-        <p className="text-sm text-stone-500">No data.</p>
-      ) : (
-        <div className="space-y-6 rounded-2xl border border-stone-200 bg-white p-6 dark:border-stone-700 dark:bg-stone-900">
-          <div className="flex items-center gap-2">
-            <Sun className="text-brand-600" />
-            <h2 className="text-lg font-bold">{data.date}</h2>
-          </div>
-          <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              ["Orders", data.orders],
-              ["Revenue", pkr(data.revenue)],
-              ["AOV", pkr(data.aov)],
-              ["Cash", pkr(data.cashTotal)],
-              ["Card", pkr(data.cardTotal)],
-              ["Discounts", pkr(data.discounts)],
-              ["Voids", data.voids],
-              ["Refunds", pkr(data.refunds)],
-              ["Waste value", pkr(data.wasteValue)],
-              ["Low stock SKUs", data.lowStockCount],
-              ["Pending rider cash", pkr(data.pendingRiderCash)],
-              ["Unclosed shifts", data.unclosedShifts],
-            ].map(([k, v]) => (
-              <div key={String(k)} className="rounded-xl bg-stone-50 p-3 dark:bg-stone-800/50">
-                <dt className="text-xs font-semibold uppercase text-stone-500">{k}</dt>
-                <dd className="mt-1 text-lg font-bold tabular-nums text-stone-900 dark:text-stone-50">{v}</dd>
-              </div>
-            ))}
-          </dl>
-          <div>
-            <h3 className="font-semibold">Top items</h3>
-            <ul className="mt-2 space-y-1 text-sm">
-              {data.topItems.map((t) => (
-                <li key={t.name} className="flex justify-between">
-                  <span>{t.name}</span>
-                  <span className="tabular-nums">{t.qty}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      )}
-    </AdminPage>
+    <>
+    {emailMsg && <p className="mb-2 text-sm text-stone-600 print:hidden">{emailMsg}</p>}
+    <DailySummaryView
+      data={data}
+      loading={loading}
+      error={error}
+      onRetry={() => void load()}
+      dateKey={dateKey}
+      timezone={timezone}
+      compareMode={compareMode}
+      onCompareMode={(m) => setQuery({ compare: m })}
+      onDateChange={(d) => setQuery({ date: d })}
+      onRefresh={() => void load()}
+      updatedLabel={updatedLabel}
+      onPrint={() => window.print()}
+      onExport={() => {
+        const q = new URLSearchParams();
+        q.set("date", dateKey);
+        q.set("compare", compareParam(compareMode));
+        window.open(`${getApiUrl()}/admin/daily-summary/export.csv?${q}`, "_blank");
+      }}
+      onSendEmail={() => {
+        setEmailMsg(null);
+        void api("/admin/daily-summary/email/test", { method: "POST" })
+          .then(() => setEmailMsg("Test close-out email sent (if SMTP is configured)."))
+          .catch((e) => setEmailMsg(e instanceof ApiError ? e.message : "Could not send email"));
+      }}
+    />
+    </>
   );
 }

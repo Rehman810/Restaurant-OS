@@ -1,0 +1,5 @@
+ALTER TABLE "StoreSettings" ADD COLUMN IF NOT EXISTS "dailyCloseoutEmailEnabled" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "StoreSettings" ADD COLUMN IF NOT EXISTS "dailyCloseoutEmailRecipients" TEXT NOT NULL DEFAULT '';
+ALTER TABLE "StoreSettings" ADD COLUMN IF NOT EXISTS "dailyCloseoutEmailSendHour" INTEGER NOT NULL DEFAULT 23;
+ALTER TABLE "StoreSettings" ADD COLUMN IF NOT EXISTS "dailyCloseoutEmailSendMinute" INTEGER NOT NULL DEFAULT 30;
+ALTER TABLE "StoreSettings" ADD COLUMN IF NOT EXISTS "dailyCloseoutEmailLastSentAt" TIMESTAMP(3);

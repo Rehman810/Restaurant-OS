@@ -583,3 +583,39 @@ h4 {
 [data-admin-theme="dark"] .drawer-panel footer {
   border-color: rgb(68 64 60) !important;
 }
+
+@media print {
+  body:has(.daily-summary-print) aside,
+  body:has(.daily-summary-print) header,
+  body:has(.daily-summary-print) .print\:hidden {
+    display: none !important;
+  }
+  body:has(.daily-summary-print) main {
+    padding: 0 !important;
+    max-width: none !important;
+  }
+  .daily-summary-print {
+    color: #000 !important;
+    background: #fff !important;
+  }
+  body:has(.daily-summary-print-thermal) .daily-summary-print {
+    max-width: 80mm;
+    margin: 0 auto;
+    font-size: 10px;
+    line-height: 1.35;
+  }
+  body:has(.daily-summary-print-thermal) .daily-summary-print table {
+    font-size: 9px;
+  }
+}
+
+@media (max-width: 640px) {
+  .daily-summary-sticky {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    padding-top: env(safe-area-inset-top);
+    background: color-mix(in srgb, var(--admin-surface, #fff) 92%, transparent);
+    backdrop-filter: blur(8px);
+  }
+}

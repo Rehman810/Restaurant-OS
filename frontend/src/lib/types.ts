@@ -121,6 +121,10 @@ export type StoreSettings = {
   analyticsEmailFrequency?: string;
   analyticsEmailRecipients?: string;
   analyticsEmailSendHour?: number;
+  dailyCloseoutEmailEnabled?: boolean;
+  dailyCloseoutEmailRecipients?: string;
+  dailyCloseoutEmailSendHour?: number;
+  dailyCloseoutEmailSendMinute?: number;
   autoPrintKitchenTickets?: boolean;
   offlinePosEnabled?: boolean;
   offlineClockSkewThresholdMinutes?: number;

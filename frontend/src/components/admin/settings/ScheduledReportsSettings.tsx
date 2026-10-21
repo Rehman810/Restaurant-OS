@@ -121,6 +121,74 @@ export function ScheduledReportsSettings({
           {testing ? "Sending…" : "Send test email now"}
         </button>
       </SettingsField>
+
+      <SettingsField label="Daily close-out email">
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={Boolean(settings.dailyCloseoutEmailEnabled)}
+            onChange={(e) => onChange({ dailyCloseoutEmailEnabled: e.target.checked })}
+          />
+          Send daily close-out email at end of store day (default 11:30 PM store time)
+        </label>
+        <p className="mt-1 text-xs text-stone-500">
+          Includes collected/booked, cash/card/COD split, and blockers. Any open cash shift keeps the day provisional.
+        </p>
+      </SettingsField>
+
+      <SettingsFormGrid>
+        <SettingsField label="Close-out time — hour (0–23, default 23)">
+          <input
+            type="number"
+            min={0}
+            max={23}
+            className="input w-full"
+            value={settings.dailyCloseoutEmailSendHour ?? 23}
+            onChange={(e) => onChange({ dailyCloseoutEmailSendHour: Number(e.target.value) || 23 })}
+          />
+        </SettingsField>
+        <SettingsField label="Close-out time — minute (default 30)">
+          <input
+            type="number"
+            min={0}
+            max={59}
+            className="input w-full"
+            value={settings.dailyCloseoutEmailSendMinute ?? 30}
+            onChange={(e) => onChange({ dailyCloseoutEmailSendMinute: Number(e.target.value) || 30 })}
+          />
+        </SettingsField>
+      </SettingsFormGrid>
+
+      <SettingsField label="Close-out recipients (optional)">
+        <input
+          className="input w-full"
+          placeholder="Leave empty to use analytics recipients"
+          value={settings.dailyCloseoutEmailRecipients ?? ""}
+          onChange={(e) => onChange({ dailyCloseoutEmailRecipients: e.target.value })}
+        />
+      </SettingsField>
+
+      <SettingsField label="Test daily close-out email">
+        <button
+          type="button"
+          className="btn-secondary inline-flex items-center gap-2"
+          disabled={testing}
+          onClick={async () => {
+            onTestingChange(true);
+            onMessage("");
+            try {
+              await api("/admin/daily-summary/email/test", { method: "POST" });
+              onMessage("Daily close-out test email sent (if SMTP is configured).");
+            } catch (e) {
+              onMessage(e instanceof ApiError ? e.message : "Could not send test email");
+            } finally {
+              onTestingChange(false);
+            }
+          }}
+        >
+          {testing ? "Sending…" : "Send close-out test email"}
+        </button>
+      </SettingsField>
     </SettingsSection>
   );
 }

@@ -5,6 +5,7 @@ import { sendEmail } from "../email";
 import { buildAnalyticsOverview } from "./overview";
 import { parseCompareMode } from "./range";
 import { storeDateKey } from "../dashboard/dates";
+import { runDailyCloseoutEmailJob } from "../reports/daily-closeout-email";
 
 export async function runAnalyticsEmailJob(now = new Date()) {
   const settings = await getStoreSettings();
@@ -76,7 +77,10 @@ let timer: ReturnType<typeof setInterval> | null = null;
 
 export function startAnalyticsEmailScheduler() {
   if (timer) return;
-  timer = setInterval(() => void runAnalyticsEmailJob(), 15 * 60 * 1000);
+  timer = setInterval(() => {
+    void runAnalyticsEmailJob();
+    void runDailyCloseoutEmailJob();
+  }, 15 * 60 * 1000);
   timer.unref();
 }
 

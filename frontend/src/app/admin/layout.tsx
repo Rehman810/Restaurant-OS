@@ -28,6 +28,7 @@ import { readPosFullscreen } from "@/lib/pos/display";
 import { readTrackingTv } from "@/lib/tracking/display";
 import { fetchTrackingSummary } from "@/lib/admin-orders/tracking";
 import { unlockKitchenAudio } from "@/lib/kitchen-chime";
+import { DayCloseoutBlockerPoller } from "@/hooks/useDayCloseoutBlockerNotification";
 
 import { ADMIN_SIDEBAR_COLLAPSED_KEY } from "@/lib/admin-sidebar";
 
@@ -51,7 +52,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [trackingTv, setTrackingTv] = useState(false);
   const [trackingBadge, setTrackingBadge] = useState(0);
   const { theme, toggle: toggleTheme } = useAdminTheme();
-
   useEffect(() => {
     setCollapsed(localStorage.getItem(SIDEBAR_KEY) === "1");
   }, []);
@@ -307,8 +307,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     (isKitchen && kitchenKiosk) || (isPos && posFullscreen) || (isTracking && trackingTv);
   const storeTimezone = store?.settings.timezone ?? "Asia/Karachi";
 
+  const mayCloseoutNotify = user.role === "ADMIN" || user.role === "MANAGER";
+
   return (
     <BranchProvider>
+    <DayCloseoutBlockerPoller enabled={mayCloseoutNotify} />
     <div
       data-admin-theme={theme}
       className="min-h-screen bg-[#fffaf5] dark:bg-stone-950 lg:flex"
@@ -387,6 +390,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                       )}
                       {n.href === "/admin/tracking" && trackingBadge > 0 && (
                         <span
+                          title={`${trackingBadge} active order${trackingBadge === 1 ? "" : "s"} in live tracking (late orders counted when present)`}
                           className={`ml-auto grid min-w-[1.25rem] place-items-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold text-white ${
                             collapsed ? "lg:absolute lg:right-1 lg:top-1 lg:ml-0" : ""
                           }`}

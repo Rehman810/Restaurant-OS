@@ -133,6 +133,28 @@ export function buildStoreSettingsUpdateData(body: Record<string, unknown>): Pri
           analyticsEmailSendHour: Math.min(23, Math.max(0, Math.floor(Number(body.analyticsEmailSendHour) || 8))),
         }
       : {}),
+    ...(body.dailyCloseoutEmailEnabled !== undefined
+      ? { dailyCloseoutEmailEnabled: Boolean(body.dailyCloseoutEmailEnabled) }
+      : {}),
+    ...(body.dailyCloseoutEmailRecipients !== undefined
+      ? { dailyCloseoutEmailRecipients: String(body.dailyCloseoutEmailRecipients) }
+      : {}),
+    ...(body.dailyCloseoutEmailSendHour !== undefined
+      ? {
+          dailyCloseoutEmailSendHour: Math.min(
+            23,
+            Math.max(0, Math.floor(Number(body.dailyCloseoutEmailSendHour) || 23))
+          ),
+        }
+      : {}),
+    ...(body.dailyCloseoutEmailSendMinute !== undefined
+      ? {
+          dailyCloseoutEmailSendMinute: Math.min(
+            59,
+            Math.max(0, Math.floor(Number(body.dailyCloseoutEmailSendMinute) || 30))
+          ),
+        }
+      : {}),
     ...(body.offlinePosEnabled !== undefined ? { offlinePosEnabled: Boolean(body.offlinePosEnabled) } : {}),
     ...(body.offlineClockSkewThresholdMinutes !== undefined
       ? {

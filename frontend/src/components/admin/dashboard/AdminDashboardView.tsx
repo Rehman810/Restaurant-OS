@@ -382,10 +382,13 @@ export function AdminDashboardView() {
           />
           <SplitCard
             title="Payment split"
-            subtitle="Based on booked orders today"
+            subtitle="Collected orders today (cash, card, COD received)"
             rows={[
               { label: "Cash", value: data.paymentSplit.cash },
               { label: "Card", value: data.paymentSplit.card },
+              ...(data.paymentSplit.codReceived > 0
+                ? [{ label: "COD received", value: data.paymentSplit.codReceived }]
+                : []),
               ...(data.paymentSplit.unspecified > 0
                 ? [{ label: "Unspecified", value: data.paymentSplit.unspecified }]
                 : []),

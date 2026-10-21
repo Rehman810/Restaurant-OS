@@ -3,7 +3,6 @@ import {
   FulfillmentType,
   OrderSource,
   OrderStatus,
-  PaymentMethod,
   ReservationStatus,
   RiderCashEntryStatus,
   Role,
@@ -21,6 +20,7 @@ import { branchQueueDate } from "../dine-in/waitlist";
 import { buildShiftReport } from "../cash-shift";
 import { compareKpi, roundMoney } from "./kpi";
 import { aggregatePeriodOrderMetrics } from "../metrics/period-stats";
+import { buildPaymentReconciliation } from "../metrics/payment-split";
 import { recipeUnitCostByMenuId } from "../metrics/menu-recipe-cost";
 import {
   COMPLETED_STATUSES,
@@ -184,15 +184,10 @@ export async function buildDashboardSummary(
 
   const branchId = bw.branchId ?? null;
 
-  const [sourceRows, paymentRows, activeOrders, completedTodayPipeline, incomingRaw, syncConflictCount] =
+  const [sourceRows, activeOrders, completedTodayPipeline, incomingRaw, syncConflictCount] =
     await Promise.all([
       prisma.order.groupBy({
         by: ["orderSource", "fulfillmentType"],
-        where: { ...bw, createdAt: { gte: start, lte: todayEnd }, status: { not: OrderStatus.CANCELLED } },
-        _sum: { total: true },
-      }),
-      prisma.order.groupBy({
-        by: ["paymentMethod"],
         where: { ...bw, createdAt: { gte: start, lte: todayEnd }, status: { not: OrderStatus.CANCELLED } },
         _sum: { total: true },
       }),
@@ -232,13 +227,13 @@ export async function buildDashboardSummary(
     else sourceSplit.online += v;
   }
 
-  const paymentSplit = { cash: 0, card: 0, unspecified: 0 };
-  for (const row of paymentRows) {
-    const v = Number(row._sum.total ?? 0);
-    if (row.paymentMethod === PaymentMethod.CASH) paymentSplit.cash += v;
-    else if (row.paymentMethod === PaymentMethod.CARD) paymentSplit.card += v;
-    else paymentSplit.unspecified += v;
-  }
+  const payRec = await buildPaymentReconciliation(bw, start, todayEnd, today.booked);
+  const paymentSplit = {
+    cash: payRec.split.cash,
+    card: payRec.split.card,
+    codReceived: payRec.split.codReceived,
+    unspecified: payRec.split.unspecified,
+  };
 
   const stageMap = new Map<OrderStatus, { count: number; oldestMinutes: number | null }>();
   for (const s of PIPELINE_STATUSES) {

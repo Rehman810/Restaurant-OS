@@ -125,6 +125,10 @@ export const SETTINGS_SECTION_FIELDS: Record<SettingsSectionId, readonly string[
     "analyticsEmailFrequency",
     "analyticsEmailRecipients",
     "analyticsEmailSendHour",
+    "dailyCloseoutEmailEnabled",
+    "dailyCloseoutEmailRecipients",
+    "dailyCloseoutEmailSendHour",
+    "dailyCloseoutEmailSendMinute",
   ],
   "my-account": [],
 };

@@ -1021,6 +1021,11 @@ model StoreSettings {
   analyticsEmailRecipients  String  @default("")
   analyticsEmailSendHour    Int     @default(8)
   analyticsEmailLastSentAt  DateTime?
+  dailyCloseoutEmailEnabled     Boolean @default(false)
+  dailyCloseoutEmailRecipients  String  @default("")
+  dailyCloseoutEmailSendHour      Int     @default(23)
+  dailyCloseoutEmailSendMinute    Int     @default(30)
+  dailyCloseoutEmailLastSentAt    DateTime?
   foodCostTargetPercent           Decimal @default(32) @db.Decimal(5, 2)
   foodCostHighPercent             Decimal @default(40) @db.Decimal(5, 2)
   suggestedPriceRoundingStep      Int     @default(10)

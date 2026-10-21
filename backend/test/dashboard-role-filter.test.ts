@@ -17,7 +17,7 @@ const base: DashboardSummary = {
     cancelledToday: compareKpi(0, 0, 0),
   },
   sourceSplit: { online: 1, pos: 2, dineIn: 3 },
-  paymentSplit: { cash: 1, card: 2, unspecified: 0 },
+  paymentSplit: { cash: 1, card: 2, codReceived: 0, unspecified: 0 },
   pipeline: { stages: [], completedToday: 0 },
   lateOrders: [],
   hourlySales: {

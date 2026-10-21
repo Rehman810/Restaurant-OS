@@ -229,6 +229,14 @@ export function validateSettingsInput(body: Record<string, unknown>): SettingsEr
     if (listErr) errors.analyticsEmailRecipients = listErr;
   }
 
+  if (body.dailyCloseoutEmailRecipients !== undefined) {
+    const raw = String(body.dailyCloseoutEmailRecipients ?? "").trim();
+    if (raw) {
+      const listErr = validateEmailList(raw);
+      if (listErr) errors.dailyCloseoutEmailRecipients = listErr;
+    }
+  }
+
   if (body.weeklySchedule !== undefined && body.weeklySchedule !== null) {
     const schedule = body.weeklySchedule;
     if (typeof schedule !== "object" || Array.isArray(schedule)) {

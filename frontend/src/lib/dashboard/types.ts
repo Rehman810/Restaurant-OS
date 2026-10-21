@@ -28,7 +28,7 @@ export type DashboardSummary = {
     cancelledToday: KpiComparison;
   };
   sourceSplit: { online: number; pos: number; dineIn: number } | null;
-  paymentSplit: { cash: number; card: number; unspecified: number } | null;
+  paymentSplit: { cash: number; card: number; codReceived: number; unspecified: number } | null;
   pipeline: {
     stages: {
       status: OrderStatus;
