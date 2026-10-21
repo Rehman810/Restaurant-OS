@@ -118,6 +118,15 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   return undefined as T;
 }
 
+export async function apiBlob(path: string): Promise<Blob> {
+  const headers = buildHeaders({}, false);
+  const res = await fetch(`${getApiUrl()}${path}`, { credentials: "include", headers });
+  if (!res.ok) {
+    throw new ApiError("Request failed", res.status);
+  }
+  return res.blob();
+}
+
 export async function apiUpload(path: string, file: File): Promise<{ url: string }> {
   const body = new FormData();
   body.append("image", file);

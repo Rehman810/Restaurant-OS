@@ -76,16 +76,39 @@ export type AnalyticsData = {
   statusBreakdown: Partial<Record<OrderStatus, number>>;
 };
 
+export type CustomerSegment = "new" | "regular" | "vip" | "at_risk" | "lapsed";
+
 export type AdminCustomer = {
   id: string;
   name: string;
   email: string;
   phone?: string | null;
   createdAt: string;
+  joinedSource?: "account" | "first_order";
   isGuest?: boolean;
+  segment?: CustomerSegment | null;
   orderCount: number;
   totalSpent: number;
   lastOrder: { id: string; total: string | number; status: OrderStatus; createdAt: string; fulfillmentType?: FulfillmentType } | null;
+};
+
+export type AdminCustomerDetail = AdminCustomer & {
+  firstOrderAt: string | null;
+  lastOrderAt: string | null;
+  daysSinceLastOrder: number | null;
+  avgOrderValue: number;
+  nonCancelledOrderCount?: number;
+  internalNotes: string;
+  notesUpdatedAt: string | null;
+  favouriteDishes: { name: string; quantity: number }[];
+  recentOrders: {
+    id: string;
+    orderNumber: string;
+    total: number;
+    status: OrderStatus;
+    createdAt: string;
+    fulfillmentType: FulfillmentType;
+  }[];
 };
 
 export type AdminRider = {

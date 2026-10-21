@@ -1,0 +1,9 @@
+import { describe, expect, it } from "vitest";
+import { AuditAction } from "../src/lib/audit-actions";
+
+describe("customer block audit actions", () => {
+  it("defines block and unblock audit codes", () => {
+    expect(AuditAction.CUSTOMER_BLOCKED).toBe("CUSTOMER_BLOCKED");
+    expect(AuditAction.CUSTOMER_UNBLOCKED).toBe("CUSTOMER_UNBLOCKED");
+  });
+});

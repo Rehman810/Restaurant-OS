@@ -9,8 +9,11 @@ import {
   filterCustomers,
   listCustomerOrders,
   paginateCustomers,
+  type CustomerSegmentFilter,
   type CustomerSort,
 } from "../lib/customer-directory";
+import { getCustomerDetail, updateCustomerNotes } from "../lib/customer-detail";
+import { customersToCsv } from "../lib/customer-export";
 import { prisma } from "../lib/prisma";
 import {
   branchScopeError,
@@ -595,6 +598,36 @@ function customerContactKey(phone: string, email: string | null | undefined) {
   return null;
 }
 
+adminRouter.get("/customers/export", requireAuth, requireRole(...ORDER_OPS), async (req, res) => {
+  let scope;
+  try {
+    scope = await resolveBranchScope(req);
+  } catch (err) {
+    return branchScopeError(res, err);
+  }
+  const branchId = scope.allBranches ? null : scope.branchId;
+  const search = String(req.query.search || "").trim();
+  const sortRaw = String(req.query.sort || "spent");
+  const sort: CustomerSort =
+    sortRaw === "orders" || sortRaw === "name" || sortRaw === "recent" ? sortRaw : "spent";
+  const segmentRaw = String(req.query.segment || "all");
+  const segment: CustomerSegmentFilter =
+    segmentRaw === "new" ||
+    segmentRaw === "regular" ||
+    segmentRaw === "vip" ||
+    segmentRaw === "at_risk" ||
+    segmentRaw === "lapsed"
+      ? segmentRaw
+      : "all";
+
+  const directory = await buildCustomerDirectory(branchId);
+  const filtered = filterCustomers(directory, search, sort, segment);
+  const csv = customersToCsv(filtered);
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", 'attachment; filename="customers.csv"');
+  res.send(csv);
+});
+
 adminRouter.get("/customers/stats", requireAuth, requireRole(...ORDER_OPS), async (req, res) => {
   let scope;
   try {
@@ -605,6 +638,55 @@ adminRouter.get("/customers/stats", requireAuth, requireRole(...ORDER_OPS), asyn
   const branchId = scope.allBranches ? null : scope.branchId;
   const directory = await buildCustomerDirectory(branchId);
   res.json(customerDirectoryStats(directory));
+});
+
+adminRouter.get("/customers/:customerId", requireAuth, requireRole(...ORDER_OPS), async (req, res) => {
+  let scope;
+  try {
+    scope = await resolveBranchScope(req);
+  } catch (err) {
+    return branchScopeError(res, err);
+  }
+  const branchId = scope.allBranches ? null : scope.branchId;
+  const detail = await getCustomerDetail(req.params.customerId, branchId);
+  if (!detail) return res.status(404).json({ error: "Customer not found." });
+  res.json({
+    ...detail,
+    createdAt: detail.createdAt.toISOString(),
+    joinedSource: detail.isGuest ? "first_order" : "account",
+    firstOrderAt: detail.firstOrderAt?.toISOString() ?? null,
+    lastOrderAt: detail.lastOrderAt?.toISOString() ?? null,
+    notesUpdatedAt: detail.notesUpdatedAt,
+    lastOrder: detail.lastOrder
+      ? { ...detail.lastOrder, createdAt: detail.lastOrder.createdAt.toISOString() }
+      : null,
+    recentOrders: detail.recentOrders.map((o) => ({
+      ...o,
+      createdAt: o.createdAt instanceof Date ? o.createdAt.toISOString() : o.createdAt,
+    })),
+  });
+});
+
+adminRouter.patch("/customers/:customerId/notes", requireAuth, requireRole(Role.ADMIN), async (req, res) => {
+  const { internalNotes } = req.body as { internalNotes?: string };
+  if (typeof internalNotes !== "string") {
+    return res.status(400).json({ error: "internalNotes is required." });
+  }
+  const profile = await updateCustomerNotes(req.params.customerId, internalNotes);
+  if (!profile) return res.status(404).json({ error: "Customer not found." });
+  await writeAudit(prisma, {
+    actorId: req.user!.id,
+    actorRole: req.user!.role,
+    action: AuditAction.CUSTOMER_UPDATED,
+    entityType: "customer",
+    entityId: req.params.customerId,
+    after: { internalNotes: profile.internalNotes },
+    ip: clientIp(req),
+  });
+  res.json({
+    internalNotes: profile.internalNotes,
+    updatedAt: profile.updatedAt.toISOString(),
+  });
 });
 
 adminRouter.get("/customers/:customerId/orders", requireAuth, requireRole(...ORDER_OPS), async (req, res) => {
@@ -637,15 +719,25 @@ adminRouter.get("/customers", requireAuth, requireRole(...ORDER_OPS), async (req
   const sortRaw = String(req.query.sort || "spent");
   const sort: CustomerSort =
     sortRaw === "orders" || sortRaw === "name" || sortRaw === "recent" ? sortRaw : "spent";
+  const segmentRaw = String(req.query.segment || "all");
+  const segment: CustomerSegmentFilter =
+    segmentRaw === "new" ||
+    segmentRaw === "regular" ||
+    segmentRaw === "vip" ||
+    segmentRaw === "at_risk" ||
+    segmentRaw === "lapsed"
+      ? segmentRaw
+      : "all";
 
   const directory = await buildCustomerDirectory(branchId);
-  const filtered = filterCustomers(directory, search, sort);
+  const filtered = filterCustomers(directory, search, sort, segment);
   const { customers, total } = paginateCustomers(filtered, limit, offset);
 
   res.json({
     customers: customers.map((c) => ({
       ...c,
       createdAt: c.createdAt.toISOString(),
+      joinedSource: c.isGuest ? "first_order" : "account",
       lastOrder: c.lastOrder
         ? {
             ...c.lastOrder,

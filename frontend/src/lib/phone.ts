@@ -1,4 +1,18 @@
 /** Mirrors backend `normalizePkPhone` — applied on save server-side; use on blur in admin for preview. */
+/** Last 10 digits for matching guest checkouts (03xx, +92, 92xx). */
+export function pkPhoneMatchKey(input: string): string | null {
+  const digits = input.replace(/\D/g, "");
+  if (digits.length < 10) return null;
+  return digits.slice(-10);
+}
+
+/** wa.me link digits: 0300… → 92300… */
+export function pkPhoneForWhatsApp(input: string): string | null {
+  const key = pkPhoneMatchKey(input);
+  if (!key) return null;
+  return `92${key}`;
+}
+
 export function normalizePkPhone(input: string): string {
   const raw = input.trim();
   if (!raw) return "";

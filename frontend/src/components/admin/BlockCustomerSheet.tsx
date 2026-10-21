@@ -52,9 +52,7 @@ export function BlockCustomerSheet({
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    const trimmed = reason.trim();
-    if (!trimmed) return;
-    onConfirm(trimmed);
+    onConfirm(reason.trim());
   }
 
   const sheet = (
@@ -71,7 +69,7 @@ export function BlockCustomerSheet({
         role="dialog"
         aria-modal="true"
         aria-label="Block customer"
-        className={`drawer-panel relative flex h-full w-full max-w-[440px] flex-col rounded-l-2xl bg-white shadow-[-12px_0_48px_rgba(0,0,0,0.2)] ${
+        className={`drawer-panel relative flex h-full w-full max-w-[440px] flex-col rounded-l-2xl bg-white shadow-[-12px_0_48px_rgba(0,0,0,0.2)] dark:bg-stone-900 dark:text-stone-100 dark:ring-1 dark:ring-stone-700 ${
           visible && !closing ? "translate-x-0" : "translate-x-full"
         }`}
       >
@@ -102,15 +100,14 @@ export function BlockCustomerSheet({
               {customer.phone ? ` or ${customer.phone}` : ""}.
             </p>
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-stone-500" htmlFor="block-reason">
-                Reason
+              <label className="mb-1.5 block text-xs font-medium text-stone-500 dark:text-stone-400" htmlFor="block-reason">
+                Reason (optional)
               </label>
               <textarea
                 id="block-reason"
-                className="input min-h-28 resize-y"
+                className="input min-h-28 resize-y dark:bg-stone-950 dark:border-stone-700"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                required
                 placeholder="Why is this customer blocked?"
               />
             </div>
@@ -123,7 +120,7 @@ export function BlockCustomerSheet({
             <button
               type="submit"
               className="inline-flex flex-1 items-center justify-center rounded-full bg-rose-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={saving || !reason.trim()}
+              disabled={saving}
             >
               {saving ? "Blocking…" : "Block customer"}
             </button>

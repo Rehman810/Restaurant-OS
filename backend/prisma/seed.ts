@@ -440,6 +440,9 @@ async function main() {
       const { seedAnalyticsDemo } = await import("../src/lib/analytics/seed-demo");
       const analytics = await seedAnalyticsDemo(prisma, mainBranch.id, riderUser?.id);
       console.log(`Analytics demo: ${analytics.created} orders (numbers ANL-*). Run npm run seed:analytics anytime to refresh.`);
+      const { seedCustomersDemo } = await import("../src/lib/customers/seed-demo");
+      const customersDemo = await seedCustomersDemo(prisma, mainBranch.id, riderUser?.id);
+      console.log(`Customers demo: ${customersDemo.created} orders (CUS-*), ${customersDemo.registered} registered accounts.`);
     }
     await seedDemoCoupons();
     console.log("Demo data already present. Passwords and existing store settings were not changed.");
@@ -958,6 +961,9 @@ async function main() {
   const { seedAnalyticsDemo } = await import("../src/lib/analytics/seed-demo");
   const analytics = await seedAnalyticsDemo(prisma, mainBranch.id, rider.id);
   console.log(`Analytics demo: ${analytics.created} historical orders (ANL-*).`);
+  const { seedCustomersDemo } = await import("../src/lib/customers/seed-demo");
+  const customersDemo = await seedCustomersDemo(prisma, mainBranch.id, rider.id);
+  console.log(`Customers demo: ${customersDemo.created} orders (CUS-*), ${customersDemo.registered} registered accounts.`);
   await seedDemoCoupons();
 
   console.log(`Seeded ${BRAND_NAME} in ${CITY}.`);

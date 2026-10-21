@@ -46,6 +46,21 @@ export function formatWhen(iso: string) {
   });
 }
 
+export function formatRelativeDays(iso: string) {
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / (24 * 60 * 60 * 1000));
+  if (days <= 0) return "Today";
+  if (days === 1) return "1 day ago";
+  return `${days} days ago`;
+}
+
+export function formatDateShort(iso: string) {
+  return new Date(iso).toLocaleDateString("en-PK", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 export function formatElapsed(iso: string) {
   const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
   if (mins < 1) return "Just now";
