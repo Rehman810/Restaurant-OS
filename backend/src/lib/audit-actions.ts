@@ -60,6 +60,9 @@ export const AuditAction = {
 
   STOCK_ADJUSTED: "inventory.stock_adjusted",
   PURCHASE_VOIDED: "inventory.purchase_voided",
+  SUPPLIER_PAYMENT_RECORDED: "inventory.supplier_payment_recorded",
+  STOCK_COUNT_SUBMITTED: "inventory.stock_count_submitted",
+  STOCK_COUNT_APPROVED: "inventory.stock_count_approved",
 } as const;
 
 export type AuditActionCode = (typeof AuditAction)[keyof typeof AuditAction];
@@ -144,6 +147,9 @@ const ACTION_META: Record<string, AuditActionMeta> = {
 
   [AuditAction.STOCK_ADJUSTED]: { label: "Stock adjusted", category: "Inventory" },
   [AuditAction.PURCHASE_VOIDED]: { label: "Purchase voided", category: "Inventory" },
+  [AuditAction.SUPPLIER_PAYMENT_RECORDED]: { label: "Supplier payment recorded", category: "Inventory" },
+  [AuditAction.STOCK_COUNT_SUBMITTED]: { label: "Stock count submitted", category: "Inventory" },
+  [AuditAction.STOCK_COUNT_APPROVED]: { label: "Stock count approved", category: "Inventory" },
 };
 
 // Legacy aliases → same meta as canonical

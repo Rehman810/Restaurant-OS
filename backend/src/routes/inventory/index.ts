@@ -14,10 +14,20 @@ import { prisma } from "../../lib/prisma";
 import { requireAuth, requireRole } from "../../middleware/auth";
 import { branchScopeError } from "../../lib/branch-scope";
 import { applyStockChange, expiringBatches, lowStockForBranch } from "../../lib/inventory/stock";
+import { countLowAndOut, needsUnitReview } from "../../lib/inventory/stock-status";
+import { recipeEditorWarnings } from "../../lib/inventory/recipe-warnings";
+import { suggestedReorderQty } from "../../lib/inventory/reorder";
 import { roundQty } from "../../lib/inventory/units";
+import {
+  assertIntegerQtyForUnit,
+  purchaseToStockQty,
+  purchaseUnitCostToStockCost,
+} from "../../lib/inventory/validate-qty";
 import { READ_ROLES, WRITE_ROLES, assertInventoryBranch, itemStatus, resolveBranchId } from "./shared";
+import { inventoryExtraRouter } from "./extra-routes";
 
 export const inventoryRouter = Router();
+inventoryRouter.use(inventoryExtraRouter);
 
 function handleErr(res: import("express").Response, err: unknown) {
   const status = typeof err === "object" && err && "status" in err ? Number((err as { status: number }).status) : 500;
@@ -49,12 +59,16 @@ inventoryRouter.get("/summary", requireAuth, requireRole(...READ_ROLES), async (
         category: i.categoryRef?.name ?? i.category,
         categoryId: i.categoryId,
         unit: i.unit,
+        purchaseUnit: i.purchaseUnit,
+        conversionFactor: Number(i.conversionFactor ?? 1),
         reorderPoint: Number(i.reorderPoint),
         parLevel: i.parLevel != null ? Number(i.parLevel) : null,
         defaultCost: Number(i.defaultCost),
         avgCost: avg,
         trackStock: i.trackStock,
         trackExpiry: i.trackExpiry,
+        isPackaging: i.isPackaging,
+        needsReview: needsUnitReview(i.unit, qty),
         isActive: i.isActive,
         quantity: qty,
         stockValue: roundQty(qty * avg),
@@ -63,8 +77,11 @@ inventoryRouter.get("/summary", requireAuth, requireRole(...READ_ROLES), async (
     });
 
     const lowStock = await lowStockForBranch(branchId);
-    const outCount = rows.filter((r) => r.status === "out").length;
-    const lowCount = rows.filter((r) => r.status === "low").length;
+    const levelCounts = countLowAndOut(
+      rows.map((r) => ({ quantity: r.quantity, reorderPoint: r.reorderPoint }))
+    );
+    const { lowCount, outCount } = levelCounts;
+    const expiringCount = rows.filter((r) => r.status === "expiring").length;
     const totalValue = rows.reduce((s, r) => s + r.stockValue, 0);
 
     const movements = await prisma.stockMovement.findMany({
@@ -82,6 +99,7 @@ inventoryRouter.get("/summary", requireAuth, requireRole(...READ_ROLES), async (
         totalValue,
         lowCount,
         outCount,
+        expiringCount,
       },
       items: rows,
       lowStock,
@@ -192,11 +210,14 @@ inventoryRouter.post("/items", requireAuth, requireRole(...WRITE_ROLES), async (
     category?: string;
     categoryId?: string;
     unit?: InventoryUnit;
+    purchaseUnit?: InventoryUnit;
+    conversionFactor?: number;
     reorderPoint?: number;
     parLevel?: number;
     defaultCost?: number;
     trackStock?: boolean;
     trackExpiry?: boolean;
+    isPackaging?: boolean;
     openingStock?: number;
     openingCost?: number;
   };
@@ -211,15 +232,19 @@ inventoryRouter.post("/items", requireAuth, requireRole(...WRITE_ROLES), async (
         category: body.category?.trim() || "General",
         categoryId: body.categoryId || null,
         unit: body.unit || InventoryUnit.KG,
+        purchaseUnit: body.purchaseUnit ?? null,
+        conversionFactor: body.conversionFactor ?? 1,
         reorderPoint: body.reorderPoint ?? 0,
         parLevel: body.parLevel ?? null,
         defaultCost: body.defaultCost ?? body.openingCost ?? 0,
         trackStock: body.trackStock ?? true,
         trackExpiry: body.trackExpiry ?? false,
+        isPackaging: body.isPackaging ?? false,
       },
     });
     const open = Number(body.openingStock ?? 0);
     if (open > 0) {
+      assertIntegerQtyForUnit(item.unit, open, "Opening stock");
       await applyStockChange({
         branchId,
         itemId: item.id,
@@ -297,6 +322,10 @@ inventoryRouter.post("/adjust", requireAuth, requireRole(...WRITE_ROLES), async 
     if (body.mode === "remove") delta = -Number(body.quantity || 0);
     if (body.mode === "set") delta = Number(body.quantity ?? 0) - current;
     if (!delta) return res.status(400).json({ error: "Enter a non-zero adjustment." });
+    const itemForUnit = await prisma.inventoryItem.findUnique({ where: { id: body.itemId } });
+    if (itemForUnit) {
+      assertIntegerQtyForUnit(itemForUnit.unit, Math.abs(delta), "Adjustment quantity");
+    }
 
     const isWaste =
       body.wasteReason ||
@@ -538,24 +567,56 @@ inventoryRouter.post("/receive", requireAuth, requireRole(...WRITE_ROLES), async
     if (!lines.length) return res.status(400).json({ error: "Add at least one line." });
 
     const warnings: string[] = [];
+    if (body.supplierId && body.invoiceRef?.trim()) {
+      const dup = await prisma.inventoryPurchase.findFirst({
+        where: {
+          branchId,
+          supplierId: body.supplierId,
+          invoiceRef: body.invoiceRef.trim(),
+          voidedAt: null,
+        },
+      });
+      if (dup) warnings.push("Duplicate invoice number for this supplier.");
+    }
     let subtotal = 0;
     type PrepLine = {
       itemId: string;
       qty: number;
       unitCost: number;
+      stockQty: number;
+      stockUnitCost: number;
       expiryDate?: string;
       batchNo?: string;
     };
     const prepared: PrepLine[] = [];
     for (const line of lines) {
-      const qty = Number(line.quantity);
-      if (!line.itemId || qty <= 0) continue;
-      const unitCost = Number(line.unitCost ?? 0);
-      subtotal += qty * unitCost;
+      const purchaseQty = Number(line.quantity);
+      if (!line.itemId || purchaseQty <= 0) continue;
+      const item = await prisma.inventoryItem.findUnique({ where: { id: line.itemId } });
+      if (!item) continue;
+      const purchaseUnit = item.purchaseUnit ?? item.unit;
+      assertIntegerQtyForUnit(purchaseUnit, purchaseQty, "Receive quantity");
+      const stockQty = purchaseToStockQty(
+        purchaseQty,
+        item.purchaseUnit,
+        item.unit,
+        Number(item.conversionFactor)
+      );
+      const purchaseUnitCost = Number(line.unitCost ?? 0);
+      const stockUnitCost = purchaseUnitCostToStockCost(
+        purchaseUnitCost,
+        item.purchaseUnit,
+        item.unit,
+        Number(item.conversionFactor)
+      );
+      assertIntegerQtyForUnit(item.unit, stockQty, "Stock quantity");
+      subtotal += purchaseQty * purchaseUnitCost;
       prepared.push({
         itemId: line.itemId,
-        qty,
-        unitCost,
+        qty: purchaseQty,
+        unitCost: purchaseUnitCost,
+        stockQty,
+        stockUnitCost,
         expiryDate: line.expiryDate,
         batchNo: line.batchNo,
       });
@@ -603,8 +664,8 @@ inventoryRouter.post("/receive", requireAuth, requireRole(...WRITE_ROLES), async
         data: {
           purchaseId: purchase.id,
           itemId: line.itemId,
-          quantity: line.qty,
-          unitCost: line.unitCost,
+          quantity: line.stockQty,
+          unitCost: line.stockUnitCost,
           lineTotal: line.qty * line.unitCost,
           batchNo: line.batchNo?.trim() || null,
           expiryDate: line.expiryDate ? new Date(line.expiryDate) : null,
@@ -615,8 +676,8 @@ inventoryRouter.post("/receive", requireAuth, requireRole(...WRITE_ROLES), async
         branchId,
         itemId: line.itemId,
         type: StockMovementType.PURCHASE,
-        quantityDelta: line.qty,
-        unitCost: line.unitCost,
+        quantityDelta: line.stockQty,
+        unitCost: line.stockUnitCost,
         reference: body.invoiceRef || purchase.id,
         referenceType: StockReferenceType.PURCHASE,
         referenceId: purchase.id,
@@ -774,6 +835,8 @@ inventoryRouter.post("/waste", requireAuth, requireRole(...WRITE_ROLES), async (
     if (!body.itemId || qty <= 0 || !body.reason) {
       return res.status(400).json({ error: "itemId, quantity, and reason are required." });
     }
+    const wasteItem = await prisma.inventoryItem.findUnique({ where: { id: body.itemId } });
+    if (wasteItem) assertIntegerQtyForUnit(wasteItem.unit, qty, "Waste quantity");
     const stock = await prisma.branchStock.findUnique({
       where: { branchId_itemId: { branchId, itemId: body.itemId } },
     });
@@ -876,6 +939,11 @@ inventoryRouter.get("/recipes/:menuItemId", requireAuth, requireRole(...WRITE_RO
           : econ.status === "SUSPICIOUS_LOW"
             ? "Recipe cost looks unusually low — check quantities and costs."
             : null;
+    const recipeWarnings = recipeEditorWarnings({
+      foodCostPercent: econ.foodCostPercent,
+      ingredientCount: lines.length,
+    });
+    const mergedWarning = costWarning || recipeWarnings[0] || null;
     res.json({
       yieldPortions,
       notes: meta?.notes ?? "",
@@ -886,7 +954,8 @@ inventoryRouter.get("/recipes/:menuItemId", requireAuth, requireRole(...WRITE_RO
       foodCostPercent: econ.foodCostPercent ?? 0,
       costStatus: econ.status,
       missingIngredients: econ.missingIngredients,
-      costWarning,
+      costWarning: mergedWarning,
+      recipeWarnings,
       lines: lines.map((l) => ({
         id: l.id,
         itemId: l.itemId,
@@ -1053,6 +1122,16 @@ inventoryRouter.post("/counts/:id/submit", requireAuth, requireRole(...WRITE_ROL
       where: { id: req.params.id },
       data: { status: StockCountStatus.SUBMITTED, submittedAt: new Date() },
     });
+    const { writeAuditSafe } = await import("../../lib/audit");
+    const { AuditAction } = await import("../../lib/audit-actions");
+    await writeAuditSafe(prisma, {
+      actorId: req.user!.id,
+      actorRole: req.user!.role,
+      branchId: existing.branchId,
+      action: AuditAction.STOCK_COUNT_SUBMITTED,
+      entityType: "stock_count",
+      entityId: count.id,
+    });
     res.json({ count });
   } catch (err) {
     return branchScopeError(res, err);
@@ -1069,6 +1148,16 @@ inventoryRouter.post("/counts/:id/approve", requireAuth, requireRole(...WRITE_RO
     return res.status(400).json({ error: "Count must be submitted before approval." });
   }
   await assertInventoryBranch(req, count.branchId);
+  const posted = await prisma.stockMovement.count({
+    where: {
+      referenceType: StockReferenceType.COUNT,
+      referenceId: count.id,
+      type: StockMovementType.COUNT_CORRECTION,
+    },
+  });
+  if (posted > 0) {
+    return res.status(400).json({ error: "Count adjustments were already posted." });
+  }
   for (const line of count.lines) {
     if (line.variance == null || Number(line.variance) === 0) continue;
     await applyStockChange({
@@ -1089,6 +1178,16 @@ inventoryRouter.post("/counts/:id/approve", requireAuth, requireRole(...WRITE_RO
       approvedAt: new Date(),
       approvedById: req.user!.id,
     },
+  });
+  const { writeAuditSafe } = await import("../../lib/audit");
+  const { AuditAction } = await import("../../lib/audit-actions");
+  await writeAuditSafe(prisma, {
+    actorId: req.user!.id,
+    actorRole: req.user!.role,
+    branchId: count.branchId,
+    action: AuditAction.STOCK_COUNT_APPROVED,
+    entityType: "stock_count",
+    entityId: count.id,
   });
   res.json({ count: updated });
   } catch (err) {
@@ -1212,8 +1311,11 @@ inventoryRouter.get("/alerts", requireAuth, requireRole(...READ_ROLES), async (r
       lowStockForBranch(branchId),
       expiringBatches(branchId, 7),
     ]);
+    const levelCounts = countLowAndOut(
+      lowStock.map((r) => ({ quantity: r.quantity, reorderPoint: r.reorderPoint }))
+    );
     res.json({
-      lowStockCount: lowStock.length,
+      lowStockCount: levelCounts.alertCount,
       lowStock: lowStock.slice(0, 5),
       expiring,
     });
@@ -1229,22 +1331,32 @@ inventoryRouter.get("/reorder-suggestions", requireAuth, requireRole(...READ_ROL
       where: { branchId },
       include: { item: { include: { supplierItems: { include: { supplier: true } } } } },
     });
+    const { stockLevel } = await import("../../lib/inventory/stock-status");
     const suggestions = stocks
-      .filter((s) => s.item.isActive && Number(s.quantity) <= Number(s.item.reorderPoint))
+      .filter(
+        (s) =>
+          s.item.isActive &&
+          s.item.trackStock &&
+          stockLevel(Number(s.quantity), Number(s.item.reorderPoint)) !== "OK"
+      )
       .map((s) => {
         const onHand = Number(s.quantity);
-        const par = s.item.parLevel != null ? Number(s.item.parLevel) : Number(s.item.reorderPoint) * 2;
-        const suggested = Math.max(0, par - onHand);
+        const reorder = Number(s.item.reorderPoint);
+        const suggested = suggestedReorderQty(onHand, s.item.parLevel != null ? Number(s.item.parLevel) : null, reorder);
         const supplier = s.item.supplierItems[0]?.supplier;
+        const avgCost = Number(s.avgCost ?? s.item.defaultCost);
         return {
           itemId: s.itemId,
           name: s.item.name,
+          unit: s.item.unit,
           onHand,
           suggestedQty: suggested,
+          estimatedCost: roundQty(suggested * avgCost),
           supplierId: supplier?.id,
           supplierName: supplier?.name,
         };
-      });
+      })
+      .filter((s) => s.suggestedQty > 0);
     res.json({ suggestions });
   } catch (err) {
     return branchScopeError(res, err);

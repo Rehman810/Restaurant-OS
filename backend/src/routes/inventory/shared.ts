@@ -1,5 +1,6 @@
 import { Role } from "@prisma/client";
 import { resolveBranchScope } from "../../lib/branch-scope";
+import { inventoryDisplayStatus } from "../../lib/inventory/stock-status";
 import { ADMIN_LIKE } from "../../lib/roles";
 
 export const READ_ROLES = [...ADMIN_LIKE, Role.CHEF] as Role[];
@@ -26,8 +27,5 @@ export async function assertInventoryBranch(
 }
 
 export function itemStatus(qty: number, reorder: number, expiringSoon: boolean) {
-  if (qty <= 0) return "out";
-  if (qty <= reorder) return "low";
-  if (expiringSoon) return "expiring";
-  return "ok";
+  return inventoryDisplayStatus(qty, reorder, expiringSoon);
 }

@@ -1,4 +1,4 @@
-import { OrderStatus, StockMovementType, StockReferenceType } from "@prisma/client";
+import { FulfillmentType, OrderStatus, StockMovementType, StockReferenceType } from "@prisma/client";
 import { prisma } from "../prisma";
 import { applyStockChange } from "./ledger";
 import { refreshMenuAvailabilityForBranch } from "./availability";
@@ -39,9 +39,20 @@ export async function deductInventoryForOrder(orderId: string, actorId?: string)
     const portions = yieldMap.get(line.menuItemId) || 1;
     const lines = recipes.filter((r) => r.menuItemId === line.menuItemId);
     for (const r of lines) {
+      if (r.item.isPackaging) continue;
       const perPortion = Number(r.quantity) / portions;
       const key = r.itemId;
       need.set(key, (need.get(key) || 0) + perPortion * line.quantity);
+    }
+  }
+
+  const fulfillment = order.fulfillmentType;
+  const needsPackaging =
+    fulfillment === FulfillmentType.DELIVERY || fulfillment === FulfillmentType.PICKUP;
+  if (needsPackaging && settings?.defaultPackagingItemId) {
+    const pkgQty = Number(settings.defaultPackagingQty ?? 1);
+    if (pkgQty > 0) {
+      need.set(settings.defaultPackagingItemId, (need.get(settings.defaultPackagingItemId) || 0) + pkgQty);
     }
   }
 

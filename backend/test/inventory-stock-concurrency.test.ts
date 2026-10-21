@@ -1,11 +1,25 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { InventoryUnit, StockMovementType } from "@prisma/client";
 import { prisma } from "../src/lib/prisma";
 import { applyStockChange, getOrCreateBranchStock } from "../src/lib/inventory/ledger";
+import { assertIntegrationTestDatabase } from "./helpers/db-guard";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 
 describe.skipIf(!hasDb)("[INV-10] concurrent stock deduction", () => {
+  let testItemId: string | null = null;
+  let testBranchId: string | null = null;
+
+  beforeAll(() => {
+    assertIntegrationTestDatabase();
+  });
+
+  afterAll(async () => {
+    if (testItemId) {
+      await prisma.inventoryItem.delete({ where: { id: testItemId } }).catch(() => null);
+    }
+  });
+
   it("does not allow two parallel deductions below zero when negative stock is disabled", async () => {
     const branch = await prisma.branch.findFirst({ where: { isActive: true } });
     if (!branch) {
@@ -15,6 +29,8 @@ describe.skipIf(!hasDb)("[INV-10] concurrent stock deduction", () => {
     const item = await prisma.inventoryItem.create({
       data: { name: `Concurrency test ${Date.now()}`, unit: InventoryUnit.PIECE, trackStock: true },
     });
+    testItemId = item.id;
+    testBranchId = branch.id;
     await getOrCreateBranchStock(branch.id, item.id);
     await applyStockChange({
       branchId: branch.id,
@@ -43,7 +59,6 @@ describe.skipIf(!hasDb)("[INV-10] concurrent stock deduction", () => {
       where: { branchId_itemId: { branchId: branch.id, itemId: item.id } },
     });
     expect(Number(stock?.quantity)).toBe(0);
-
-    await prisma.inventoryItem.delete({ where: { id: item.id } }).catch(() => null);
+    expect(testBranchId).toBe(branch.id);
   });
 });

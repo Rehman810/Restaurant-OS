@@ -3,6 +3,7 @@ export { deductInventoryForOrder, reverseInventoryForOrder, shouldDeductOnStatus
 export { refreshMenuAvailabilityForBranch } from "./availability";
 
 import { prisma } from "../prisma";
+import { stockLevel } from "./stock-status";
 
 export async function lowStockForBranch(branchId: string) {
   const stocks = await prisma.branchStock.findMany({
@@ -14,7 +15,7 @@ export async function lowStockForBranch(branchId: string) {
       (s) =>
         s.item.isActive &&
         s.item.trackStock &&
-        Number(s.quantity) <= Number(s.item.reorderPoint)
+        stockLevel(Number(s.quantity), Number(s.item.reorderPoint)) !== "OK"
     )
     .map((s) => ({
       itemId: s.itemId,
