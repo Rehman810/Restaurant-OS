@@ -2,7 +2,7 @@
 
 import { ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Calendar, Info, Search } from "lucide-react";
+import { Calendar, Info, MoreHorizontal, Search } from "lucide-react";
 import { AdminSelect } from "@/components/admin/AdminSelect";
 
 const TOOLTIP_W = 288;
@@ -474,6 +474,64 @@ export function SearchableSelect({
         )}
       </div>
     </Field>
+  );
+}
+
+export function RowActionsMenu({
+  actions,
+}: {
+  actions: { label: string; onClick: () => void; danger?: boolean }[];
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        aria-label="Row actions"
+        className="rounded-lg p-1.5 text-stone-500 hover:bg-stone-100 hover:text-stone-800 dark:hover:bg-stone-800"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+      >
+        <MoreHorizontal size={18} />
+      </button>
+      {open && (
+        <div
+          className="absolute right-0 z-30 mt-1 min-w-[10rem] rounded-xl border border-stone-200 bg-white py-1 shadow-lg dark:border-stone-700 dark:bg-stone-900"
+          role="menu"
+        >
+          {actions.map((a) => (
+            <button
+              key={a.label}
+              type="button"
+              role="menuitem"
+              className={`block w-full px-3 py-2 text-left text-sm hover:bg-stone-50 dark:hover:bg-stone-800 ${
+                a.danger ? "text-red-600" : "text-stone-800 dark:text-stone-100"
+              }`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen(false);
+                a.onClick();
+              }}
+            >
+              {a.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

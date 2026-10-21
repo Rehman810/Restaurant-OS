@@ -275,3 +275,26 @@ export async function fetchReorderSuggestions() {
 export async function fetchValuationReport() {
   return api<{ byCategory: Record<string, number> }>("/admin/inventory/reports/valuation");
 }
+
+export async function fetchSupplierLedger(supplierId: string) {
+  return api<{
+    balanceDue: number;
+    purchases: { id: string; purchaseDate: string; invoiceRef: string | null; total: number; paidAmount: number; paymentStatus: string }[];
+    payments: { id: string; amount: number; method: string; paidAt: string; reference: string | null }[];
+  }>(`/admin/inventory/suppliers/${supplierId}/ledger`);
+}
+
+export async function recordSupplierPayment(
+  supplierId: string,
+  payload: { amount: number; method?: string; paidAt?: string; reference?: string; notes?: string }
+) {
+  return api(`/admin/inventory/suppliers/${supplierId}/payments`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function movementsExportUrl(params: Record<string, string>) {
+  const q = new URLSearchParams(params).toString();
+  return `/api/proxy/admin/inventory/movements/export.csv${q ? `?${q}` : ""}`;
+}
