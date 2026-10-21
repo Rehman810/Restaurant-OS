@@ -37,8 +37,18 @@ model Branch {
   name         String
   code         String
   address      String     @default("")
+  addressLine  String     @default("")
+  area         String     @default("")
+  city         String     @default("")
+  latitude     Float?
+  longitude    Float?
+  email        String?
+  managerUserId String?
+  managerUser  User?      @relation("BranchManager", fields: [managerUserId], references: [id], onDelete: SetNull)
   phone        String     @default("")
+  acceptsOnlineOrders Boolean @default(true)
   isActive     Boolean    @default(true)
+  deactivatedAt DateTime?
   isDefault    Boolean    @default(false)
   sortOrder    Int        @default(0)
   timezone     String     @default("Asia/Karachi")
@@ -285,6 +295,7 @@ model User {
   waiterOrders    Order[]        @relation("WaiterOrders")
   waiterSessions       TableSession[] @relation("WaiterSessions")
   branchMembers        BranchMember[]
+  managedBranches      Branch[]       @relation("BranchManager")
   confirmedReservations Reservation[] @relation("ReservationConfirmedBy")
   auditLogs            AuditLog[]
   ordersAdjustmentRequested Order[] @relation("OrderAdjRequester")

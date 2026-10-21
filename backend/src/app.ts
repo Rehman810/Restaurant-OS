@@ -5,6 +5,7 @@ import { menuRouter } from "./routes/menu";
 import { ordersRouter } from "./routes/orders";
 import { riderRouter } from "./routes/rider";
 import { adminRouter } from "./routes/admin";
+import { adminBranchesRouter } from "./routes/admin-branches";
 import { adminOrdersRouter } from "./routes/admin-orders";
 import { adminTrackingRouter } from "./routes/admin-tracking";
 import { adminMenuRouter } from "./routes/admin-menu";
@@ -109,6 +110,7 @@ export function createApp() {
   app.use("/admin/orders", adminOrdersRouter);
   app.use("/admin/tracking", adminTrackingRouter);
   app.use("/admin/menu", adminMenuRouter);
+  app.use("/admin/branches", adminBranchesRouter);
   app.use("/admin", adminRouter);
   app.use("/invoices", invoicesRouter);
 

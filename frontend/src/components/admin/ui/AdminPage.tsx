@@ -112,25 +112,34 @@ export function AdminKpiCard({
   icon: Icon,
   accent = "brand",
   onClick,
+  compact,
 }: {
   label: string;
   value: string | number;
   hint?: string;
-  icon: LucideIcon;
+  icon?: LucideIcon;
   accent?: keyof typeof KPI_ACCENTS;
   onClick?: () => void;
+  compact?: boolean;
 }) {
   const body = (
     <div className="rounded-2xl border border-stone-200/80 bg-white p-4 shadow-sm transition dark:border-stone-700 dark:bg-stone-900">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs font-medium text-stone-500 dark:text-stone-400">{label}</p>
-          <p className="mt-1 text-2xl font-bold tabular-nums text-stone-900 dark:text-stone-50">{value}</p>
-          {hint && <p className="mt-0.5 text-xs text-stone-400 dark:text-stone-500">{hint}</p>}
+          <p className="text-xs font-medium text-stone-600 dark:text-stone-400">{label}</p>
+          <p
+            className={`mt-1 font-bold tabular-nums text-stone-900 dark:text-stone-50 ${compact ? "text-lg sm:text-xl" : "text-2xl"}`}
+            title={typeof value === "string" ? value : undefined}
+          >
+            {value}
+          </p>
+          {hint && <p className="mt-0.5 text-xs text-stone-500 dark:text-stone-400">{hint}</p>}
         </div>
-        <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ring-1 ${KPI_ACCENTS[accent]}`}>
-          <Icon size={18} aria-hidden />
-        </span>
+        {Icon && !compact && (
+          <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ring-1 ${KPI_ACCENTS[accent]}`}>
+            <Icon size={18} aria-hidden />
+          </span>
+        )}
       </div>
     </div>
   );

@@ -15,7 +15,7 @@ import { requireAuth, requireRole } from "../../middleware/auth";
 import { branchScopeError } from "../../lib/branch-scope";
 import { applyStockChange, expiringBatches, lowStockForBranch } from "../../lib/inventory/stock";
 import { roundQty } from "../../lib/inventory/units";
-import { READ_ROLES, WRITE_ROLES, itemStatus, resolveBranchId } from "./shared";
+import { READ_ROLES, WRITE_ROLES, assertInventoryBranch, itemStatus, resolveBranchId } from "./shared";
 
 export const inventoryRouter = Router();
 
@@ -722,9 +722,11 @@ inventoryRouter.get("/movements/export.csv", requireAuth, requireRole(...READ_RO
 });
 
 inventoryRouter.post("/purchases/:id/payment", requireAuth, requireRole(...WRITE_ROLES), async (req, res) => {
+  try {
   const amount = Number((req.body as { amount?: number }).amount ?? 0);
   const purchase = await prisma.inventoryPurchase.findUnique({ where: { id: req.params.id } });
   if (!purchase) return res.status(404).json({ error: "Purchase not found." });
+  await assertInventoryBranch(req, purchase.branchId);
   const paid = Number(purchase.paidAmount) + amount;
   const total = Number(purchase.total);
   let paymentStatus: PurchasePaymentStatus = PurchasePaymentStatus.PARTIAL;
@@ -735,6 +737,9 @@ inventoryRouter.post("/purchases/:id/payment", requireAuth, requireRole(...WRITE
     data: { paidAmount: paid, paymentStatus },
   });
   res.json({ purchase: updated });
+  } catch (err) {
+    return handleErr(res, err);
+  }
 });
 
 inventoryRouter.post("/waste", requireAuth, requireRole(...WRITE_ROLES), async (req, res) => {
@@ -934,6 +939,7 @@ inventoryRouter.get("/counts", requireAuth, requireRole(...READ_ROLES), async (r
 });
 
 inventoryRouter.get("/counts/:id", requireAuth, requireRole(...READ_ROLES), async (req, res) => {
+  try {
   const count = await prisma.stockCount.findUnique({
     where: { id: req.params.id },
     include: {
@@ -941,6 +947,7 @@ inventoryRouter.get("/counts/:id", requireAuth, requireRole(...READ_ROLES), asyn
     },
   });
   if (!count) return res.status(404).json({ error: "Count not found." });
+  await assertInventoryBranch(req, count.branchId);
   res.json({
     count: {
       ...count,
@@ -956,6 +963,9 @@ inventoryRouter.get("/counts/:id", requireAuth, requireRole(...READ_ROLES), asyn
       })),
     },
   });
+  } catch (err) {
+    return branchScopeError(res, err);
+  }
 });
 
 inventoryRouter.post("/counts", requireAuth, requireRole(...WRITE_ROLES), async (req, res) => {
@@ -984,11 +994,13 @@ inventoryRouter.post("/counts", requireAuth, requireRole(...WRITE_ROLES), async 
 });
 
 inventoryRouter.patch("/counts/:id/lines", requireAuth, requireRole(...WRITE_ROLES), async (req, res) => {
+  try {
   const body = req.body as { lines?: { itemId: string; countedQty: number }[] };
   const count = await prisma.stockCount.findUnique({ where: { id: req.params.id } });
   if (!count || count.status !== StockCountStatus.DRAFT) {
     return res.status(400).json({ error: "Count is not editable." });
   }
+  await assertInventoryBranch(req, count.branchId);
   for (const line of body.lines || []) {
     const row = await prisma.stockCountLine.findUnique({
       where: { countId_itemId: { countId: count.id, itemId: line.itemId } },
@@ -1010,17 +1022,28 @@ inventoryRouter.patch("/counts/:id/lines", requireAuth, requireRole(...WRITE_ROL
     });
   }
   res.json({ ok: true });
+  } catch (err) {
+    return branchScopeError(res, err);
+  }
 });
 
 inventoryRouter.post("/counts/:id/submit", requireAuth, requireRole(...WRITE_ROLES), async (req, res) => {
-  const count = await prisma.stockCount.update({
-    where: { id: req.params.id },
-    data: { status: StockCountStatus.SUBMITTED, submittedAt: new Date() },
-  });
-  res.json({ count });
+  try {
+    const existing = await prisma.stockCount.findUnique({ where: { id: req.params.id } });
+    if (!existing) return res.status(404).json({ error: "Count not found." });
+    await assertInventoryBranch(req, existing.branchId);
+    const count = await prisma.stockCount.update({
+      where: { id: req.params.id },
+      data: { status: StockCountStatus.SUBMITTED, submittedAt: new Date() },
+    });
+    res.json({ count });
+  } catch (err) {
+    return branchScopeError(res, err);
+  }
 });
 
 inventoryRouter.post("/counts/:id/approve", requireAuth, requireRole(...WRITE_ROLES), async (req, res) => {
+  try {
   const count = await prisma.stockCount.findUnique({
     where: { id: req.params.id },
     include: { lines: true },
@@ -1028,6 +1051,7 @@ inventoryRouter.post("/counts/:id/approve", requireAuth, requireRole(...WRITE_RO
   if (!count || count.status !== StockCountStatus.SUBMITTED) {
     return res.status(400).json({ error: "Count must be submitted before approval." });
   }
+  await assertInventoryBranch(req, count.branchId);
   for (const line of count.lines) {
     if (line.variance == null || Number(line.variance) === 0) continue;
     await applyStockChange({
@@ -1050,6 +1074,9 @@ inventoryRouter.post("/counts/:id/approve", requireAuth, requireRole(...WRITE_RO
     },
   });
   res.json({ count: updated });
+  } catch (err) {
+    return branchScopeError(res, err);
+  }
 });
 
 inventoryRouter.get("/transfers", requireAuth, requireRole(...READ_ROLES), async (req, res) => {
@@ -1093,6 +1120,7 @@ inventoryRouter.post("/transfers", requireAuth, requireRole(...WRITE_ROLES), asy
 });
 
 inventoryRouter.post("/transfers/:id/ship", requireAuth, requireRole(...WRITE_ROLES), async (req, res) => {
+  try {
   const transfer = await prisma.stockTransfer.findUnique({
     where: { id: req.params.id },
     include: { lines: true },
@@ -1100,6 +1128,7 @@ inventoryRouter.post("/transfers/:id/ship", requireAuth, requireRole(...WRITE_RO
   if (!transfer || transfer.status !== TransferStatus.PENDING) {
     return res.status(400).json({ error: "Transfer cannot be shipped." });
   }
+  await assertInventoryBranch(req, transfer.fromBranchId);
   for (const line of transfer.lines) {
     await applyStockChange({
       branchId: transfer.fromBranchId,
@@ -1116,9 +1145,13 @@ inventoryRouter.post("/transfers/:id/ship", requireAuth, requireRole(...WRITE_RO
     data: { status: TransferStatus.IN_TRANSIT, shippedAt: new Date() },
   });
   res.json({ transfer: updated });
+  } catch (err) {
+    return branchScopeError(res, err);
+  }
 });
 
 inventoryRouter.post("/transfers/:id/receive", requireAuth, requireRole(...WRITE_ROLES), async (req, res) => {
+  try {
   const body = req.body as { lines?: { itemId: string; quantityReceived: number }[] };
   const transfer = await prisma.stockTransfer.findUnique({
     where: { id: req.params.id },
@@ -1127,6 +1160,7 @@ inventoryRouter.post("/transfers/:id/receive", requireAuth, requireRole(...WRITE
   if (!transfer || transfer.status !== TransferStatus.IN_TRANSIT) {
     return res.status(400).json({ error: "Transfer is not in transit." });
   }
+  await assertInventoryBranch(req, transfer.toBranchId);
   const recvMap = new Map((body.lines || []).map((l) => [l.itemId, l.quantityReceived]));
   for (const line of transfer.lines) {
     const qty = recvMap.get(line.itemId) ?? Number(line.quantitySent);
@@ -1149,6 +1183,9 @@ inventoryRouter.post("/transfers/:id/receive", requireAuth, requireRole(...WRITE
     data: { status: TransferStatus.RECEIVED, receivedAt: new Date(), receivedById: req.user!.id },
   });
   res.json({ transfer: updated });
+  } catch (err) {
+    return branchScopeError(res, err);
+  }
 });
 
 inventoryRouter.get("/alerts", requireAuth, requireRole(...READ_ROLES), async (req, res) => {

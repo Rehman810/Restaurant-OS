@@ -34,10 +34,24 @@ export function BranchSwitcher({ className = "" }: { className?: string }) {
 
   const canPickAll = user.role === "ADMIN";
   const label = selection === "all" ? "All branches" : activeBranch?.name ?? "Branch";
+  const singleBranch = branches.length === 1 && !canPickAll;
 
   function pick(id: BranchSelection) {
     setSelection(id);
     close();
+  }
+
+  if (singleBranch) {
+    return (
+      <div className={`flex h-9 max-w-[16rem] items-center gap-1.5 rounded-xl border border-stone-200/90 bg-white/95 px-2 dark:border-stone-600 dark:bg-stone-800/95 ${className}`}>
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 text-white">
+          <Building2 size={14} strokeWidth={2.25} />
+        </span>
+        <span className="min-w-0 truncate text-xs font-semibold text-stone-900 dark:text-stone-50" title={label}>
+          {label}
+        </span>
+      </div>
+    );
   }
 
   return (
@@ -46,8 +60,10 @@ export function BranchSwitcher({ className = "" }: { className?: string }) {
         type="button"
         aria-expanded={open}
         aria-haspopup="listbox"
+        aria-label={`Branch: ${label}`}
+        title={label}
         onClick={() => setOpen((v) => !v)}
-        className="group flex h-9 max-w-[11rem] items-center gap-1.5 rounded-xl border border-stone-200/90 bg-white/95 py-0 pl-2 pr-1.5 shadow-sm transition hover:border-brand-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 dark:border-stone-600 dark:bg-stone-800/95 dark:hover:border-stone-500 sm:max-w-[13rem]"
+        className="group flex h-9 max-w-[11rem] items-center gap-1.5 rounded-xl border border-stone-200/90 bg-white/95 py-0 pl-2 pr-1.5 shadow-sm transition hover:border-brand-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 dark:border-stone-600 dark:bg-stone-800/95 dark:hover:border-stone-500 sm:max-w-[16rem]"
       >
         <span
           className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 text-white"
@@ -70,7 +86,7 @@ export function BranchSwitcher({ className = "" }: { className?: string }) {
           className="absolute right-0 z-50 mt-2 w-[min(100vw-1.5rem,17rem)] overflow-hidden rounded-2xl border border-stone-200/90 bg-white p-1.5 shadow-xl shadow-stone-900/10 dark:border-stone-600 dark:bg-stone-900 dark:shadow-black/40"
         >
           <p className="px-2.5 pb-1 pt-1 text-[10px] font-bold uppercase tracking-wider text-stone-400 dark:text-stone-500">
-            Outlet
+            Branch
           </p>
           {canPickAll && (
             <button
@@ -117,7 +133,7 @@ export function BranchSwitcher({ className = "" }: { className?: string }) {
                   {b.address ? (
                     <span className="block truncate text-xs text-stone-500 dark:text-stone-400">{b.address}</span>
                   ) : (
-                    <span className="block text-xs text-stone-500 dark:text-stone-400">Branch outlet</span>
+                    <span className="block text-xs text-stone-500 dark:text-stone-400">Branch</span>
                   )}
                 </span>
                 {selected && <Check size={18} className="shrink-0 text-brand-600 dark:text-brand-400" />}

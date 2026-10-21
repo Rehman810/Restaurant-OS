@@ -187,11 +187,14 @@ ordersRouter.post("/", optionalAuth, async (req, res) => {
   let resolvedBranchId = await getDefaultBranchId();
   if (branchIdBody) {
     const branch = await prisma.branch.findFirst({
-      where: { id: String(branchIdBody), isActive: true },
-      select: { id: true, name: true, address: true },
+      where: { id: String(branchIdBody), isActive: true, acceptsOnlineOrders: true },
+      select: { id: true, name: true, address: true, acceptsOnlineOrders: true },
     });
     if (!branch) {
-      return res.status(400).json({ error: "Selected branch is not available." });
+      return res.status(400).json({
+        error: "Selected branch is not available for online orders.",
+        code: "BRANCH_ONLINE_ORDERING_OFF",
+      });
     }
     resolvedBranchId = branch.id;
   }

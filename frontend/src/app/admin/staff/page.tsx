@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Bike,
   ChefHat,
@@ -40,7 +41,15 @@ function defaultBranchIds(selection: string, branches: { id: string; isDefault?:
 
 export default function StaffPage() {
   const { user } = useAuth();
-  const { selection, branches } = useBranch();
+  const searchParams = useSearchParams();
+  const { selection, branches, setSelection } = useBranch();
+
+  useEffect(() => {
+    const focus = searchParams.get("focusBranch");
+    if (focus && branches.some((b) => b.id === focus)) {
+      setSelection(focus);
+    }
+  }, [searchParams, branches, setSelection]);
   const branchOptions = branches.map((b) => ({ id: b.id, name: b.name, address: b.address }));
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");

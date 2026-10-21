@@ -1,22 +1,25 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { Building2, ChevronDown, Plus } from "lucide-react";
+import { useAuth } from "@/lib/auth";
 import {
-  Building2,
-  MapPin,
-  Pencil,
-  Phone,
-  Plus,
-  Star,
-  Users,
-} from "lucide-react";
-import { createBranch, fetchAdminBranches, updateBranch } from "@/modules/branches/api";
-import type { Branch } from "@/modules/branches/types";
+  createBranch,
+  deactivateBranch,
+  fetchAdminBranches,
+  makeBranchDefault,
+  reactivateBranch,
+  toggleBranchOnlineOrdering,
+  updateBranch,
+} from "@/modules/branches/api";
+import type { AdminBranch, BranchesListRange } from "@/modules/branches/types";
 import { useBranch } from "@/modules/branches/BranchContext";
 import { RefreshButton } from "@/components/admin/RefreshButton";
 import { BranchFormSheet, type BranchFormData } from "@/components/admin/BranchFormSheet";
 import { ConfirmSheet } from "@/components/admin/ConfirmSheet";
+import { BranchCard } from "@/components/admin/branches/BranchCard";
+import { DeactivateBranchSheet } from "@/components/admin/branches/DeactivateBranchSheet";
 import {
   AdminAlert,
   AdminEmptyState,
@@ -25,58 +28,109 @@ import {
   AdminPage,
   AdminPageHeader,
 } from "@/components/admin/ui";
+import { api } from "@/lib/api";
+import { formatMoney, normalizeBranchCodeInput, suggestBranchCodeFromName, validateBranchCodeClient } from "@/lib/branches/helpers";
 
-const emptyForm: BranchFormData = { name: "", code: "", address: "", phone: "", isDefault: false };
+const BranchesPerformance = dynamic(
+  () => import("@/components/admin/branches/BranchesPerformance").then((m) => m.BranchesPerformance),
+  { ssr: false, loading: () => <div className="skeleton h-24 rounded-2xl" /> }
+);
 
-function branchToForm(b: Branch): BranchFormData {
-  return {
-    name: b.name,
-    code: b.code,
-    address: b.address || "",
-    phone: b.phone || "",
-    isDefault: b.isDefault,
-  };
+const emptyForm: BranchFormData = {
+  name: "",
+  code: "",
+  addressLine: "",
+  area: "",
+  city: "",
+  phone: "",
+  email: "",
+  latitude: "",
+  longitude: "",
+  managerUserId: "",
+  acceptsOnlineOrders: true,
+  isDefault: false,
+  copyFromBranchId: "",
+  copyOptions: {},
+};
+
+function checklistDismissed(id: string) {
+  try {
+    return localStorage.getItem(`branch-checklist-dismissed-${id}`) === "1";
+  } catch {
+    return false;
+  }
 }
 
 export default function BranchesPage() {
-  const { refresh: refreshContext } = useBranch();
-  const [branches, setBranches] = useState<Branch[]>([]);
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
+  const { refresh: refreshContext, setSelection } = useBranch();
+  const [range, setRange] = useState<BranchesListRange>("today");
+  const [branches, setBranches] = useState<AdminBranch[]>([]);
+  const [meta, setMeta] = useState<{ ms: number; timezone: string } | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
+  const [inactiveOpen, setInactiveOpen] = useState(false);
+  const [dismissed, setDismissed] = useState<Record<string, boolean>>({});
+
   const [formOpen, setFormOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<Branch | null>(null);
+  const [editTarget, setEditTarget] = useState<AdminBranch | null>(null);
   const [form, setForm] = useState<BranchFormData>(emptyForm);
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [deactivateTarget, setDeactivateTarget] = useState<Branch | null>(null);
-  const [deactivating, setDeactivating] = useState(false);
+  const [managerOptions, setManagerOptions] = useState<{ id: string; name: string }[]>([]);
 
-  const stats = useMemo(() => {
-    const active = branches.filter((b) => b.isActive).length;
-    const staff = branches.reduce((sum, b) => sum + (b._count?.members ?? 0), 0);
-    return { total: branches.length, active, staff };
-  }, [branches]);
+  const [deactivateTarget, setDeactivateTarget] = useState<AdminBranch | null>(null);
+  const [deactivating, setDeactivating] = useState(false);
+  const [onlineTarget, setOnlineTarget] = useState<AdminBranch | null>(null);
+  const [onlineReason, setOnlineReason] = useState("");
+  const [onlineSaving, setOnlineSaving] = useState(false);
 
   const load = useCallback(async (manual = false) => {
     if (manual) setRefreshing(true);
     else setLoading(true);
     setError("");
     try {
-      const data = await fetchAdminBranches();
+      const data = await fetchAdminBranches(range);
       setBranches(data.branches);
+      setMeta(data.meta);
+      setUpdatedAt(new Date());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load branches");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [range]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!formOpen || editTarget) return;
+    if (!form.code && form.name.trim()) {
+      setForm((f) => ({ ...f, code: suggestBranchCodeFromName(f.name) }));
+    }
+  }, [form.name, form.code, formOpen, editTarget]);
+
+  const activeBranches = useMemo(() => branches.filter((b) => b.isActive), [branches]);
+  const inactiveBranches = useMemo(() => branches.filter((b) => !b.isActive), [branches]);
+
+  const kpis = useMemo(() => {
+    const openNow = activeBranches.filter((b) => b.open.isOpenNow && b.acceptsOnlineOrders).length;
+    const collected = activeBranches.reduce((s, b) => s + b.live.collectedToday, 0);
+    const inProgress = activeBranches.reduce((s, b) => s + b.live.inProgress, 0);
+    return {
+      branches: `${activeBranches.length} of ${branches.length}`,
+      openNow,
+      collected,
+      inProgress,
+    };
+  }, [activeBranches, branches.length]);
 
   function openCreate() {
     setEditTarget(null);
@@ -85,46 +139,70 @@ export default function BranchesPage() {
     setFormOpen(true);
   }
 
-  function openEdit(branch: Branch) {
-    setEditTarget(branch);
-    setForm(branchToForm(branch));
+  function openEdit(b: AdminBranch) {
+    setEditTarget(b);
+    setForm({
+      name: b.name,
+      code: b.code,
+      addressLine: b.addressLine || b.address || "",
+      area: b.area || "",
+      city: b.city || "",
+      phone: b.phone || "",
+      email: b.email || "",
+      latitude: b.latitude != null ? String(b.latitude) : "",
+      longitude: b.longitude != null ? String(b.longitude) : "",
+      managerUserId: b.managerUserId || "",
+      acceptsOnlineOrders: b.acceptsOnlineOrders,
+      isDefault: b.isDefault,
+      copyFromBranchId: "",
+      copyOptions: {},
+    });
     setFormError("");
     setFormOpen(true);
-  }
-
-  function closeForm() {
-    setFormOpen(false);
-    setEditTarget(null);
-    setForm(emptyForm);
-    setFormError("");
+    void api<{ staff: { id: string; name: string }[] }>(`/admin/staff?limit=100`, {
+      headers: { "X-Branch-Id": b.id },
+    })
+      .then((r) => setManagerOptions(r.staff || []))
+      .catch(() => setManagerOptions([]));
   }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!form.name.trim()) return;
+    const code = normalizeBranchCodeInput(form.code || suggestBranchCodeFromName(form.name));
+    const codeErr = validateBranchCodeClient(code);
+    if (codeErr) {
+      setFormError(codeErr);
+      return;
+    }
     setSaving(true);
     setFormError("");
+    const payload = {
+      name: form.name.trim(),
+      code,
+      addressLine: form.addressLine.trim(),
+      area: form.area.trim(),
+      city: form.city.trim(),
+      phone: form.phone.trim(),
+      email: form.email.trim() || null,
+      latitude: form.latitude ? Number(form.latitude) : null,
+      longitude: form.longitude ? Number(form.longitude) : null,
+      managerUserId: form.managerUserId || null,
+      acceptsOnlineOrders: form.acceptsOnlineOrders,
+      isDefault: form.isDefault,
+      copyFrom:
+        form.copyFromBranchId && isAdmin
+          ? { sourceBranchId: form.copyFromBranchId, options: form.copyOptions }
+          : undefined,
+    };
     try {
       if (editTarget) {
-        await updateBranch(editTarget.id, {
-          name: form.name.trim(),
-          code: form.code.trim() || undefined,
-          address: form.address.trim(),
-          phone: form.phone.trim(),
-          isDefault: form.isDefault,
-        });
+        await updateBranch(editTarget.id, payload);
         setMsg("Branch updated.");
       } else {
-        await createBranch({
-          name: form.name.trim(),
-          code: form.code.trim() || undefined,
-          address: form.address.trim(),
-          phone: form.phone.trim(),
-          isDefault: form.isDefault,
-        });
+        await createBranch(payload);
         setMsg("Branch created.");
       }
-      closeForm();
+      setFormOpen(false);
       await load(true);
       await refreshContext();
     } catch (err) {
@@ -134,203 +212,145 @@ export default function BranchesPage() {
     }
   }
 
-  async function setDefault(branch: Branch) {
-    setError("");
-    try {
-      await updateBranch(branch.id, { isDefault: true });
-      setMsg(`${branch.name} is now the default branch.`);
-      await load(true);
-      await refreshContext();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not update branch");
-    }
-  }
-
-  async function confirmDeactivate() {
-    if (!deactivateTarget) return;
-    setDeactivating(true);
-    setError("");
-    try {
-      await updateBranch(deactivateTarget.id, { isActive: false });
-      setMsg(`${deactivateTarget.name} deactivated.`);
-      setDeactivateTarget(null);
-      await load(true);
-      await refreshContext();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not deactivate branch");
-    } finally {
-      setDeactivating(false);
-    }
-  }
-
-  async function activate(branch: Branch) {
-    setError("");
-    try {
-      await updateBranch(branch.id, { isActive: true });
-      setMsg(`${branch.name} is active again.`);
-      await load(true);
-      await refreshContext();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not activate branch");
-    }
+  function deactivateReason(b: AdminBranch): string | null {
+    if (b.isDefault) return "Set another default branch first.";
+    if (activeBranches.length <= 1 && b.isActive) return "At least one branch must stay active.";
+    return null;
   }
 
   return (
     <AdminPage>
       <AdminPageHeader
         title="Branches"
-        description="Each outlet has its own kitchen queue, POS, and orders. Use the header switcher to filter the admin panel."
+        description="Each branch has its own kitchen queue, POS, orders and stock. Use the branch switcher at the top to focus the admin panel on one branch."
         icon={Building2}
+        trailing={
+          updatedAt ? (
+            <span className="text-xs font-normal text-stone-500">Updated {updatedAt.toLocaleTimeString()}</span>
+          ) : null
+        }
         actions={
           <>
+            <select
+              className="input py-2 text-sm"
+              value={range}
+              onChange={(e) => setRange(e.target.value as BranchesListRange)}
+              aria-label="Performance range"
+            >
+              <option value="today">Today</option>
+              <option value="7d">7 days</option>
+              <option value="30d">30 days</option>
+            </select>
             <RefreshButton busy={loading || refreshing} onClick={() => load(true)} />
-            <button type="button" onClick={openCreate} className="btn-primary">
-              <Plus size={16} /> Add branch
-            </button>
+            {isAdmin && (
+              <button type="button" onClick={openCreate} className="btn-primary min-h-[44px]">
+                <Plus size={16} /> Add branch
+              </button>
+            )}
           </>
         }
       />
 
-      <AdminKpiGrid className="sm:grid-cols-3 xl:grid-cols-3">
-        <AdminKpiCard label="Outlets" value={stats.total} icon={Building2} accent="brand" />
-        <AdminKpiCard label="Active" value={stats.active} icon={Star} accent="amber" />
-        <AdminKpiCard label="Staff assigned" value={stats.staff} icon={Users} accent="sky" />
+      <AdminKpiGrid className="grid-cols-2 lg:grid-cols-4">
+        <AdminKpiCard compact label="Branches" value={kpis.branches} hint="Active of total" />
+        <AdminKpiCard compact label="Open now" value={kpis.openNow} />
+        <AdminKpiCard compact label="Sales today" value={formatMoney(kpis.collected)} hint="All branches" />
+        <AdminKpiCard compact label="Orders in progress" value={kpis.inProgress} />
       </AdminKpiGrid>
 
-      {msg && (
-        <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
-          {msg}
-        </p>
-      )}
-
-      {error && (
-        <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
-          {error}
-        </p>
-      )}
+      {msg && <AdminAlert variant="success">{msg}</AdminAlert>}
+      {error && <AdminAlert variant="error">{error}</AdminAlert>}
+      {meta && isAdmin && <p className="text-xs text-stone-500">Loaded in {meta.ms}ms ({meta.timezone})</p>}
 
       {loading ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="skeleton h-44 rounded-2xl" />
-          <div className="skeleton h-44 rounded-2xl" />
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="skeleton h-64 rounded-2xl" />
+          <div className="skeleton h-64 rounded-2xl" />
         </div>
       ) : branches.length === 0 ? (
         <AdminEmptyState
           icon={Building2}
           title="No branches yet"
-          description="Add your first outlet to run multi-location kitchen and POS."
+          description="Add your first branch to run multi-location kitchen and POS."
           action={
-            <button type="button" onClick={openCreate} className="btn-primary">
-              <Plus size={16} /> Add branch
-            </button>
+            isAdmin ? (
+              <button type="button" onClick={openCreate} className="btn-primary">
+                <Plus size={16} /> Add branch
+              </button>
+            ) : null
           }
         />
       ) : (
-        <ul className="grid gap-4 lg:grid-cols-2">
-          {branches.map((b) => (
-            <li
-              key={b.id}
-              className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition dark:bg-stone-900 ${
-                b.isDefault && b.isActive
-                  ? "border-brand-200 ring-1 ring-brand-100 dark:border-brand-800 dark:ring-brand-900/50"
-                  : "border-stone-200/80 dark:border-stone-700"
-              } ${!b.isActive ? "opacity-75" : ""}`}
-            >
-              <div className="border-b border-stone-100 bg-gradient-to-r from-stone-50/80 to-white px-4 py-3 dark:border-stone-800 dark:from-stone-800/40 dark:to-stone-900">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-md">
-                      <Building2 size={20} />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="flex flex-wrap items-center gap-2 font-semibold text-stone-900 dark:text-stone-50">
-                        <span className="truncate">{b.name}</span>
-                        {b.isDefault && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
-                            <Star size={10} /> Default
-                          </span>
-                        )}
-                        {!b.isActive && (
-                          <span className="rounded-full bg-stone-200 px-2 py-0.5 text-[10px] font-bold uppercase text-stone-600 dark:bg-stone-700 dark:text-stone-300">
-                            Inactive
-                          </span>
-                        )}
-                      </p>
-                      <p className="text-xs font-medium text-stone-500 dark:text-stone-400">Code: {b.code}</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => openEdit(b)}
-                    className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-stone-200 px-2.5 py-1.5 text-xs font-semibold text-stone-600 hover:bg-stone-50 dark:border-stone-600 dark:text-stone-300 dark:hover:bg-stone-800"
-                  >
-                    <Pencil size={13} /> Edit
-                  </button>
-                </div>
-              </div>
+        <>
+          <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {activeBranches.map((b) => (
+              <BranchCard
+                key={b.id}
+                branch={b}
+                isAdmin={Boolean(isAdmin)}
+                checklistDismissed={dismissed[b.id] ?? checklistDismissed(b.id)}
+                onDismissChecklist={() => {
+                  localStorage.setItem(`branch-checklist-dismissed-${b.id}`, "1");
+                  setDismissed((d) => ({ ...d, [b.id]: true }));
+                }}
+                onEdit={() => openEdit(b)}
+                onDeactivate={() => setDeactivateTarget(b)}
+                onReactivate={async () => {
+                  await reactivateBranch(b.id);
+                  setMsg(`${b.name} is active again.`);
+                  await load(true);
+                  await refreshContext();
+                }}
+                onMakeDefault={async () => {
+                  await makeBranchDefault(b.id);
+                  setMsg(`${b.name} is now the default branch.`);
+                  await load(true);
+                  await refreshContext();
+                }}
+                onToggleOnline={() => setOnlineTarget(b)}
+                onFocusBranch={() => setSelection(b.id)}
+                deactivateDisabledReason={deactivateReason(b)}
+              />
+            ))}
+          </ul>
 
-              <div className="space-y-3 px-4 py-4">
-                {b.address ? (
-                  <p className="flex gap-2 text-sm text-stone-600 dark:text-stone-300">
-                    <MapPin size={16} className="mt-0.5 shrink-0 text-stone-400" />
-                    <span>{b.address}</span>
-                  </p>
-                ) : (
-                  <p className="text-sm text-stone-400">No address set</p>
-                )}
-                {b.phone ? (
-                  <p className="flex gap-2 text-sm text-stone-600 dark:text-stone-300">
-                    <Phone size={16} className="shrink-0 text-stone-400" />
-                    <a href={`tel:${b.phone}`} className="hover:text-brand-600">{b.phone}</a>
-                  </p>
-                ) : (
-                  <p className="text-sm text-stone-400">No phone set</p>
-                )}
+          {isAdmin && <BranchesPerformance branches={branches} />}
 
-                <div className="flex flex-wrap gap-2 pt-1">
-                  <span className="rounded-lg bg-stone-100 px-2.5 py-1 text-xs font-semibold text-stone-600 dark:bg-stone-800 dark:text-stone-300">
-                    {b._count?.members ?? 0} staff assigned
-                  </span>
-                  <Link
-                    href="/admin/staff"
-                    className="rounded-lg bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-800 hover:bg-brand-100 dark:bg-brand-950/50 dark:text-brand-200"
-                  >
-                    Manage staff →
-                  </Link>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2 border-t border-stone-100 bg-stone-50/50 px-4 py-3 dark:border-stone-800 dark:bg-stone-800/30">
-                {!b.isDefault && b.isActive && (
-                  <button
-                    type="button"
-                    className="rounded-xl border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-200"
-                    onClick={() => setDefault(b)}
-                  >
-                    Make default
-                  </button>
-                )}
-                {b.isActive ? (
-                  <button
-                    type="button"
-                    className="rounded-xl border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-800 hover:bg-red-100 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200"
-                    onClick={() => setDeactivateTarget(b)}
-                  >
-                    Deactivate
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"
-                    onClick={() => activate(b)}
-                  >
-                    Activate
-                  </button>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
+          {inactiveBranches.length > 0 && isAdmin && (
+            <div>
+              <button
+                type="button"
+                className="flex items-center gap-2 text-sm font-semibold text-stone-700 dark:text-stone-200"
+                onClick={() => setInactiveOpen((v) => !v)}
+              >
+                <ChevronDown size={16} className={inactiveOpen ? "rotate-180" : ""} />
+                Inactive branches ({inactiveBranches.length})
+              </button>
+              {inactiveOpen && (
+                <ul className="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {inactiveBranches.map((b) => (
+                    <BranchCard
+                      key={b.id}
+                      branch={b}
+                      isAdmin
+                      checklistDismissed
+                      onDismissChecklist={() => {}}
+                      onEdit={() => openEdit(b)}
+                      onDeactivate={() => {}}
+                      onReactivate={async () => {
+                        await reactivateBranch(b.id);
+                        await load(true);
+                      }}
+                      onMakeDefault={() => {}}
+                      onToggleOnline={() => {}}
+                      onFocusBranch={() => setSelection(b.id)}
+                    />
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </>
       )}
 
       {formOpen && (
@@ -341,20 +361,65 @@ export default function BranchesPage() {
           setForm={setForm}
           saving={saving}
           error={formError}
-          onClose={closeForm}
+          codeLocked={Boolean(editTarget)}
+          branchOptions={branches.filter((b) => b.isActive)}
+          managerOptions={managerOptions}
+          isAdmin={Boolean(isAdmin)}
+          onClose={() => setFormOpen(false)}
           onSubmit={onSubmit}
         />
       )}
 
-      <ConfirmSheet
+      <DeactivateBranchSheet
+        branch={deactivateTarget}
+        otherBranches={activeBranches.filter((b) => b.id !== deactivateTarget?.id)}
         open={Boolean(deactivateTarget)}
-        title={`Deactivate ${deactivateTarget?.name ?? "branch"}?`}
-        message="New orders won't be routed here. Staff can stay assigned; reactivate anytime. You cannot deactivate the default branch without choosing another default first."
-        confirmLabel="Deactivate"
-        danger
         saving={deactivating}
         onClose={() => setDeactivateTarget(null)}
-        onConfirm={() => void confirmDeactivate()}
+        onConfirm={async (opts) => {
+          if (!deactivateTarget) return;
+          setDeactivating(true);
+          try {
+            await deactivateBranch(deactivateTarget.id, opts);
+            setMsg(`${deactivateTarget.name} deactivated.`);
+            setDeactivateTarget(null);
+            await load(true);
+            await refreshContext();
+          } catch (err) {
+            setError(err instanceof Error ? err.message : "Could not deactivate");
+          } finally {
+            setDeactivating(false);
+          }
+        }}
+      />
+
+      <ConfirmSheet
+        open={Boolean(onlineTarget)}
+        title={onlineTarget?.acceptsOnlineOrders ? "Turn off online ordering?" : "Turn online ordering on?"}
+        message={
+          onlineTarget?.acceptsOnlineOrders
+            ? "Customers will not be able to check out for this branch until you turn it back on."
+            : "Customers can place online orders for this branch again."
+        }
+        reasonRequired={Boolean(onlineTarget?.acceptsOnlineOrders)}
+        reasonLabel="Reason"
+        confirmLabel="Confirm"
+        saving={onlineSaving}
+        onClose={() => setOnlineTarget(null)}
+        onConfirm={async (reason) => {
+          if (!onlineTarget) return;
+          setOnlineSaving(true);
+          try {
+            await toggleBranchOnlineOrdering(onlineTarget.id, !onlineTarget.acceptsOnlineOrders, reason || "Updated");
+            setMsg("Online ordering updated.");
+            setOnlineTarget(null);
+            await load(true);
+          } catch (err) {
+            setError(err instanceof Error ? err.message : "Could not update");
+          } finally {
+            setOnlineSaving(false);
+          }
+        }}
       />
     </AdminPage>
   );

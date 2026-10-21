@@ -13,6 +13,18 @@ export async function resolveBranchId(req: import("express").Request) {
   return scope.branchId;
 }
 
+/** Ensures a branch-scoped inventory row belongs to the header branch (managers cannot cross branches). */
+export async function assertInventoryBranch(
+  req: import("express").Request,
+  resourceBranchId: string,
+  message = "This record is outside your branch."
+) {
+  const branchId = await resolveBranchId(req);
+  if (resourceBranchId !== branchId) {
+    throw Object.assign(new Error(message), { status: 403 });
+  }
+}
+
 export function itemStatus(qty: number, reorder: number, expiringSoon: boolean) {
   if (qty <= 0) return "out";
   if (qty <= reorder) return "low";

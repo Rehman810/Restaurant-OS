@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma";
 import { optionalAuth, requireAuth, requireRole } from "../middleware/auth";
 import { ADMIN_LIKE } from "../lib/roles";
 import { branchScopeError, resolveBranchScope } from "../lib/branch-scope";
+import { couponInBranchScope } from "../lib/coupon-branch-scope";
 import {
   couponCustomerStats,
   evaluateCoupon,
@@ -97,8 +98,17 @@ couponsAdminRouter.post("/", requireAuth, requireRole(...ADMIN_LIKE), async (req
 });
 
 couponsAdminRouter.patch("/:id", requireAuth, requireRole(...ADMIN_LIKE), async (req, res) => {
+  let scope;
+  try {
+    scope = await resolveBranchScope(req);
+  } catch (err) {
+    return branchScopeError(res, err);
+  }
   const existing = await prisma.coupon.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: "Coupon not found." });
+  if (!couponInBranchScope(scope, existing)) {
+    return res.status(403).json({ error: "You do not have access to this voucher." });
+  }
   const parsed = couponWriteData(req.body as Record<string, unknown>, "update");
   if ("error" in parsed) return res.status(400).json({ error: parsed.error });
   try {

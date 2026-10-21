@@ -61,7 +61,7 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/admin/catalog/dishes", label: "Dishes", icon: UtensilsCrossed },
       { href: "/admin/catalog/offers", label: "Offers", icon: Sparkles },
-      { href: "/admin/catalog/vouchers", label: "Vouchers", icon: TicketPercent },
+      { href: "/admin/catalog/vouchers", label: "Coupons", icon: TicketPercent },
       { href: "/admin/catalog/categories", label: "Categories", icon: FolderTree },
       { href: "/admin/inventory", label: "Inventory", icon: Package },
       { href: "/admin/areas", label: "Areas", icon: MapPinned },
@@ -96,7 +96,7 @@ export const ADMIN_MOBILE_NAV: NavItem[] = [
 const MANAGER_NAV_SECTIONS: NavSection[] = ADMIN_NAV_SECTIONS.map((section) => ({
   ...section,
   items: section.items.filter(
-    (item) => item.href !== "/admin/branches" && item.href !== "/admin/settings" && item.href !== "/admin/staff"
+    (item) => item.href !== "/admin/settings" && item.href !== "/admin/staff"
   ),
 })).filter((section) => section.items.length > 0);
 

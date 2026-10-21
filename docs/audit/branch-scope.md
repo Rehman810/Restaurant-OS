@@ -20,4 +20,8 @@
 | Admin dashboard | `routes/admin.ts` | SCOPED / GLOBAL for ADMIN |
 | Dine-in admin | `routes/dine-in.ts` | SCOPED |
 
-**MANAGER isolation test:** automated fixture (`branch-manager-scope.test.ts`) — add in follow-up if not present; manual: log in as branch A manager, call `/admin/reports/*` and `/admin/orders` with branch B ids.
+**MANAGER isolation tests:** `branch-manager-scope.test.ts`, `branch-manager-scope-extended.test.ts` (coupons, inventory counts/transfers, header `X-Branch-Id`), `idor-scope.test.ts`.
+
+**Task 2 fixes:** coupon PATCH scope (`coupon-branch-scope.ts`); inventory purchase payment, stock count by id, transfer ship/receive (`assertInventoryBranch` in `inventory/shared.ts`).
+
+Full module matrix: `docs/BRANCHES.md` § Per-branch vs global audit.
