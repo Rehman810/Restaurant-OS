@@ -1,4 +1,4 @@
-import { InventoryUnit, StockMovementType } from "@prisma/client";
+import { InventoryUnit, StockCountStatus, StockMovementType, WasteReason } from "@prisma/client";
 import { prisma } from "../prisma";
 import { applyStockChange } from "./ledger";
 
@@ -58,7 +58,7 @@ const INGREDIENTS: IngredientSeed[] = [
   { name: "Penne pasta dry", category: "Dry Goods", unit: InventoryUnit.KG, cost: 320, reorder: 5 },
   { name: "Breading flour", category: "Dry Goods", unit: InventoryUnit.KG, cost: 150, reorder: 8 },
   { name: "Sweet corn", category: "Dry Goods", unit: InventoryUnit.KG, cost: 220, reorder: 3 },
-  { name: "Burger buns", category: "Bakery", unit: InventoryUnit.PIECE, cost: 35, reorder: 40 },
+  { name: "Burger buns", category: "Bakery", unit: InventoryUnit.PIECE, cost: 35, reorder: 40, stockMul: 6 },
   { name: "Pizza dough ball 12in", category: "Bakery", unit: InventoryUnit.PIECE, cost: 95, reorder: 25, trackExpiry: true },
   { name: "Garlic bread loaf", category: "Bakery", unit: InventoryUnit.PIECE, cost: 120, reorder: 10, trackExpiry: true },
   { name: "Naan bread", category: "Bakery", unit: InventoryUnit.PIECE, cost: 25, reorder: 30 },
@@ -69,7 +69,7 @@ const INGREDIENTS: IngredientSeed[] = [
   { name: "Ice cream base", category: "Dairy", unit: InventoryUnit.L, cost: 550, reorder: 2, trackExpiry: true },
   { name: "Chocolate couverture", category: "Dry Goods", unit: InventoryUnit.KG, cost: 1900, reorder: 2 },
   { name: "Gulab jamun mix", category: "Dry Goods", unit: InventoryUnit.KG, cost: 600, reorder: 2 },
-  { name: "Takeaway box", category: "Packaging", unit: InventoryUnit.PACK, cost: 12, reorder: 100, stockMul: 8 },
+  { name: "Takeaway box", category: "Packaging", unit: InventoryUnit.PACK, cost: 12, reorder: 100, stockMul: 8, trackExpiry: false },
   { name: "Napkins pack", category: "Packaging", unit: InventoryUnit.PACK, cost: 180, reorder: 5 },
 ];
 
@@ -198,10 +198,12 @@ const RECIPES: { match: string; yieldPortions?: number; lines: { ingredient: str
   {
     match: "Arrabiata Penne",
     lines: [
-      { ingredient: "Penne pasta dry", qty: 0.12 },
-      { ingredient: "Tomatoes", qty: 0.15 },
-      { ingredient: "Garlic", qty: 0.01 },
-      { ingredient: "Cooking oil", qty: 0.03 },
+      { ingredient: "Penne pasta dry", qty: 0.18 },
+      { ingredient: "Tomatoes", qty: 0.22 },
+      { ingredient: "Garlic", qty: 0.015 },
+      { ingredient: "Cooking oil", qty: 0.04 },
+      { ingredient: "Cream", qty: 0.05 },
+      { ingredient: "Mozzarella cheese", qty: 0.04 },
     ],
   },
   {
@@ -413,7 +415,6 @@ const RECIPES: { match: string; yieldPortions?: number; lines: { ingredient: str
     lines: [
       { ingredient: "Cheddar cheese", qty: 0.08 },
       { ingredient: "Tomatoes", qty: 0.06 },
-      { ingredient: "Takeaway box", qty: 0.1 },
     ],
   },
 ];
@@ -431,6 +432,10 @@ async function upsertIngredient(
       category: d.category,
       categoryId: categoryId ?? null,
       unit: d.unit,
+      ...(d.name === "Burger buns"
+        ? { purchaseUnit: InventoryUnit.PACK, conversionFactor: 8 }
+        : {}),
+      ...(d.name === "Takeaway box" ? { isPackaging: true } : {}),
       defaultCost: d.cost,
       reorderPoint: d.reorder,
       parLevel: d.par ?? d.reorder * 2,
@@ -444,6 +449,10 @@ async function upsertIngredient(
       reorderPoint: d.reorder,
       parLevel: d.par ?? d.reorder * 2,
       trackExpiry: d.trackExpiry ?? false,
+      ...(d.name === "Burger buns"
+        ? { unit: InventoryUnit.PIECE, purchaseUnit: InventoryUnit.PACK, conversionFactor: 8 }
+        : {}),
+      ...(d.name === "Takeaway box" ? { isPackaging: true } : {}),
     },
   });
 
@@ -454,10 +463,11 @@ async function upsertIngredient(
   const targetQty = d.reorder * mul;
   const current = Number(stock?.quantity ?? 0);
 
-  // Demo: one item low, one out
+  const LOW_DEMO = new Set(["Mint leaves", "Garlic", "Karahi masala"]);
+  const OUT_DEMO = new Set(["Prawns peeled", "Fish fillet"]);
   let openQty = targetQty;
-  if (d.name === "Mint leaves") openQty = Math.max(0, d.reorder - 0.5);
-  if (d.name === "Prawns peeled") openQty = 0;
+  if (LOW_DEMO.has(d.name)) openQty = Math.max(0, d.reorder * 0.4);
+  if (OUT_DEMO.has(d.name)) openQty = 0;
 
   if (refreshStock || current === 0) {
     const delta = openQty - current;
@@ -546,5 +556,56 @@ export async function seedInventoryDemo(branchId: string, options?: { refreshSto
     recipeCount += 1;
   }
 
-  return { ingredients: INGREDIENTS.length, recipes: recipeCount, supplierId: supplier.id };
+  const takeawayId = ingByName.get("Takeaway box");
+  if (takeawayId) {
+    await prisma.storeSettings.update({
+      where: { id: "default" },
+      data: { defaultPackagingItemId: takeawayId, defaultPackagingQty: 1 },
+    });
+  }
+
+  await prisma.stockCount.deleteMany({
+    where: {
+      status: StockCountStatus.DRAFT,
+      createdAt: { gte: new Date("2025-10-16T00:00:00Z"), lt: new Date("2025-10-17T00:00:00Z") },
+    },
+  });
+
+  const supplier2 = await prisma.supplier.upsert({
+    where: { restaurantId_name: { restaurantId: RESTAURANT_ID, name: "City Wholesale" } },
+    create: {
+      name: "City Wholesale",
+      phone: "0300-555-0101",
+      paymentTerms: "Net 30",
+      notes: "Demo supplier with outstanding balance",
+    },
+    update: {},
+  });
+
+  const wasteReasons = [
+    WasteReason.EXPIRED,
+    WasteReason.SPOILED,
+    WasteReason.DROPPED,
+    WasteReason.STAFF_MEAL,
+  ];
+  for (let i = 0; i < wasteReasons.length; i++) {
+    const ing = INGREDIENTS[i + 5];
+    const itemId = ingByName.get(ing.name);
+    if (!itemId) continue;
+    await applyStockChange({
+      branchId,
+      itemId,
+      type: StockMovementType.WASTE,
+      quantityDelta: -0.1,
+      reason: wasteReasons[i],
+      notes: "Demo waste",
+    }).catch(() => null);
+  }
+
+  return {
+    ingredients: INGREDIENTS.length,
+    recipes: recipeCount,
+    supplierId: supplier.id,
+    supplier2Id: supplier2.id,
+  };
 }
