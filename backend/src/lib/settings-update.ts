@@ -105,6 +105,15 @@ export function buildStoreSettingsUpdateData(body: Record<string, unknown>): Pri
     ...(body.lowRatingThreshold !== undefined
       ? { lowRatingThreshold: Math.min(5, Math.max(1, Math.floor(Number(body.lowRatingThreshold) || 2))) }
       : {}),
+    ...(body.staffRequireTwoFaAdminManager !== undefined
+      ? { staffRequireTwoFaAdminManager: Boolean(body.staffRequireTwoFaAdminManager) }
+      : {}),
+    ...(body.staffInactivityDays !== undefined
+      ? { staffInactivityDays: Math.min(365, Math.max(30, Math.floor(Number(body.staffInactivityDays) || 90))) }
+      : {}),
+    ...(body.passwordMinLength !== undefined
+      ? { passwordMinLength: Math.min(32, Math.max(8, Math.floor(Number(body.passwordMinLength) || 8))) }
+      : {}),
     ...(body.twoFaReminderDays !== undefined
       ? { twoFaReminderDays: Math.max(1, Math.floor(Number(body.twoFaReminderDays) || 7)) }
       : {}),

@@ -23,6 +23,7 @@ export type StaffFormData = {
   password: string;
   role: Role;
   autoGeneratePassword: boolean;
+  sendInvite: boolean;
   branchIds: string[];
 };
 
@@ -43,6 +44,8 @@ export function StaffFormSheet({
   error,
   onClose,
   onSubmit,
+  mode = "create",
+  roleOptions,
 }: {
   open: boolean;
   form: StaffFormData;
@@ -52,6 +55,8 @@ export function StaffFormSheet({
   error: string;
   onClose: () => void;
   onSubmit: (e: FormEvent) => void;
+  mode?: "create" | "edit";
+  roleOptions?: { value: Role; label: string }[];
 }) {
   const [visible, setVisible] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -93,7 +98,7 @@ export function StaffFormSheet({
       <aside
         role="dialog"
         aria-modal="true"
-        aria-label="Add staff member"
+        aria-label={mode === "edit" ? "Edit staff member" : "Add staff member"}
         className={`drawer-panel relative flex h-full w-full max-w-[440px] flex-col rounded-l-2xl bg-white shadow-[-12px_0_48px_rgba(0,0,0,0.2)] ${
           visible && !closing ? "translate-x-0" : "translate-x-full"
         }`}
@@ -102,10 +107,10 @@ export function StaffFormSheet({
         <header className="shrink-0 border-b border-stone-100 px-6 py-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-medium text-stone-500">New account</p>
+              <p className="text-xs font-medium text-stone-500">{mode === "edit" ? "Update profile" : "New account"}</p>
               <h2 className="mt-0.5 flex items-center gap-2 text-xl font-semibold text-stone-900">
                 <UserPlus size={18} className="text-brand-600" />
-                Add staff member
+                {mode === "edit" ? "Edit staff member" : "Add staff member"}
               </h2>
             </div>
             <button
@@ -130,17 +135,19 @@ export function StaffFormSheet({
                 placeholder="e.g. Chef Ali"
               />
             </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-stone-500">Email (login)</label>
-              <input
-                className="input"
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                required
-                placeholder="chef@email.com"
-              />
-            </div>
+            {mode === "create" && (
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-stone-500">Email (login)</label>
+                <input
+                  className="input"
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                  required
+                  placeholder="chef@email.com"
+                />
+              </div>
+            )}
             <div>
               <label className="mb-1.5 block text-xs font-medium text-stone-500">Phone</label>
               <input
@@ -161,10 +168,11 @@ export function StaffFormSheet({
                 Staff only see data for this outlet. Set role when creating the account; branches are shown as text in the staff list.
               </p>
             </div>
+            {mode === "create" && (
             <div>
               <p className="mb-1.5 text-xs font-medium text-stone-500">Role</p>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {ASSIGNABLE_ROLES.map((role) => {
+                {(roleOptions ?? ASSIGNABLE_ROLES).map((role) => {
                   const Icon = ROLE_ICONS[role.value as keyof typeof ROLE_ICONS] ?? ChefHat;
                   const active = form.role === role.value;
                   return (
@@ -188,18 +196,21 @@ export function StaffFormSheet({
                 Riders are created here. They show up on the Riders page after the account exists.
               </p>
             </div>
+            )}
+            {mode === "create" && (
             <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-stone-200 bg-stone-50 px-3 py-3 text-sm text-stone-700">
               <input
                 type="checkbox"
                 className="mt-0.5 h-4 w-4 rounded border-stone-300 text-brand-600"
-                checked={form.autoGeneratePassword}
+                checked={form.sendInvite}
                 onChange={(e) =>
-                  setForm((f) => ({ ...f, autoGeneratePassword: e.target.checked, password: "" }))
+                  setForm((f) => ({ ...f, sendInvite: e.target.checked, autoGeneratePassword: e.target.checked }))
                 }
               />
-              <span>Auto-generate a password and email the login details</span>
+              <span>Send email invite to set their own password (recommended)</span>
             </label>
-            {!form.autoGeneratePassword && (
+            )}
+            {mode === "create" && !form.sendInvite && (
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-stone-500">Password</label>
                 <input
@@ -216,9 +227,9 @@ export function StaffFormSheet({
             {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">{error}</p>}
           </div>
           <footer className="shrink-0 border-t border-stone-100 bg-stone-50/80 px-6 py-4">
-            <button type="submit" disabled={saving} className="btn-primary w-full">
+            <button type="submit" disabled={saving} className="btn-primary w-full min-h-[44px]">
               <Plus size={16} />
-              {saving ? "Creating…" : "Create account"}
+              {saving ? (mode === "edit" ? "Saving…" : "Creating…") : mode === "edit" ? "Save changes" : "Create account"}
             </button>
           </footer>
         </form>

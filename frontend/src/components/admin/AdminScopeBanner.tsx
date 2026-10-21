@@ -1,12 +1,42 @@
 "use client";
 
 import Link from "next/link";
-import { Building2, Globe2, Layers } from "lucide-react";
+import { Building2, Globe2, Layers, UserCog } from "lucide-react";
 import { useBranch } from "@/modules/branches/BranchContext";
 
-type Variant = "branch" | "chain" | "shared";
+type Variant = "branch" | "chain" | "shared" | "staff";
 
-export function AdminScopeBanner({ variant }: { variant: Variant }) {
+export function AdminScopeBanner({
+  variant,
+  managerScope,
+}: {
+  variant: Variant;
+  managerScope?: boolean;
+}) {
+  if (variant === "staff") {
+    return (
+      <div
+        className="flex items-start gap-2.5 rounded-2xl border border-stone-200/80 bg-stone-50/90 px-4 py-3 text-sm text-stone-600 dark:border-stone-700 dark:bg-stone-800/50 dark:text-stone-300"
+        role="status"
+      >
+        <UserCog className="mt-0.5 shrink-0 text-brand-600 dark:text-brand-400" size={18} />
+        <p>
+          {managerScope ? (
+            <>
+              <span className="font-semibold text-stone-800 dark:text-stone-100">Your branches.</span>
+              You only see staff assigned to outlets you manage. Use filters to narrow the list.
+            </>
+          ) : (
+            <>
+              <span className="font-semibold text-stone-800 dark:text-stone-100">All outlets.</span>
+              The staff directory is not tied to the header branch. Use filters below to narrow by role or branch.
+            </>
+          )}
+        </p>
+      </div>
+    );
+  }
+
   const { selection, activeBranch, branches } = useBranch();
 
   if (variant === "chain") {

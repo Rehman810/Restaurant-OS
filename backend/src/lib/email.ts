@@ -13,6 +13,7 @@ import {
   passwordResetEmail,
   riderAssignedEmail,
   staffWelcomeEmail,
+  staffInviteEmail,
 } from "./email-templates";
 
 type OrderWithItems = Order & { items: OrderItem[] };
@@ -288,6 +289,19 @@ export async function sendPasswordResetEmail(email: string, name: string, resetU
   await sendMail({
     to: email,
     subject: `Reset your ${brand.storeName} password`,
+    html,
+    text,
+    storeName: brand.storeName,
+    transactional: true,
+  });
+}
+
+export async function sendStaffInviteEmail(email: string, name: string, role: string, inviteUrl: string) {
+  const brand = await getEmailBranding();
+  const { html, text } = staffInviteEmail({ storeName: brand.storeName }, name, inviteUrl, role);
+  await sendMail({
+    to: email,
+    subject: `Set up your ${brand.storeName} staff account`,
     html,
     text,
     storeName: brand.storeName,

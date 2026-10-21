@@ -1,0 +1,17 @@
+Scanned at: 2026-10-21T19:28:40.909Z
+Total users in DB: 117
+Test-like users: 112
+  With history: 24
+  Without history: 88
+  Active test ADMIN accounts: 24
+
+By role (test-like):
+  ADMIN: 24
+  CHEF: 17
+  CUSTOMER: 28
+  MANAGER: 30
+  WAITER: 13
+
+By email domain (test-like):
+  test.local: 112
+

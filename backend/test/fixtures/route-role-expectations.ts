@@ -42,7 +42,7 @@ export const ROUTE_ROLE_MATRIX: RouteRoleProbe[] = [
   { method: "GET", path: "/admin/coupons/", allowed: [...ADMIN_LIKE] },
   { method: "GET", path: "/admin/reports/sales-intelligence", allowed: [...ADMIN_LIKE, Role.MANAGER] },
   { method: "GET", path: "/admin/reports/tax-collected", allowed: [...ADMIN_LIKE, Role.MANAGER] },
-  { method: "GET", path: "/admin/staff/", allowed: [Role.ADMIN] },
+  { method: "GET", path: "/admin/staff/", allowed: [...ADMIN_LIKE] },
   { method: "GET", path: "/admin/rider-cash/summary", allowed: [...ADMIN_LIKE] },
   { method: "GET", path: "/admin/print-stations/", allowed: [...ORDER_OPS] },
   { method: "GET", path: "/admin/kot/orders/00000000-0000-4000-8000-000000000099", allowed: [...ORDER_OPS] },

@@ -13,8 +13,12 @@ describe.skipIf(!hasDb)("branch copy-from", () => {
   let sourceId = "";
   let targetId = "";
   let adminToken = "";
+  let adminId = "";
 
   afterAll(async () => {
+    if (adminId) {
+      await prisma.user.delete({ where: { id: adminId } }).catch(() => {});
+    }
     if (sourceId && targetId) {
       await prisma.diningTable.deleteMany({ where: { branchId: { in: [sourceId, targetId] } } });
       await prisma.diningFloor.deleteMany({ where: { branchId: { in: [sourceId, targetId] } } });
@@ -26,6 +30,7 @@ describe.skipIf(!hasDb)("branch copy-from", () => {
   it("copies tables and stations only for selected parts", async () => {
     const ts = Date.now();
     const admin = await createTestUser({ email: `cpy-adm-${ts}@test.local`, role: Role.ADMIN });
+    adminId = admin.user.id;
     adminToken = admin.token;
     const restaurant = await prisma.restaurant.findFirst();
     expect(restaurant).toBeTruthy();

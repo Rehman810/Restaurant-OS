@@ -1,0 +1,113 @@
+id,email,name,role,isActive,isTest,branchNames,createdAt,lastLoginAt,historyTotal,flaggedByPattern
+c3c25761-978c-487d-86a4-62f5f72f5b8e,matrix-manager-d569f1a7@test.local,matrix-manager-d569f1a7,MANAGER,true,true,Demo Restaurant — Main,2026-10-20T15:17:54.045Z,,20,false
+6f2c2078-de21-4452-b5b7-91ebc65bcc58,matrix-waiter-d569f1a7@test.local,matrix-waiter-d569f1a7,WAITER,true,true,Demo Restaurant — Main,2026-10-20T15:17:54.132Z,,0,false
+36c0a1af-bd21-4e4d-a1e4-70cc7b0090e1,cust-a-1792509476288@test.local,cust-a-1792509476288,CUSTOMER,true,true,(none),2026-10-20T15:17:56.411Z,,0,false
+498b3a16-ebfa-42b8-86ca-d25114e54a03,cust-b-1792509476427@test.local,cust-b-1792509476427,CUSTOMER,true,true,(none),2026-10-20T15:17:56.526Z,,0,false
+4931222e-1dfa-4879-8501-d35c8a096d1e,matrix-manager-037031ed@test.local,matrix-manager-037031ed,MANAGER,true,true,Demo Restaurant — Main,2026-10-20T15:18:24.077Z,,70,false
+8824e190-6dba-46fb-ab8a-acd046748d49,matrix-waiter-037031ed@test.local,matrix-waiter-037031ed,WAITER,true,true,Demo Restaurant — Main,2026-10-20T15:18:24.163Z,,0,false
+05accd0b-6159-418c-baf1-c7d8ecd53d79,cust-a-1792509510266@test.local,cust-a-1792509510266,CUSTOMER,true,true,(none),2026-10-20T15:18:30.385Z,,0,false
+f5e9861d-7dec-4494-b15b-4342b3aa2035,cust-b-1792509510399@test.local,cust-b-1792509510399,CUSTOMER,true,true,(none),2026-10-20T15:18:30.482Z,,0,false
+381bd873-73b3-4aa8-bc36-c453fe6f5749,matrix-manager-533cdd9d@test.local,matrix-manager-533cdd9d,MANAGER,true,true,Demo Restaurant — Main,2026-10-20T15:18:52.467Z,,0,false
+fcc35d58-95a8-47a1-bbf5-da3109cdc59b,matrix-waiter-533cdd9d@test.local,matrix-waiter-533cdd9d,WAITER,true,true,Demo Restaurant — Main,2026-10-20T15:18:52.554Z,,0,false
+d7e286d3-742e-4af5-b3e5-a776526c621d,cust-a-1792509534771@test.local,cust-a-1792509534771,CUSTOMER,true,true,(none),2026-10-20T15:18:54.892Z,,0,false
+d5445b59-6e76-4808-847f-3ec04f7db991,cust-b-1792509534906@test.local,cust-b-1792509534906,CUSTOMER,true,true,(none),2026-10-20T15:18:54.989Z,,0,false
+171fd1b4-7a5f-4340-9c09-573ee24ea923,adm-ord-mgr-1792512581019@test.local,adm-ord-mgr-1792512581019,MANAGER,true,true,Demo Restaurant — Main,2026-10-20T16:09:41.140Z,,0,false
+6d7c2e98-321d-4b9b-b911-8cdc77826714,adm-ord-chef-1792512581019@test.local,adm-ord-chef-1792512581019,CHEF,true,true,Demo Restaurant — Main,2026-10-20T16:09:41.232Z,,0,false
+87f167b9-e61d-45f7-81f0-ab54e6aa2a1c,adm-ord-mgr-1792512606868@test.local,adm-ord-mgr-1792512606868,MANAGER,true,true,Demo Restaurant — Main,2026-10-20T16:10:06.992Z,,0,false
+2c999489-ba6a-4cd7-b033-81bfdf34a758,adm-ord-chef-1792512606868@test.local,adm-ord-chef-1792512606868,CHEF,true,true,Demo Restaurant — Main,2026-10-20T16:10:07.087Z,,0,false
+3bc5da93-68ba-456a-a761-837afdb67da2,matrix-manager-b4838eaa@test.local,matrix-manager-b4838eaa,MANAGER,true,true,Demo Restaurant — Main,2026-10-20T16:10:20.722Z,,10,false
+e841c6da-658d-4718-bbd9-012f03a01994,matrix-waiter-b4838eaa@test.local,matrix-waiter-b4838eaa,WAITER,true,true,Demo Restaurant — Main,2026-10-20T16:10:20.805Z,,0,false
+0066d344-b651-42f5-9803-b4463386c2d2,cust-a-1792512623194@test.local,cust-a-1792512623194,CUSTOMER,true,true,(none),2026-10-20T16:10:23.335Z,,0,false
+e84bba28-0b02-44a0-8834-15f2b5b1f565,cust-b-1792512623353@test.local,cust-b-1792512623353,CUSTOMER,true,true,(none),2026-10-20T16:10:23.437Z,,0,false
+11ebf143-bad7-4fca-ba01-c3a7dae39e0e,adm-ord-mgr-1792512624350@test.local,adm-ord-mgr-1792512624350,MANAGER,true,true,Demo Restaurant — Main,2026-10-20T16:10:24.488Z,,0,false
+4b824386-2558-4a7c-8e50-3d73871b618d,adm-ord-chef-1792512624350@test.local,adm-ord-chef-1792512624350,CHEF,true,true,Demo Restaurant — Main,2026-10-20T16:10:24.590Z,,0,false
+e61f8539-e44b-4bd9-9566-60215717600b,matrix-manager-4ef64c35@test.local,matrix-manager-4ef64c35,MANAGER,true,true,Demo Restaurant — Main,2026-10-20T16:10:48.302Z,,10,false
+5a958977-59cc-4611-a6a9-9d45f736d301,matrix-waiter-4ef64c35@test.local,matrix-waiter-4ef64c35,WAITER,true,true,Demo Restaurant — Main,2026-10-20T16:10:48.392Z,,0,false
+74f46826-b65f-4ec6-8975-f17667435df7,cust-a-1792512650914@test.local,cust-a-1792512650914,CUSTOMER,true,true,(none),2026-10-20T16:10:51.047Z,,0,false
+c6c6b20c-42a7-4e27-b829-31edfa94e3e7,cust-b-1792512651062@test.local,cust-b-1792512651062,CUSTOMER,true,true,(none),2026-10-20T16:10:51.154Z,,0,false
+7dd600cb-289f-4e8f-af87-99627828a6b2,adm-ord-mgr-1792512653410@test.local,adm-ord-mgr-1792512653410,MANAGER,true,true,Demo Restaurant — Main,2026-10-20T16:10:53.552Z,,0,false
+26897d9e-1940-44e8-8aa1-8e99d630b646,adm-ord-chef-1792512653410@test.local,adm-ord-chef-1792512653410,CHEF,true,true,Demo Restaurant — Main,2026-10-20T16:10:53.655Z,,0,false
+31d4d7b9-54d1-4475-ac90-36b7cb82faba,adm-ord-mgr-1792513027382@test.local,adm-ord-mgr-1792513027382,MANAGER,true,true,Demo Restaurant — Main,2026-10-20T16:17:07.511Z,,0,false
+5fee8a2e-2d6e-4cf5-a134-f092d581194b,adm-ord-chef-1792513027382@test.local,adm-ord-chef-1792513027382,CHEF,true,true,Demo Restaurant — Main,2026-10-20T16:17:07.607Z,,0,false
+caf31ab6-316e-420a-9797-4cefa5b463ee,adm-ord-mgr-1792513324610@test.local,adm-ord-mgr-1792513324610,MANAGER,true,true,Demo Restaurant — Main,2026-10-20T16:22:04.805Z,,0,false
+c9aa5f0e-54ce-4cc0-8610-a39d02ee7326,adm-ord-chef-1792513324610@test.local,adm-ord-chef-1792513324610,CHEF,true,true,Demo Restaurant — Main,2026-10-20T16:22:04.939Z,,0,false
+ee8f396b-ef99-4c49-b4b1-c44f08c0df5a,adm-ord-mgr-1792513625043@test.local,adm-ord-mgr-1792513625043,MANAGER,true,true,Demo Restaurant — Main,2026-10-20T16:27:05.172Z,,0,false
+321df3a9-b088-4620-acba-846168edc8e6,adm-ord-chef-1792513625043@test.local,adm-ord-chef-1792513625043,CHEF,true,true,Demo Restaurant — Main,2026-10-20T16:27:05.257Z,,0,false
+ad305d79-1107-417e-8baf-c7ece9e3d69c,adm-ord-mgr-1792516402494@test.local,adm-ord-mgr-1792516402494,MANAGER,true,true,Demo Restaurant — Main,2026-10-20T17:13:22.694Z,,0,false
+f4c455df-29e8-4c5f-8da6-b3926f6cd5ee,adm-ord-chef-1792516402494@test.local,adm-ord-chef-1792516402494,CHEF,true,true,Demo Restaurant — Main,2026-10-20T17:13:22.825Z,,0,false
+c5258f3c-8c4c-4880-a482-d6ba62723b20,adm-br-1792578584336@test.local,adm-br-1792578584336,ADMIN,true,true,(none),2026-10-21T10:29:46.083Z,,0,false
+6a20c894-e2a9-46a0-8f77-0698091f9443,adm-br-1792578619741@test.local,adm-br-1792578619741,ADMIN,true,true,(none),2026-10-21T10:30:20.221Z,,0,false
+59b82e08-841b-4b7f-9582-f55d0c093a0a,matrix-manager-ca0bd8c4@test.local,matrix-manager-ca0bd8c4,MANAGER,true,true,Demo Restaurant — Main,2026-10-21T10:33:15.031Z,,0,false
+7aed5e6d-ffdd-484b-960a-37e1dcee88e6,matrix-waiter-ca0bd8c4@test.local,matrix-waiter-ca0bd8c4,WAITER,true,true,Demo Restaurant — Main,2026-10-21T10:33:15.251Z,,0,false
+56ad6be1-4804-4a61-a6d0-7416490defad,cust-a-1792578800613@test.local,cust-a-1792578800613,CUSTOMER,true,true,(none),2026-10-21T10:33:20.937Z,,0,false
+6616c408-5aca-4193-bae4-ad96d56a8053,cust-b-1792578800960@test.local,cust-b-1792578800960,CUSTOMER,true,true,(none),2026-10-21T10:33:21.160Z,,0,false
+d41a2057-c584-4991-8b0f-0659afddc786,adm-ord-mgr-1792578812490@test.local,adm-ord-mgr-1792578812490,MANAGER,true,true,Demo Restaurant — Main,2026-10-21T10:33:32.871Z,,0,false
+8916ce90-e88d-4b8d-8172-7d348937d3d3,adm-ord-chef-1792578812490@test.local,adm-ord-chef-1792578812490,CHEF,true,true,Demo Restaurant — Main,2026-10-21T10:33:33.094Z,,0,false
+d3737398-20a4-403d-9310-5b8cc632d2d8,adm-br-1792578828202@test.local,adm-br-1792578828202,ADMIN,true,true,(none),2026-10-21T10:33:48.504Z,,0,false
+ae0d379b-b1d4-4caa-a2b5-b256366c0f33,cust-a-1792603274210@test.local,cust-a-1792603274210,CUSTOMER,true,true,(none),2026-10-21T17:21:14.352Z,,0,false
+64c4a655-1f36-4e76-87d5-378247d9dc78,cust-b-1792603274374@test.local,cust-b-1792603274374,CUSTOMER,true,true,(none),2026-10-21T17:21:14.481Z,,0,false
+8d82c87a-beda-4ceb-b2d3-d3fb41b0b976,adm-br-1792603275732@test.local,adm-br-1792603275732,ADMIN,true,true,(none),2026-10-21T17:21:15.876Z,,0,false
+27b8beb1-7bd2-42dc-b243-9e8699a1a9d7,cpy-adm-1792603284453@test.local,cpy-adm-1792603284453,ADMIN,true,true,(none),2026-10-21T17:21:24.591Z,,0,false
+1a0b3c82-9d53-413c-bf36-bbfffd2b2bb6,adm-ord-mgr-1792603290855@test.local,adm-ord-mgr-1792603290855,MANAGER,true,true,Demo Restaurant — Main,2026-10-21T17:21:31.017Z,,0,false
+2524e5f8-6abc-46aa-834e-29cf4feeaee4,adm-ord-chef-1792603290855@test.local,adm-ord-chef-1792603290855,CHEF,true,true,Demo Restaurant — Main,2026-10-21T17:21:31.147Z,,0,false
+3daacb8e-e3ba-4f4b-b8b8-a1baee5d4106,matrix-manager-cbd51241@test.local,matrix-manager-cbd51241,MANAGER,true,true,Demo Restaurant — Main,2026-10-21T17:22:09.186Z,,0,false
+d4155f4e-ad73-47c7-8adc-4d5b570a0358,matrix-waiter-cbd51241@test.local,matrix-waiter-cbd51241,WAITER,true,true,Demo Restaurant — Main,2026-10-21T17:22:09.286Z,,0,false
+1f1393f6-91c5-44fe-aac3-455dc026f157,adm-br-1792603330800@test.local,adm-br-1792603330800,ADMIN,true,true,(none),2026-10-21T17:22:10.947Z,,2,false
+45df593c-d7fb-4325-955e-1dacc04b449e,cpy-adm-1792603337405@test.local,cpy-adm-1792603337405,ADMIN,true,true,(none),2026-10-21T17:22:17.542Z,,1,false
+5baf5eab-e7fc-4319-b460-fb882098c6c4,cust-a-1792603343423@test.local,cust-a-1792603343423,CUSTOMER,true,true,(none),2026-10-21T17:22:23.577Z,,0,false
+1c8d696f-8a5d-4a51-8f46-4b004a2ae74e,cust-b-1792603343595@test.local,cust-b-1792603343595,CUSTOMER,true,true,(none),2026-10-21T17:22:23.702Z,,0,false
+7ef25cbf-b7e5-49bf-8fd9-0fa1ec1720aa,adm-ord-mgr-1792603344941@test.local,adm-ord-mgr-1792603344941,MANAGER,true,true,Demo Restaurant — Main,2026-10-21T17:22:25.117Z,,0,false
+42c32666-c0e9-480a-928b-b342890d40ec,adm-ord-chef-1792603344941@test.local,adm-ord-chef-1792603344941,CHEF,true,true,Demo Restaurant — Main,2026-10-21T17:22:25.229Z,,0,false
+f93946a0-3c60-4ac1-98da-64147b1d4113,adm-br-1792603372687@test.local,adm-br-1792603372687,ADMIN,true,true,(none),2026-10-21T17:22:52.854Z,,2,false
+afe5c0c3-c4fb-4f90-9c82-94b9a8d779ed,cpy-adm-1792603375607@test.local,cpy-adm-1792603375607,ADMIN,true,true,(none),2026-10-21T17:22:55.751Z,,1,false
+597ac250-82ef-48df-8d98-4b796bb8167f,matrix-manager-3e986bbd@test.local,matrix-manager-3e986bbd,MANAGER,true,true,Demo Restaurant — Main,2026-10-21T17:23:02.862Z,,0,false
+c94ff07c-4362-4bab-a6d6-aa66a43be168,matrix-waiter-3e986bbd@test.local,matrix-waiter-3e986bbd,WAITER,true,true,Demo Restaurant — Main,2026-10-21T17:23:02.962Z,,0,false
+887bef8c-10a9-4da9-8dd2-04e698936e5a,cust-a-1792603387795@test.local,cust-a-1792603387795,CUSTOMER,true,true,(none),2026-10-21T17:23:07.941Z,,0,false
+8a4b5788-1574-4283-b1ca-b0ed6df01f92,cust-b-1792603387956@test.local,cust-b-1792603387956,CUSTOMER,true,true,(none),2026-10-21T17:23:08.069Z,,0,false
+281a02bf-4398-4c8f-9f79-9345e14f9c43,adm-ord-mgr-1792603389303@test.local,adm-ord-mgr-1792603389303,MANAGER,true,true,Demo Restaurant — Main,2026-10-21T17:23:09.462Z,,0,false
+9cd6afb1-622f-4099-a077-439a97e480a5,adm-ord-chef-1792603389303@test.local,adm-ord-chef-1792603389303,CHEF,true,true,Demo Restaurant — Main,2026-10-21T17:23:09.576Z,,0,false
+d1a42181-4595-42c1-be07-ccf09a98afe0,adm-br-1792603414163@test.local,adm-br-1792603414163,ADMIN,true,true,(none),2026-10-21T17:23:34.316Z,,2,false
+bbb4588c-8fda-44ca-a7fb-fde1adc1efaa,cpy-adm-1792603423231@test.local,cpy-adm-1792603423231,ADMIN,true,true,(none),2026-10-21T17:23:43.372Z,,1,false
+5f36028c-05d4-4330-8bdb-520f7bb093d3,matrix-manager-01afb920@test.local,matrix-manager-01afb920,MANAGER,true,true,Demo Restaurant — Main,2026-10-21T17:23:50.491Z,,0,false
+27bee5ec-f604-4945-85b0-442afb963743,matrix-waiter-01afb920@test.local,matrix-waiter-01afb920,WAITER,true,true,Demo Restaurant — Main,2026-10-21T17:23:50.621Z,,0,false
+10021125-856d-46a3-afbb-898a0a46892a,cust-a-1792603435587@test.local,cust-a-1792603435587,CUSTOMER,true,true,(none),2026-10-21T17:23:55.729Z,,0,false
+5ba6e033-2aba-4032-91cf-5f12eb3c5274,cust-b-1792603435749@test.local,cust-b-1792603435749,CUSTOMER,true,true,(none),2026-10-21T17:23:55.854Z,,0,false
+4c4c8ad0-e363-429c-ab27-f0e4f9edc988,adm-br-1792603438499@test.local,adm-br-1792603438499,ADMIN,true,true,(none),2026-10-21T17:23:58.644Z,,2,false
+39c3a402-f94c-4b74-9855-23c5ce947398,adm-ord-mgr-1792603439909@test.local,adm-ord-mgr-1792603439909,MANAGER,true,true,Demo Restaurant — Main,2026-10-21T17:24:00.080Z,,10,false
+3c9f1867-079c-480c-8962-162f4d19adb0,adm-ord-chef-1792603439909@test.local,adm-ord-chef-1792603439909,CHEF,true,true,Demo Restaurant — Main,2026-10-21T17:24:00.194Z,,0,false
+70937e87-8e35-4539-8145-7a1c74f1cb8a,cpy-adm-1792603465500@test.local,cpy-adm-1792603465500,ADMIN,true,true,(none),2026-10-21T17:24:25.664Z,,1,false
+0feade1d-9010-4849-b28e-1c34551af8b5,cpy-adm-1792603483588@test.local,cpy-adm-1792603483588,ADMIN,true,true,(none),2026-10-21T17:24:43.740Z,,1,false
+f595208b-49f2-4ad1-b512-5ada87acee77,cpy-adm-1792603492438@test.local,cpy-adm-1792603492438,ADMIN,true,true,(none),2026-10-21T17:24:52.612Z,,1,false
+2b02f3a7-24ec-4cd7-ad44-0ad432d764dd,cpy-adm-1792603527506@test.local,cpy-adm-1792603527506,ADMIN,true,true,(none),2026-10-21T17:25:27.655Z,,1,false
+683f6d01-2366-4c2b-8ae6-efdc84fceab3,matrix-manager-53cc9df4@test.local,matrix-manager-53cc9df4,MANAGER,true,true,Demo Restaurant — Main,2026-10-21T17:25:45.456Z,,0,false
+58bea7c4-fba6-4006-be44-22dbab0c6ca0,matrix-waiter-53cc9df4@test.local,matrix-waiter-53cc9df4,WAITER,true,true,Demo Restaurant — Main,2026-10-21T17:25:45.557Z,,0,false
+2fe1bd1f-13f8-41a0-bff4-f4eded97188a,cust-a-1792603550317@test.local,cust-a-1792603550317,CUSTOMER,true,true,(none),2026-10-21T17:25:50.459Z,,0,false
+ac1934c5-c7a8-40d4-8972-608d276a5bec,cust-b-1792603550480@test.local,cust-b-1792603550480,CUSTOMER,true,true,(none),2026-10-21T17:25:50.624Z,,0,false
+8552012e-6bea-4b2e-a0e3-806767c4eded,adm-ord-mgr-1792603551803@test.local,adm-ord-mgr-1792603551803,MANAGER,true,true,Copy Source,2026-10-21T17:25:51.954Z,,0,false
+e9f1beb3-f7c4-4716-bfea-e6d96719eba0,adm-ord-chef-1792603551803@test.local,adm-ord-chef-1792603551803,CHEF,true,true,Copy Source,2026-10-21T17:25:52.065Z,,0,false
+1b0db4eb-def9-4624-9096-141ae19fe807,adm-br-1792603553231@test.local,adm-br-1792603553231,ADMIN,true,true,(none),2026-10-21T17:25:53.372Z,,2,false
+4bcc7d72-0335-4fb7-a268-ce05ac889a15,cpy-adm-1792603560890@test.local,cpy-adm-1792603560890,ADMIN,true,true,(none),2026-10-21T17:26:01.044Z,,1,false
+9c35088e-08b1-4c18-b9cd-03ddbc4e0778,matrix-manager-7131d5a9@test.local,matrix-manager-7131d5a9,MANAGER,true,true,Demo Restaurant — Main,2026-10-21T17:26:27.630Z,,0,false
+cb09d4ed-89f5-459b-8620-7ad2e770faf0,matrix-waiter-7131d5a9@test.local,matrix-waiter-7131d5a9,WAITER,true,true,Demo Restaurant — Main,2026-10-21T17:26:27.754Z,,0,false
+1de927e9-1c34-4af2-a159-134aafa1c0dc,cust-a-1792603592707@test.local,cust-a-1792603592707,CUSTOMER,true,true,(none),2026-10-21T17:26:32.853Z,,0,false
+ad0ac025-1e87-47cf-abdf-bc8a4a03989f,cust-b-1792603592871@test.local,cust-b-1792603592871,CUSTOMER,true,true,(none),2026-10-21T17:26:32.976Z,,0,false
+022cf89a-525f-43ce-a192-d20209192b90,adm-ord-mgr-1792603595732@test.local,adm-ord-mgr-1792603595732,MANAGER,true,true,Copy Target,2026-10-21T17:26:35.899Z,,0,false
+465cf867-d68f-4104-8aef-61d24b391a2a,adm-ord-chef-1792603595732@test.local,adm-ord-chef-1792603595732,CHEF,true,true,Copy Target,2026-10-21T17:26:36.013Z,,0,false
+6ed2e1cb-fa13-4b92-8533-346bdb5a2dbb,adm-br-1792603597088@test.local,adm-br-1792603597088,ADMIN,true,true,(none),2026-10-21T17:26:37.245Z,,2,false
+9edf08a1-23a8-44ce-baad-7d110a371197,cpy-adm-1792603602818@test.local,cpy-adm-1792603602818,ADMIN,true,true,(none),2026-10-21T17:26:42.962Z,,1,false
+f9e782c5-70b7-47a5-8288-451b8268d4ce,matrix-manager-32a7e8c1@test.local,matrix-manager-32a7e8c1,MANAGER,true,true,Demo Restaurant — Main,2026-10-21T17:27:09.216Z,,0,false
+c376e4a8-b2cb-4cbb-ba90-e391d85fa3c6,matrix-waiter-32a7e8c1@test.local,matrix-waiter-32a7e8c1,WAITER,true,true,Demo Restaurant — Main,2026-10-21T17:27:09.316Z,,0,false
+7b4beb34-78c1-44a2-a164-9f0c57fcc2cc,cust-a-1792603633997@test.local,cust-a-1792603633997,CUSTOMER,true,true,(none),2026-10-21T17:27:14.141Z,,0,false
+bd0e834b-7c1c-4926-a029-1ca04b447a00,cust-b-1792603634157@test.local,cust-b-1792603634157,CUSTOMER,true,true,(none),2026-10-21T17:27:14.254Z,,0,false
+9f2f13dd-8e88-4c7f-8891-7d094c08f236,adm-ord-mgr-1792603636740@test.local,adm-ord-mgr-1792603636740,MANAGER,true,true,Copy Source,2026-10-21T17:27:16.895Z,,0,false
+7a49c934-1ad5-4d62-83a1-b07196e0c611,adm-ord-chef-1792603636740@test.local,adm-ord-chef-1792603636740,CHEF,true,true,Copy Source,2026-10-21T17:27:17.019Z,,0,false
+f408722e-bb8e-46f3-9320-c64dbf199069,adm-br-1792603638102@test.local,adm-br-1792603638102,ADMIN,true,true,(none),2026-10-21T17:27:18.252Z,,2,false
+095e4473-beea-4b4c-bd7a-4b062d2e2143,cpy-adm-1792603643867@test.local,cpy-adm-1792603643867,ADMIN,true,true,(none),2026-10-21T17:27:24.010Z,,1,false
+106dd3c5-9344-43f6-8a1b-5852d80832eb,adm-br-1792604131287@test.local,adm-br-1792604131287,ADMIN,true,true,(none),2026-10-21T17:35:31.497Z,,2,false
+305d8734-5764-47a1-86c0-b8fa640e5cf7,cpy-adm-1792604133979@test.local,cpy-adm-1792604133979,ADMIN,true,true,(none),2026-10-21T17:35:34.183Z,,1,false
+8749c9f4-bf87-4945-af61-bdc0e511b242,adm-ord-mgr-1792604135562@test.local,adm-ord-mgr-1792604135562,MANAGER,true,true,Copy Source,2026-10-21T17:35:35.783Z,,0,false
+48e6c27a-00f1-4f09-8b3e-7b3a28839bf4,adm-ord-chef-1792604135562@test.local,adm-ord-chef-1792604135562,CHEF,true,true,Copy Source,2026-10-21T17:35:35.904Z,,0,false
+cca5663f-2eb6-4b5c-9d52-6898c5f226f5,cust-a-1792604150505@test.local,cust-a-1792604150505,CUSTOMER,true,true,(none),2026-10-21T17:35:50.656Z,,0,false
+f92c182a-9a97-4d46-adf5-648d27e1a882,cust-b-1792604150672@test.local,cust-b-1792604150672,CUSTOMER,true,true,(none),2026-10-21T17:35:50.779Z,,0,false
+530a2a7d-cf65-4c8c-bbf7-37ce22df2728,matrix-manager-5eb3d136@test.local,matrix-manager-5eb3d136,MANAGER,true,true,Demo Restaurant — Main,2026-10-21T17:35:56.631Z,,0,false
+05e85399-e464-4249-8358-f526c1fc2fbf,matrix-waiter-5eb3d136@test.local,matrix-waiter-5eb3d136,WAITER,true,true,Demo Restaurant — Main,2026-10-21T17:35:56.747Z,,0,false

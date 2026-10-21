@@ -2,6 +2,8 @@ import bcrypt from "bcryptjs";
 import { Role } from "@prisma/client";
 import { prisma } from "../../src/lib/prisma";
 import { signToken } from "../../src/middleware/auth";
+import { assertSafeToCreateTestUsers } from "../../src/lib/test-users";
+import { registerTestUserId } from "./test-user-registry";
 
 export async function createTestUser(input: {
   email: string;
@@ -9,6 +11,7 @@ export async function createTestUser(input: {
   password?: string;
   name?: string;
 }) {
+  assertSafeToCreateTestUsers();
   const password = input.password || "test-pass-123";
   const hash = await bcrypt.hash(password, 10);
   const user = await prisma.user.create({
@@ -18,8 +21,10 @@ export async function createTestUser(input: {
       role: input.role,
       passwordHash: hash,
       isActive: true,
+      isTest: true,
     },
   });
+  registerTestUserId(user.id);
   return {
     user,
     token: signToken({

@@ -546,6 +546,7 @@ async function main() {
         email: "admin@admin.com",
         passwordHash: hash,
         role: Role.ADMIN,
+        isOwner: true,
         phone: "0300-1002003",
       },
     }),

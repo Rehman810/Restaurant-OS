@@ -353,6 +353,22 @@ export function passwordResetEmail(brand: EmailBrand, name: string, resetUrl: st
   });
 }
 
+export function staffInviteEmail(brand: EmailBrand, name: string, inviteUrl: string, role: string) {
+  return renderEmail({
+    brand,
+    preheader: `Set up your ${role} account for ${brand.storeName}.`,
+    eyebrow: "Staff invite",
+    title: "You're invited",
+    badge: { label: role, tone: "brand" },
+    body: `
+      <p style="margin:0">Hi ${esc(name)}, use the secure link below to set your password and activate your account. This link expires in 7 days and works once.</p>
+      ${infoCard("Role", esc(role))}
+    `,
+    cta: { label: "Set password", url: inviteUrl },
+    footerNote: "If you weren't expecting this invite, contact your store admin.",
+  });
+}
+
 export function staffWelcomeEmail(
   brand: EmailBrand,
   name: string,

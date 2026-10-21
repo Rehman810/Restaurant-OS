@@ -24,6 +24,7 @@ describe("branch code helpers", () => {
 describe.skipIf(!hasDb)("admin branches API", () => {
   const createdBranchIds: string[] = [];
   let adminToken = "";
+  let adminId = "";
   let managerToken = "";
   let managerId = "";
 
@@ -32,6 +33,9 @@ describe.skipIf(!hasDb)("admin branches API", () => {
       await prisma.branchMember.deleteMany({ where: { userId: managerId } });
       await prisma.user.delete({ where: { id: managerId } }).catch(() => {});
     }
+    if (adminId) {
+      await prisma.user.delete({ where: { id: adminId } }).catch(() => {});
+    }
     if (createdBranchIds.length) {
       await prisma.branch.deleteMany({ where: { id: { in: createdBranchIds } } });
     }
@@ -39,6 +43,7 @@ describe.skipIf(!hasDb)("admin branches API", () => {
 
   it("setup admin and manager", async () => {
     const admin = await createTestUser({ email: `adm-br-${Date.now()}@test.local`, role: Role.ADMIN });
+    adminId = admin.user.id;
     adminToken = admin.token;
     const restaurant = await prisma.restaurant.findFirst();
     expect(restaurant).toBeTruthy();

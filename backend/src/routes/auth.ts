@@ -13,6 +13,8 @@ import { requireAuth, requireRole, signToken } from "../middleware/auth";
 import { storeNameFrom } from "../lib/branding";
 import { sendPasswordResetEmail } from "../lib/email";
 import { getStoreSettings } from "../lib/settings-data";
+import { isLoginBlockedForTestUser } from "../lib/test-users";
+import { loginBlockedForMissingTwoFa } from "../lib/staff/two-fa-policy";
 import { authLimiter } from "../middleware/security";
 import { jwtSecret } from "../lib/jwt-secret";
 import {
@@ -66,6 +68,7 @@ function publicUser(user: {
   role: Role;
   phone: string | null;
   totpEnabled?: boolean;
+  isOwner?: boolean;
   loyaltyPoints?: number;
 }) {
   return {
@@ -75,6 +78,7 @@ function publicUser(user: {
     role: user.role,
     phone: user.phone,
     totpEnabled: Boolean(user.totpEnabled),
+    isOwner: user.role === Role.ADMIN ? Boolean(user.isOwner) : undefined,
     loyaltyPoints: user.role === Role.CUSTOMER ? user.loyaltyPoints ?? 0 : undefined,
   };
 }
@@ -129,7 +133,8 @@ authRouter.post("/login", authLimiter, async (req, res) => {
   if (user && isLocked(user.lockedUntil)) {
     return res.status(429).json({ error: LOCKED_LOGIN_ERROR });
   }
-  if (!user || !user.isActive || !(await bcrypt.compare(password, user.passwordHash))) {
+  const blockedTestLogin = user && isLoginBlockedForTestUser(user);
+  if (!user || !user.isActive || blockedTestLogin || !(await bcrypt.compare(password, user.passwordHash))) {
     if (user?.isActive) {
       await prisma.user.update({ where: { id: user.id }, data: nextLockState(user.failedLoginCount) });
     }
@@ -151,6 +156,22 @@ authRouter.post("/login", authLimiter, async (req, res) => {
       });
     }
     return res.status(401).json({ error: GENERIC_LOGIN_ERROR });
+  }
+
+  const settings = await getStoreSettings();
+  if (
+    loginBlockedForMissingTwoFa({
+      role: user.role,
+      totpEnabled: user.totpEnabled,
+      createdAt: user.createdAt,
+      requireTwoFaAdminManager: Boolean(settings.staffRequireTwoFaAdminManager),
+      graceDays: settings.twoFaReminderDays ?? 7,
+    })
+  ) {
+    return res.status(403).json({
+      error: "Two-factor authentication is required for your role. Set it up in account settings.",
+      code: "2FA_REQUIRED",
+    });
   }
 
   await prisma.user.update({

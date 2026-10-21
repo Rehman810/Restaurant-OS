@@ -276,6 +276,8 @@ model User {
   role         Role
   phone        String?
   isActive     Boolean  @default(true)
+  isTest       Boolean  @default(false)
+  isOwner      Boolean  @default(false)
   totpSecret           String?
   totpEnabled          Boolean   @default(false)
   recoveryCodes        String?
@@ -1011,6 +1013,9 @@ model StoreSettings {
   shiftOpenWarningHours Int      @default(12)
   lowRatingThreshold    Int      @default(2)
   twoFaReminderDays     Int      @default(7)
+  staffRequireTwoFaAdminManager Boolean @default(false)
+  staffInactivityDays   Int      @default(90)
+  passwordMinLength     Int      @default(8)
   weekStartDay          Int      @default(1)
   analyticsInsightMinDays   Int  @default(7)
   analyticsInsightMinOrders Int  @default(20)

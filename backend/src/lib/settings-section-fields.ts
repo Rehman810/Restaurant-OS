@@ -116,6 +116,10 @@ export const SETTINGS_SECTION_FIELDS: Record<SettingsSectionId, readonly string[
     "trackingCompletedWindowHours",
     "shiftOpenWarningHours",
     "lowRatingThreshold",
+    "twoFaReminderDays",
+    "staffRequireTwoFaAdminManager",
+    "staffInactivityDays",
+    "passwordMinLength",
   ],
   "scheduled-reports": [
     "weekStartDay",

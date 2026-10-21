@@ -1,10 +1,25 @@
 import { execSync } from "child_process";
 import path from "path";
 import dotenv from "dotenv";
+import { isTestDatabaseUrl } from "../src/lib/test-users";
 
 const backendRoot = path.resolve(__dirname, "..");
-dotenv.config({ path: path.join(backendRoot, ".env.test") });
 dotenv.config({ path: path.join(backendRoot, ".env") });
+dotenv.config({ path: path.join(backendRoot, ".env.test"), override: true });
+
+process.env.NODE_ENV = process.env.NODE_ENV || "test";
+
+if (
+  process.env.DATABASE_URL &&
+  !isTestDatabaseUrl(process.env.DATABASE_URL) &&
+  process.env.ALLOW_TESTS_ON_DEV_DB !== "1"
+) {
+  console.error(
+    "[test] Refusing to run: DATABASE_URL does not look like a test database.\n" +
+      "Use backend/.env.test (e.g. restaurant_os_test) or set ALLOW_TESTS_ON_DEV_DB=1 intentionally."
+  );
+  process.exit(1);
+}
 
 if (!process.env.DATABASE_URL) {
   console.warn(

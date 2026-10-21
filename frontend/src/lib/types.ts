@@ -10,6 +10,7 @@ export type User = {
   role: Role;
   phone?: string | null;
   totpEnabled?: boolean;
+  isOwner?: boolean;
   loyaltyPoints?: number;
 };
 

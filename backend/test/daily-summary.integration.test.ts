@@ -35,6 +35,7 @@ describe.skipIf(!hasDb)("daily summary vs dashboard metrics", () => {
 
     const mgr = await createTestUser({ email: `mgr-ds-${ts}@test.local`, role: Role.MANAGER });
     token = mgr.token;
+    await prisma.branchMember.create({ data: { branchId, userId: mgr.user.id } });
 
     await prisma.order.create({
       data: {
@@ -54,7 +55,7 @@ describe.skipIf(!hasDb)("daily summary vs dashboard metrics", () => {
 
     const metrics = await aggregatePeriodOrderMetrics({ branchId }, startUtc, endUtc);
     const res = await appRequest(app, "GET", `/admin/daily-summary?date=${dateKey}&branchId=${branchId}`, {
-      headers: authHeader(token),
+      headers: { ...authHeader(token), "X-Branch-Id": branchId },
     });
     expect(res.status).toBe(200);
     const body = res.body as { money: { booked: { value: number }; collected: { value: number } } };

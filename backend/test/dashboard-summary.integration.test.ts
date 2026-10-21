@@ -40,6 +40,7 @@ describe.skipIf(!hasDb)("GET /admin/dashboard/summary", () => {
     const chef = await createTestUser({ email: `chef-dash-${ts}@test.local`, role: Role.CHEF });
     chefId = chef.user.id;
     chefToken = chef.token;
+    await prisma.branchMember.create({ data: { branchId, userId: chef.user.id } });
 
     await prisma.order.create({
       data: {
@@ -81,7 +82,7 @@ describe.skipIf(!hasDb)("GET /admin/dashboard/summary", () => {
     expect(adminBody.last7Days).toHaveLength(7);
 
     const chefRes = await appRequest(app, "GET", `/admin/dashboard/summary?branchId=${branchId}`, {
-      headers: authHeader(chefToken),
+      headers: { ...authHeader(chefToken), "X-Branch-Id": branchId },
     });
     expect(chefRes.status).toBe(200);
     const chefBody = chefRes.body as { kpis: { booked: null; sourceSplit: null } };
