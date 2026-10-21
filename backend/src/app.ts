@@ -67,7 +67,17 @@ export function createApp() {
     })
   );
 
-  app.get("/health", (_req, res) => res.json({ ok: true }));
+  app.get("/health", (_req, res) =>
+    res.json({
+      ok: true,
+      apiVersion: 2,
+      features: {
+        dashboardSummary: true,
+        adminOrdersDispatch: true,
+        adminTracking: true,
+      },
+    })
+  );
   app.use("/upload", uploadRouter);
   app.use("/auth", authRouter);
   app.use("/menu", menuRouter);

@@ -1,4 +1,6 @@
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
+import { isRouteMissingError, loadApiCapabilities } from "@/lib/api-capabilities";
+import { fetchAdminOrdersLegacy } from "@/lib/legacy-api/orders-dispatch";
 import type { OrderStatus } from "@/lib/types";
 import type {
   AdminBulkResult,
@@ -44,7 +46,15 @@ export function buildAdminOrdersQuery(params: FetchAdminOrdersParams) {
 
 export async function fetchAdminOrdersDispatch(params: FetchAdminOrdersParams) {
   const qs = buildAdminOrdersQuery(params);
-  return api<AdminOrdersListResponse>(`/admin/orders${qs ? `?${qs}` : ""}`);
+  try {
+    return await api<AdminOrdersListResponse>(`/admin/orders${qs ? `?${qs}` : ""}`);
+  } catch (err) {
+    if (isRouteMissingError(err)) {
+      await loadApiCapabilities(true);
+      return fetchAdminOrdersLegacy(params);
+    }
+    throw err;
+  }
 }
 
 export async function transitionAdminOrder(
@@ -58,21 +68,56 @@ export async function transitionAdminOrder(
     boardUndo?: boolean;
   }
 ) {
-  return api<{ ok: boolean; orderId: string; status: OrderStatus }>(`/admin/orders/${id}/transition`, {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
+  try {
+    return await api<{ ok: boolean; orderId: string; status: OrderStatus }>(
+      `/admin/orders/${id}/transition`,
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      }
+    );
+  } catch (err) {
+    if (isRouteMissingError(err)) {
+      await api(`/orders/${id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: body.targetStatus, reason: body.reason }),
+      });
+      return { ok: true, orderId: id, status: body.targetStatus };
+    }
+    throw err;
+  }
 }
 
 export async function assignAdminOrderRider(id: string, riderId: string) {
-  return api<{ ok: boolean; orderId: string; riderId: string }>(`/admin/orders/${id}/assign-rider`, {
-    method: "POST",
-    body: JSON.stringify({ riderId }),
-  });
+  try {
+    return await api<{ ok: boolean; orderId: string; riderId: string }>(
+      `/admin/orders/${id}/assign-rider`,
+      {
+        method: "POST",
+        body: JSON.stringify({ riderId }),
+      }
+    );
+  } catch (err) {
+    if (isRouteMissingError(err)) {
+      await api(`/orders/${id}/assign`, {
+        method: "PATCH",
+        body: JSON.stringify({ riderId }),
+      });
+      return { ok: true, orderId: id, riderId };
+    }
+    throw err;
+  }
 }
 
 export async function fetchAdminOrderDetail(id: string) {
-  return api<AdminOrderDetail>(`/admin/orders/${id}`);
+  try {
+    return await api<AdminOrderDetail>(`/admin/orders/${id}`);
+  } catch (err) {
+    if (isRouteMissingError(err)) {
+      return api<AdminOrderDetail>(`/orders/${id}`);
+    }
+    throw err;
+  }
 }
 
 export async function bulkAdminOrders(body: {

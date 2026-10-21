@@ -65,6 +65,16 @@ npm run typecheck    # API build + frontend tsc
 3. Frontend: `NEXT_PUBLIC_API_URL` → API origin; never enable `NEXT_PUBLIC_ENABLE_DEMO_LOGIN` in production.
 4. Optional: VAPID keys for storefront push; tax fields in Settings after go-live.
 
+### Vercel frontend + remote API
+
+If the Next.js app is on Vercel and the API runs elsewhere (Render, Oracle, etc.):
+
+1. **Do not** set `NEXT_PUBLIC_API_URL` to `localhost` on Vercel.
+2. Set **`API_PROXY_TARGET`** (Vercel server env) to your public API origin, e.g. `http://YOUR_HOST:4000` or `https://api.example.com`.
+3. Set **`CLIENT_URL`** on the API to your Vercel URL (and enable `ALLOW_VERCEL_PREVIEWS=1` if you use preview deploys).
+4. Redeploy **both** after pulling latest `main`. Check `https://YOUR_VERCEL_APP/api/proxy/health` — it should include `"apiVersion": 2`. If admin pages show **Not found**, the API is outdated or the proxy target is wrong.
+5. Optional: **`NEXT_PUBLIC_SOCKET_URL`** → same host as the API for live orders and notifications.
+
 ### E2E (Playwright)
 
 ```bash
