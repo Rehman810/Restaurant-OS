@@ -19,6 +19,7 @@ import { PRODUCT_NAME, storeDisplayName } from "@/lib/branding";
 import { useStore } from "@/lib/store";
 import { PublicStore } from "@/lib/types";
 import { OpsKitchenAlertBanner } from "@/components/admin/OpsKitchenAlertBanner";
+import { StaffNotificationCenter } from "@/components/admin/StaffNotificationCenter";
 import { chefAdminPathAllowed } from "@/lib/kitchen/chef-access";
 import { readKitchenKiosk } from "@/lib/kitchen/display";
 import { readPosFullscreen } from "@/lib/pos/display";
@@ -126,9 +127,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       if (typeof n === "number") setPendingDineIn(n);
     };
     window.addEventListener("dine-in-pending", onPending);
+    const onNotify = (e: Event) => {
+      const kind = (e as CustomEvent<{ kind?: string }>).detail?.kind;
+      if (kind === "reservation_pending") refresh();
+    };
+    window.addEventListener("staff-notification", onNotify);
     const id = window.setInterval(refresh, 45_000);
     return () => {
       window.removeEventListener("dine-in-pending", onPending);
+      window.removeEventListener("staff-notification", onNotify);
       window.clearInterval(id);
     };
   }, [user, path]);
@@ -141,8 +148,24 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         .catch(() => setLowStockCount(0));
     };
     refresh();
+    const onNotify = (e: Event) => {
+      const kind = (e as CustomEvent<{ kind?: string }>).detail?.kind;
+      if (
+        kind === "inventory_low_stock" ||
+        kind === "inventory_out_of_stock" ||
+        kind === "inventory_restocked" ||
+        kind === "menu_sold_out" ||
+        kind === "menu_back_in_stock"
+      ) {
+        refresh();
+      }
+    };
+    window.addEventListener("staff-notification", onNotify);
     const id = window.setInterval(refresh, 60_000);
-    return () => window.clearInterval(id);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener("staff-notification", onNotify);
+    };
   }, [user, path]);
 
   useEffect(() => {
@@ -443,6 +466,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-2.5">
+            <StaffNotificationCenter />
             <BranchSwitcher />
             <span
               className="hidden h-9 items-center gap-1.5 border-l border-stone-200 pl-2.5 text-xs font-medium text-stone-600 dark:border-stone-700 dark:text-stone-400 sm:inline-flex"

@@ -212,6 +212,12 @@ kitchenRouter.patch("/menu/:menuItemId/stock", requireAuth, requireRole(...KITCH
     orderNumber: "",
     message: available ? `${prior.name} is back on the menu` : `86 — ${prior.name} marked out of stock`,
   });
+  const { notifyMenuBackInStock, notifyMenuSoldOut } = await import("../lib/notifications/ops");
+  if (available) {
+    notifyMenuBackInStock({ branchId, menuItemId: prior.id, name: prior.name });
+  } else {
+    notifyMenuSoldOut({ branchId, menuItemId: prior.id, name: prior.name, reason: "kitchen_86" });
+  }
 
   res.json({ id: prior.id, name: prior.name, isAvailable: available, branchId });
 });

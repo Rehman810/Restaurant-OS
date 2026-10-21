@@ -1,5 +1,6 @@
 import { Prisma, StockMovementType, StockReferenceType } from "@prisma/client";
 import { prisma } from "../prisma";
+import { maybeEmitStockAlerts } from "./stock-notify";
 import { roundQty, weightedAverageCost } from "./units";
 
 export type LedgerInput = {
@@ -45,12 +46,21 @@ export async function getOrCreateBranchStock(branchId: string, itemId: string, t
   });
 }
 
+type StockChangeResult = {
+  movement: Awaited<ReturnType<typeof prisma.stockMovement.create>>;
+  oldQty: number;
+  newQty: number;
+  itemName: string;
+  unit: string;
+  reorderPoint: number;
+};
+
 /** Single entry point for all stock mutations — always writes a movement row. */
 export async function applyStockChange(input: LedgerInput) {
   const settings = await inventorySettings();
   const allowNegative = input.allowNegative ?? settings.allowNegative;
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx): Promise<StockChangeResult | null> => {
     const item = await tx.inventoryItem.findFirst({
       where: { id: input.itemId, isActive: true },
     });
@@ -133,8 +143,29 @@ export async function applyStockChange(input: LedgerInput) {
       },
     });
 
-    return movement;
+    return {
+      movement,
+      oldQty,
+      newQty: clampedQty,
+      itemName: item.name,
+      unit: item.unit,
+      reorderPoint: Number(item.reorderPoint),
+    };
   });
+
+  if (result) {
+    maybeEmitStockAlerts({
+      branchId: input.branchId,
+      itemId: input.itemId,
+      itemName: result.itemName,
+      unit: result.unit,
+      reorderPoint: result.reorderPoint,
+      oldQty: result.oldQty,
+      newQty: result.newQty,
+    });
+    return result.movement;
+  }
+  return null;
 }
 
 async function consumeBatchesFefo(

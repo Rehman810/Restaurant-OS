@@ -112,6 +112,10 @@ export function emitOrderChange(
     branchId?: string | null;
     riderId?: string | null;
     customerId?: string | null;
+    orderNumber?: string;
+    total?: number | string | { toString(): string };
+    source?: string | null;
+    status?: string;
   }
 ) {
   if (!io) return;
@@ -125,6 +129,18 @@ export function emitOrderChange(
     event === "order:created" ? "order_created" : "order_transitioned",
     { orderId: order.id }
   );
+
+  if (event === "order:created" && order.orderNumber) {
+    void import("./notifications/ops").then(({ notifyOrderCreated }) => {
+      notifyOrderCreated({
+        id: order.id,
+        orderNumber: order.orderNumber!,
+        branchId: order.branchId,
+        total: order.total != null ? Number(order.total) : undefined,
+        source: order.source ?? null,
+      });
+    });
+  }
 }
 
 export type TrackingBoardDeltaKind =
@@ -154,6 +170,28 @@ export type KitchenAlertPayload = {
 export function emitKitchenAlert(alert: KitchenAlertPayload) {
   if (!io) return;
   io.to("ops").emit("kitchen:alert", { ...alert, at: Date.now() });
+  void import("./notifications/ops").then(({ notifyKitchenAlert }) => notifyKitchenAlert(alert));
+}
+
+export type OpsNotificationPayload = {
+  id: string;
+  kind: string;
+  title: string;
+  message: string;
+  at: number;
+  branchId?: string;
+  href?: string;
+  severity: "info" | "warning" | "urgent";
+  meta?: Record<string, string | number | boolean | null>;
+};
+
+/** Unified staff notification feed (orders, inventory, menu, bookings). */
+export function emitOpsNotification(notification: OpsNotificationPayload) {
+  if (!io) return;
+  io.to("ops").emit("ops:notification", notification);
+  if (notification.branchId) {
+    io.to(`branch:${notification.branchId}`).emit("ops:notification", notification);
+  }
 }
 
 /** Broadcast menu/catalog changes (storefront, POS, kitchen refetch). */
