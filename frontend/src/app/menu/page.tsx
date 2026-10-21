@@ -10,6 +10,7 @@ import { usePagination } from "@/hooks/usePagination";
 import { Pagination } from "@/components/Pagination";
 import { MENU_EMPTY_HINT } from "@/lib/storefront-copy";
 import { CATEGORIES as DEFAULT_CATEGORIES, Category, MenuItem } from "@/lib/types";
+import { useMenuRealtimeRefresh } from "@/hooks/useMenuRealtimeRefresh";
 
 export default function MenuPage() {
   const [items, setItems] = useState<MenuItem[] | null>(null);
@@ -18,7 +19,7 @@ export default function MenuPage() {
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
 
-  useEffect(() => {
+  function loadCatalog() {
     Promise.all([
       fetchAllMenuItems(),
       fetchAllCategories().catch((): Category[] => []),
@@ -28,7 +29,13 @@ export default function MenuPage() {
         if (cats.length > 0) setCategories(cats.map((c) => c.name));
       })
       .catch((e) => setError(e.message));
+  }
+
+  useEffect(() => {
+    loadCatalog();
   }, []);
+
+  useMenuRealtimeRefresh(loadCatalog);
 
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};

@@ -37,10 +37,25 @@ async function ensureSocket(): Promise<Socket | null> {
   return socket;
 }
 
+export type OpsNotificationEvent = {
+  id: string;
+  kind: string;
+  title: string;
+  message: string;
+  at: number;
+  branchId?: string;
+  href?: string;
+  severity: "info" | "warning" | "urgent";
+  meta?: Record<string, string | number | boolean | null>;
+};
+
 export type LiveOrdersOptions = {
   onCreated?: (payload?: { orderId?: string; at?: number }) => void;
   onConnectChange?: (connected: boolean) => void;
   onKitchenAlert?: (payload: { type: string; orderId: string; orderNumber: string; message: string; at: number }) => void;
+  onOpsNotification?: (payload: OpsNotificationEvent) => void;
+  onMenuCatalogChanged?: () => void;
+  onMenuAvailabilityChanged?: (payload: { branchId: string; at: number }) => void;
 };
 
 export function useLiveOrders(
@@ -72,6 +87,13 @@ export function useLiveOrders(
     }) => {
       optionsRef.current?.onKitchenAlert?.(payload);
     };
+    const onOpsNotification = (payload: OpsNotificationEvent) => {
+      optionsRef.current?.onOpsNotification?.(payload);
+    };
+    const onMenuCatalogChanged = () => optionsRef.current?.onMenuCatalogChanged?.();
+    const onMenuAvailabilityChanged = (payload: { branchId: string; at: number }) => {
+      optionsRef.current?.onMenuAvailabilityChanged?.(payload);
+    };
     const onBoardDelta = () => onChangeRef.current();
     void ensureSocket().then((sock) => {
       s = sock;
@@ -83,6 +105,9 @@ export function useLiveOrders(
       s.on("order:updated", onUpdated);
       s.on("tracking:board-delta", onBoardDelta);
       s.on("kitchen:alert", onKitchenAlert);
+      s.on("ops:notification", onOpsNotification);
+      s.on("menu:catalog-changed", onMenuCatalogChanged);
+      s.on("menu:availability-changed", onMenuAvailabilityChanged);
       s.on("connect", onConnect);
       s.on("disconnect", onDisconnect);
       optionsRef.current?.onConnectChange?.(s.connected);
@@ -96,6 +121,9 @@ export function useLiveOrders(
       s.off("order:updated", onUpdated);
       s.off("tracking:board-delta", onBoardDelta);
       s.off("kitchen:alert", onKitchenAlert);
+      s.off("ops:notification", onOpsNotification);
+      s.off("menu:catalog-changed", onMenuCatalogChanged);
+      s.off("menu:availability-changed", onMenuAvailabilityChanged);
       s.off("connect", onConnect);
       s.off("disconnect", onDisconnect);
     };

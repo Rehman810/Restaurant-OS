@@ -270,6 +270,22 @@ dineInPublicRouter.post("/reservations", publicBookingLimiter, async (req, res) 
 
   void enqueueForReservation(reservation.id, "BOOKING_RECEIVED");
   void enqueueForReservation(reservation.id, "MANAGER_PENDING");
+  void import("../lib/notifications/ops").then(({ notifyReservationPending }) => {
+    notifyReservationPending({
+      branchId: branch.id,
+      reservationId: reservation.id,
+      guestName: reservation.guestName,
+      partySize: reservation.partySize,
+      startsAt: reservation.startsAt.toLocaleString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        timeZone: branch.timezone || "Asia/Karachi",
+      }),
+    });
+  });
 
   res.status(201).json({
     reservation: await serializeReservation({ ...reservation, table: null }),

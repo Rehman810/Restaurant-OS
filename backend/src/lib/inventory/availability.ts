@@ -1,6 +1,8 @@
 import { SoldOutUntilKind } from "@prisma/client";
 import { prisma } from "../prisma";
 import { getStoreSettings } from "../settings-data";
+import { notifyMenuBackInStock, notifyMenuSoldOut } from "../notifications/ops";
+import { emitMenuCatalogChanged } from "../realtime";
 
 /** Mark menu items sold out at a branch when recipe ingredients cannot cover one portion. */
 export async function refreshMenuAvailabilityForBranch(branchId: string) {
@@ -23,6 +25,18 @@ export async function refreshMenuAvailabilityForBranch(branchId: string) {
   const qtyMap = new Map(stocks.map((s) => [s.itemId, Number(s.quantity)]));
 
   const menuIds = [...new Set(recipes.map((r) => r.menuItemId))];
+  const menuNames = await prisma.menuItem.findMany({
+    where: { id: { in: menuIds } },
+    select: { id: true, name: true },
+  });
+  const nameMap = new Map(menuNames.map((m) => [m.id, m.name]));
+
+  const priorAuto = await prisma.menuItemBranchAvailability.findMany({
+    where: { branchId, menuItemId: { in: menuIds }, reason: "auto_inventory" },
+    select: { menuItemId: true, soldOut: true },
+  });
+  const priorAutoIds = new Set(priorAuto.filter((p) => p.soldOut).map((p) => p.menuItemId));
+
   for (const menuItemId of menuIds) {
     const lines = recipes.filter((r) => r.menuItemId === menuItemId);
     const portions = yieldMap.get(menuItemId) || 1;
@@ -53,12 +67,21 @@ export async function refreshMenuAvailabilityForBranch(branchId: string) {
           setAt: new Date(),
         },
       });
+      if (!priorAutoIds.has(menuItemId)) {
+        const name = nameMap.get(menuItemId) ?? "Menu item";
+        notifyMenuSoldOut({ branchId, menuItemId, name, reason: "auto_inventory" });
+      }
     } else {
-      await prisma.menuItemBranchAvailability.deleteMany({
+      const removed = await prisma.menuItemBranchAvailability.deleteMany({
         where: { menuItemId, branchId, reason: "auto_inventory" },
       });
+      if (removed.count > 0) {
+        const name = nameMap.get(menuItemId) ?? "Menu item";
+        notifyMenuBackInStock({ branchId, menuItemId, name });
+      }
     }
   }
 
+  emitMenuCatalogChanged([branchId]);
   void timezone;
 }
