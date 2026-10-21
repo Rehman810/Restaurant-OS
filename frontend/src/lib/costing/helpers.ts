@@ -1,6 +1,9 @@
 export type FoodCostBand = "HEALTHY" | "WATCH" | "HIGH" | "UNKNOWN";
 export type DishCostStatus = "COMPLETE" | "INCOMPLETE" | "NO_RECIPE" | "SUSPICIOUS_LOW";
 
+/** Shared with inventory recipe editor — food cost below this % triggers a review flag. */
+export const LOW_FOOD_COST_PCT = 15;
+
 export const COST_BASIS_COPY =
   "Costs use your average purchase price at this branch. Ingredients with no purchases yet use their default cost.";
 
@@ -41,8 +44,10 @@ export function statusLabel(status: DishCostStatus) {
   }
 }
 
-export function needsRecipeCheck(status: DishCostStatus) {
-  return status === "INCOMPLETE" || status === "NO_RECIPE" || status === "SUSPICIOUS_LOW";
+export function needsRecipeCheck(status: DishCostStatus, foodCostPercent?: number | null) {
+  if (status === "INCOMPLETE" || status === "NO_RECIPE" || status === "SUSPICIOUS_LOW") return true;
+  if (foodCostPercent != null && foodCostPercent < LOW_FOOD_COST_PCT) return true;
+  return false;
 }
 
 export function canShowMargin(status: DishCostStatus) {

@@ -32,6 +32,7 @@ import {
   TabHelp,
   TablePagination,
   TextInput,
+  StatusChip,
 } from "./components/primitives";
 import { AdminScopeBanner } from "@/components/admin/AdminScopeBanner";
 import { RefreshButton } from "@/components/admin/RefreshButton";
@@ -40,9 +41,12 @@ import { AdminAlert, AdminEmptyState, AdminPage, AdminPageHeader } from "@/compo
 import { ConfirmSheet } from "@/components/admin/ConfirmSheet";
 import { useBranch } from "@/modules/branches/BranchContext";
 import { pkr } from "@/lib/format";
+import { formatInventoryWhen, formatQty } from "./format";
+import { LOW_FOOD_COST_PCT } from "@/lib/costing/helpers";
 import {
   adjustStock,
   approveCount,
+  deleteCount,
   createCategory,
   createInventoryItem,
   createSupplier,
@@ -118,7 +122,7 @@ export function InventoryModule() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
-  const [metrics, setMetrics] = useState({ totalItems: 0, totalValue: 0, lowCount: 0, outCount: 0 });
+  const [metrics, setMetrics] = useState({ totalItems: 0, totalValue: 0, lowCount: 0, outCount: 0, expiringCount: 0 });
   const [items, setItems] = useState<InventoryItemRow[]>([]);
   const [movements, setMovements] = useState<
     { id: string; type: string; itemName: string; quantityDelta: number; createdAt: string }[]
@@ -214,7 +218,7 @@ export function InventoryModule() {
   const [supTerms, setSupTerms] = useState("");
   const [valuation, setValuation] = useState<Record<string, number>>({});
   const [suggestions, setSuggestions] = useState<
-    { name: string; suggestedQty: number; supplierName?: string; itemId: string }[]
+    { name: string; suggestedQty: number; unit?: string; estimatedCost?: number; supplierName?: string; itemId: string }[]
   >([]);
   const [archiveTarget, setArchiveTarget] = useState<InventoryItemRow | null>(null);
 
@@ -268,6 +272,18 @@ export function InventoryModule() {
     return filteredItems.slice(start, start + stockPageSize);
   }, [filteredItems, stockPageSafe, stockPageSize]);
 
+  const pickerItems = useMemo(
+    () =>
+      items.map((i) => ({
+        id: i.id,
+        name: i.name,
+        unit: i.unit,
+        quantity: i.quantity,
+        status: i.status,
+      })),
+    [items]
+  );
+
   useEffect(() => {
     setStockPage(1);
   }, [searchQ, statusFilter, categoryFilter, showArchived, stockPageSize]);
@@ -303,23 +319,43 @@ export function InventoryModule() {
   }, [load, selection]);
 
   useEffect(() => {
+    if (branchRequired) return;
+    const onTabError = (err: unknown) => {
+      setError(err instanceof Error ? err.message : "Could not load tab data");
+    };
     if (tab === "receive") {
-      void fetchPurchases().then((d) => setPurchases(d.purchases));
+      void fetchPurchases()
+        .then((d) => setPurchases(d.purchases))
+        .catch(onTabError);
     }
     if (tab === "recipes") {
-      void fetchMenuItemsForRecipes().then((d) => setMenuItems(d.items));
+      void fetchMenuItemsForRecipes()
+        .then((d) => setMenuItems(d.items))
+        .catch(onTabError);
     }
     if (tab === "waste") {
-      void fetchWaste().then(setWasteData);
+      void fetchWaste().then(setWasteData).catch(onTabError);
     }
     if (tab === "movements") void reloadMovements();
-    if (tab === "counts") void fetchCounts().then((d) => setCounts(d.counts));
-    if (tab === "transfers") void fetchTransfers().then((d) => setTransfers(d.transfers));
-    if (tab === "reports") {
-      void fetchValuationReport().then((d) => setValuation(d.byCategory));
-      void fetchReorderSuggestions().then((d) => setSuggestions(d.suggestions));
+    if (tab === "counts") {
+      void fetchCounts()
+        .then((d) => setCounts(d.counts))
+        .catch(onTabError);
     }
-  }, [tab, selection, reloadMovements]);
+    if (tab === "transfers") {
+      void fetchTransfers()
+        .then((d) => setTransfers(d.transfers))
+        .catch(onTabError);
+    }
+    if (tab === "reports") {
+      void fetchValuationReport()
+        .then((d) => setValuation(d.byCategory))
+        .catch(onTabError);
+      void fetchReorderSuggestions()
+        .then((d) => setSuggestions(d.suggestions))
+        .catch(onTabError);
+    }
+  }, [tab, selection, reloadMovements, branchRequired]);
 
   useEffect(() => {
     if (tab === "movements") void reloadMovements();
@@ -348,19 +384,23 @@ export function InventoryModule() {
       setRecipeLines([]);
       return;
     }
-    void fetchRecipe(recipeMenuId).then((d) => {
-      setRecipeYield(String(d.yieldPortions));
-      setRecipeMeta({
-        recipeCost: d.recipeCost,
-        marginPercent: d.marginPercent,
-        foodCostPercent: d.foodCostPercent,
-        price: d.price,
-        costWarning: d.costWarning ?? null,
+    void fetchRecipe(recipeMenuId)
+      .then((d) => {
+        setRecipeYield(String(d.yieldPortions));
+        setRecipeMeta({
+          recipeCost: d.recipeCost,
+          marginPercent: d.marginPercent,
+          foodCostPercent: d.foodCostPercent,
+          price: d.price,
+          costWarning: d.costWarning ?? null,
+        });
+        setRecipeLines(
+          d.lines.length ? d.lines.map((l) => ({ itemId: l.itemId, quantity: String(l.quantity) })) : [{ itemId: "", quantity: "" }]
+        );
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "Could not load recipe");
       });
-      setRecipeLines(
-        d.lines.length ? d.lines.map((l) => ({ itemId: l.itemId, quantity: String(l.quantity) })) : [{ itemId: "", quantity: "" }]
-      );
-    });
   }, [recipeMenuId]);
 
   async function onAddItem(e: FormEvent) {
@@ -506,11 +546,12 @@ export function InventoryModule() {
 
           {tab === "stock" && (
             <>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <MetricCard label="Total items" value={metrics.totalItems} />
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <MetricCard label="Total items" value={metrics.totalItems} onClick={() => setStatusFilter("all")} />
                 <MetricCard label="Stock value" value={pkr(metrics.totalValue)} />
                 <MetricCard label="Low stock" value={metrics.lowCount} accent="amber" onClick={() => setStatusFilter("low")} />
                 <MetricCard label="Out of stock" value={metrics.outCount} accent="red" onClick={() => setStatusFilter("out")} />
+                <MetricCard label="Expiring (7d)" value={metrics.expiringCount} onClick={() => setStatusFilter("expiring")} />
               </div>
 
               <div className="grid gap-3 rounded-2xl border border-stone-200/80 bg-stone-50/50 p-3 dark:border-stone-700 dark:bg-stone-800/30 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
@@ -553,7 +594,6 @@ export function InventoryModule() {
                   <InventoryTable
                     columns={["Item", "On hand", "Reorder", "Avg cost", "Value", "Status", ""]}
                     loading={loading}
-                    bodyMaxHeight={STOCK_TABLE_HEIGHT}
                   >
                     {paginatedStockItems.map((i) => (
                       <tr key={i.id} className="hover:bg-stone-50/80 dark:hover:bg-stone-800/40">
@@ -561,12 +601,12 @@ export function InventoryModule() {
                           <p className="font-semibold text-stone-900 dark:text-stone-100">{i.name}</p>
                           <p className="text-xs text-stone-400">{i.category} · {i.unit}</p>
                         </td>
-                        <td className="px-4 py-3 font-mono tabular-nums">{i.quantity}</td>
+                        <td className="px-4 py-3 font-mono tabular-nums">{formatQty(i.quantity, i.unit)}</td>
                         <td className="px-4 py-3 text-stone-500">{i.reorderPoint}</td>
                         <td className="px-4 py-3">{pkr(i.avgCost)}</td>
                         <td className="px-4 py-3 font-medium">{pkr(i.stockValue)}</td>
                         <td className="px-4 py-3">
-                          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusBadge(i.status)}`}>{statusLabel(i.status)}</span>
+                          <StatusChip status={i.status} />
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap gap-1">
@@ -673,7 +713,7 @@ export function InventoryModule() {
                                 const next = [...recvLines];
                                 next[idx] = { ...next[idx], itemId: id };
                                 setRecvLines(next);
-                              }} items={items} />
+                              }} items={pickerItems} />
                             </div>
                             <div className="lg:col-span-2"><Field label="Qty"><TextInput value={line.quantity} onChange={(e) => { const next = [...recvLines]; next[idx].quantity = e.target.value; setRecvLines(next); }} inputMode="decimal" /></Field></div>
                             <div className="lg:col-span-2"><Field label="Unit cost"><TextInput value={line.unitCost} onChange={(e) => { const next = [...recvLines]; next[idx].unitCost = e.target.value; setRecvLines(next); }} inputMode="decimal" /></Field></div>
@@ -774,7 +814,7 @@ export function InventoryModule() {
                       <div><p className="text-xs text-stone-500">Menu price</p><p className="font-bold">{pkr(recipeMeta.price)}</p></div>
                       <div>
                         <p className="text-xs text-stone-500">Food cost %</p>
-                        <p className={`font-bold ${recipeMeta.foodCostPercent > 40 ? "text-red-600" : recipeMeta.foodCostPercent > 30 ? "text-amber-600" : "text-emerald-600"}`}>
+                        <p className={`font-bold ${recipeMeta.foodCostPercent > 40 ? "text-red-600" : recipeMeta.foodCostPercent > 30 ? "text-amber-600" : recipeMeta.foodCostPercent < LOW_FOOD_COST_PCT ? "text-amber-600" : "text-emerald-600"}`}>
                           {recipeMeta.foodCostPercent.toFixed(1)}%
                         </p>
                       </div>
@@ -794,7 +834,7 @@ export function InventoryModule() {
                               next[idx].itemId = id;
                               setRecipeLines(next);
                             }}
-                            items={items}
+                            items={pickerItems}
                           />
                           <Field label="Qty per portion">
                             <TextInput
@@ -832,7 +872,7 @@ export function InventoryModule() {
             <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
               <InventoryPanel title="Log waste" description="Reduces on-hand stock and records cost impact">
                 <form onSubmit={async (e) => { e.preventDefault(); await logWaste({ itemId: wasteItem, quantity: Number(wasteQty), reason: wasteReason }); setMsg("Waste logged."); void fetchWaste().then(setWasteData); await load(); }} className="grid gap-3 sm:grid-cols-2">
-                  <IngredientPicker label="Ingredient" value={wasteItem} onChange={setWasteItem} items={items} />
+                  <IngredientPicker label="Ingredient" value={wasteItem} onChange={setWasteItem} items={pickerItems} />
                   <Field label="Quantity" required><TextInput value={wasteQty} onChange={(e) => setWasteQty(e.target.value)} inputMode="decimal" required /></Field>
                   <SelectField label="Reason" value={wasteReason} onChange={setWasteReason} options={WASTE_REASONS.map((r) => ({ value: r, label: r.replace(/_/g, " ") }))} className="sm:col-span-2" />
                   <button type="submit" className="btn-primary sm:col-span-2 sm:w-fit">Record waste</button>
@@ -943,11 +983,24 @@ export function InventoryModule() {
                 <button type="button" className="btn-primary mb-3 w-full text-sm" onClick={async () => { const res = await startStockCount(); setMsg("Count started."); setActiveCountId(res.count.id); void fetchCounts().then((d) => setCounts(d.counts)); }}>Start new count</button>
                 <ul className="space-y-1 text-sm">
                   {counts.map((c) => (
-                    <li key={c.id}>
-                      <button type="button" onClick={() => setActiveCountId(c.id)} className={`w-full rounded-lg px-2 py-2 text-left ${activeCountId === c.id ? "bg-brand-50 dark:bg-brand-950/40" : "hover:bg-stone-50"}`}>
-                        <p className="text-xs text-stone-500">{new Date(c.createdAt).toLocaleString()}</p>
+                    <li key={c.id} className="flex items-center gap-2">
+                      <button type="button" onClick={() => setActiveCountId(c.id)} className={`flex-1 rounded-lg px-2 py-2 text-left ${activeCountId === c.id ? "bg-brand-50 dark:bg-brand-950/40" : "hover:bg-stone-50"}`}>
+                        <p className="text-xs text-stone-500">{formatInventoryWhen(c.createdAt)}</p>
                         <p className="font-semibold">{c.status}</p>
                       </button>
+                      {c.status === "DRAFT" && (
+                        <button
+                          type="button"
+                          className="ml-2 text-xs font-semibold text-red-600"
+                          onClick={async () => {
+                            await deleteCount(c.id);
+                            if (activeCountId === c.id) setActiveCountId("");
+                            void fetchCounts().then((d) => setCounts(d.counts));
+                          }}
+                        >
+                          Delete
+                        </button>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -991,7 +1044,7 @@ export function InventoryModule() {
                   <SelectField label="To branch" value={transferTo} onChange={setTransferTo} options={branches.filter((b) => b.id !== selection).map((b) => ({ value: b.id, label: b.name }))} />
                   {transferLines.map((line, idx) => (
                     <div key={idx} className="grid gap-2 sm:grid-cols-2">
-                      <IngredientPicker label="Item" value={line.itemId} onChange={(id) => { const n = [...transferLines]; n[idx].itemId = id; setTransferLines(n); }} items={items} />
+                      <IngredientPicker label="Item" value={line.itemId} onChange={(id) => { const n = [...transferLines]; n[idx].itemId = id; setTransferLines(n); }} items={pickerItems} />
                       <Field label="Quantity"><TextInput value={line.quantity} onChange={(e) => { const n = [...transferLines]; n[idx].quantity = e.target.value; setTransferLines(n); }} inputMode="decimal" /></Field>
                     </div>
                   ))}
@@ -1043,8 +1096,15 @@ export function InventoryModule() {
                 <ul className="space-y-2 text-sm">
                   {suggestions.map((s) => (
                     <li key={s.itemId} className="flex items-center justify-between gap-2 rounded-lg bg-stone-50 px-3 py-2 dark:bg-stone-800/40">
-                      <div><p className="font-medium">{s.name}</p><p className="text-xs text-stone-500">{s.supplierName || "No linked supplier"}</p></div>
-                      <button type="button" className="btn-secondary text-xs" onClick={() => { setTab("receive"); setReceiveView("new"); }}>Order {s.suggestedQty}</button>
+                      <div>
+                        <p className="font-medium">{s.name}</p>
+                        <p className="text-xs text-stone-500">
+                          {s.supplierName || "No linked supplier"} · {formatQty(s.suggestedQty, s.unit ?? "PIECE")} · {pkr(s.estimatedCost ?? 0)}
+                        </p>
+                      </div>
+                      <button type="button" className="btn-secondary text-xs" onClick={() => { setTab("receive"); setReceiveView("new"); }}>
+                        Order {s.suggestedQty}
+                      </button>
                     </li>
                   ))}
                   {suggestions.length === 0 && <p className="text-stone-500">All items above reorder level.</p>}

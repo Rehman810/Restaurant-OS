@@ -14,6 +14,8 @@ describe("dish costing helpers", () => {
     expect(bandLabel("HEALTHY")).toBe("On target");
     expect(statusLabel("INCOMPLETE")).toBe("Check recipe");
     expect(needsRecipeCheck("SUSPICIOUS_LOW")).toBe(true);
+    expect(needsRecipeCheck("COMPLETE", 8)).toBe(true);
+    expect(needsRecipeCheck("COMPLETE", 20)).toBe(false);
     expect(canShowMargin("INCOMPLETE")).toBe(false);
   });
 });

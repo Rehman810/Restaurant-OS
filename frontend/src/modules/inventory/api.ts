@@ -5,7 +5,7 @@ export type { InventoryItemRow, InventoryUnit, StockMovementRow, InventoryTab };
 
 export async function fetchInventorySummary() {
   return api<{
-    metrics: { totalItems: number; totalValue: number; lowCount: number; outCount: number };
+    metrics: { totalItems: number; totalValue: number; lowCount: number; outCount: number; expiringCount?: number };
     items: InventoryItemRow[];
     lowStock: { itemId: string; name: string; quantity: number; reorderPoint: number; unit: string }[];
     movements: StockMovementRow[];
@@ -211,6 +211,20 @@ export async function approveCount(id: string) {
   return api(`/admin/inventory/counts/${id}/approve`, { method: "POST" });
 }
 
+export async function deleteCount(id: string) {
+  return api(`/admin/inventory/counts/${id}`, { method: "DELETE" });
+}
+
+export async function convertItemToPieces(
+  itemId: string,
+  payload: { conversionFactor: number; preview?: boolean }
+) {
+  return api(`/admin/inventory/items/${itemId}/convert-to-pieces`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export type TransferRow = {
   id: string;
   status: string;
@@ -250,6 +264,8 @@ export async function fetchReorderSuggestions() {
       name: string;
       onHand: number;
       suggestedQty: number;
+      unit?: string;
+      estimatedCost?: number;
       supplierId?: string;
       supplierName?: string;
     }[];
