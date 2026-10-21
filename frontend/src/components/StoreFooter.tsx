@@ -65,28 +65,31 @@ export function StoreFooter() {
           <p className="mt-4 max-w-sm text-sm leading-relaxed text-stone-400">
             {storeTagline(settings)} — fresh food from our kitchen, delivered to your door.
           </p>
-          {(settings?.instagramUrl || settings?.facebookUrl) && (
+          {[
+            { href: settings?.facebookUrl, label: "Facebook" },
+            { href: settings?.instagramUrl, label: "Instagram" },
+            { href: settings?.tiktokUrl, label: "TikTok" },
+            { href: settings?.youtubeUrl, label: "YouTube" },
+          ].some((l) => l.href?.trim()) && (
             <div className="mt-6 flex flex-wrap gap-2">
-              {settings.facebookUrl && (
-                <a
-                  href={settings.facebookUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-stone-300 transition hover:border-white/25 hover:text-white"
-                >
-                  Facebook
-                </a>
-              )}
-              {settings.instagramUrl && (
-                <a
-                  href={settings.instagramUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-stone-300 transition hover:border-white/25 hover:text-white"
-                >
-                  Instagram
-                </a>
-              )}
+              {[
+                { href: settings?.facebookUrl, label: "Facebook" },
+                { href: settings?.instagramUrl, label: "Instagram" },
+                { href: settings?.tiktokUrl, label: "TikTok" },
+                { href: settings?.youtubeUrl, label: "YouTube" },
+              ]
+                .filter((l) => l.href?.trim())
+                .map((link) => (
+                  <a
+                    key={link.label}
+                    href={link.href!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-stone-300 transition hover:border-white/25 hover:text-white"
+                  >
+                    {link.label}
+                  </a>
+                ))}
             </div>
           )}
         </div>

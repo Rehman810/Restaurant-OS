@@ -909,8 +909,14 @@ model StoreSettings {
   closeHour           Int      @default(2)
   closeMinute         Int      @default(30)
   weeklySchedule      Json?
+  specialHours        Json     @default("[]")
   closedMessage       String   @default("")
   forceClosed         Boolean  @default(false)
+  onlineCloseReason   String   @default("")
+  onlineClosedAt      DateTime?
+  onlineClosedByUserId String?
+  onlineReopenAt      DateTime?
+  lastOrderCutoffMinutes Int    @default(0)
   taxEnabled          Boolean  @default(false)
   taxLegalName        String   @default("")
   taxBusinessAddress  String   @default("")
@@ -990,6 +996,7 @@ model StoreSettings {
   suggestedPriceRoundingStep      Int     @default(10)
   suspiciousLowCostFraction       Decimal @default(0.25) @db.Decimal(5, 4)
   ingredientPriceChangeAlertPercent Decimal @default(10) @db.Decimal(5, 2)
+  settingsVersion     Int      @default(0)
   updatedAt           DateTime @updatedAt
 }
 

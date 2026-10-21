@@ -26,6 +26,12 @@ import {
   Printer,
 } from "lucide-react";
 import { Role } from "@/lib/types";
+import {
+  SETTINGS_SECTIONS,
+  SettingsSectionId,
+  roleMayAccessSettingsSection,
+  settingsPath,
+} from "@/modules/settings/ia";
 
 export type NavItem = { href: string; label: string; icon: typeof LayoutDashboard };
 export type NavSection = { title: string; items: NavItem[] };
@@ -152,6 +158,15 @@ export function navSectionsForRole(role: Role, opts?: NavOptions): NavSection[] 
     ];
   }
   return applyNavOptions(ADMIN_NAV_SECTIONS, opts);
+}
+
+/** Settings sections visible in admin settings IA (role-guarded). */
+export function settingsNavForRole(role: Role): { href: string; label: string; sectionId: SettingsSectionId }[] {
+  return SETTINGS_SECTIONS.filter((s) => roleMayAccessSettingsSection(role, s.id)).map((s) => ({
+    href: settingsPath(s.id),
+    label: s.label,
+    sectionId: s.id,
+  }));
 }
 
 export const MOBILE_NAV_FOR_ROLE: Record<Role, NavItem[]> = {

@@ -6,6 +6,7 @@ import {
   Role,
 } from "@prisma/client";
 import { prisma } from "../prisma";
+import { orderAlertThresholds } from "../order-alert-thresholds";
 import { getStoreSettings } from "../settings-data";
 import { COMPLETED_STATUSES } from "../dashboard/order-completion";
 import { aggregatePeriodOrderMetrics } from "../metrics/period-stats";
@@ -113,11 +114,7 @@ export async function buildAnalyticsOverview(params: OverviewParams): Promise<An
   const granularity = capGranularity(preset.fromKey, preset.toKey, params.timezone, params.granularity);
 
   const settings = await getStoreSettings();
-  const lateThresholds = {
-    lateConfirmMinutes: settings.lateConfirmMinutes ?? 15,
-    latePrepMinutes: settings.latePrepMinutes ?? 25,
-    lateDeliveryMinutes: settings.lateDeliveryMinutes ?? 45,
-  };
+  const lateThresholds = orderAlertThresholds(settings);
   const minDays = params.minInsightDays ?? 7;
   const minOrders = params.minInsightOrders ?? 20;
 

@@ -17,6 +17,7 @@ type AuthCtx = {
   register: (data: { name: string; email: string; password: string; phone?: string }) => Promise<User>;
   logout: () => void;
   logoutEverywhere: () => Promise<void>;
+  refreshUser: () => Promise<User>;
 };
 
 const Ctx = createContext<AuthCtx | null>(null);
@@ -86,6 +87,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         setUser(null);
         reconnectLiveSocket();
+      },
+      refreshUser: async () => {
+        const me = await api<User>("/auth/me");
+        setUser(me);
+        reconnectLiveSocket();
+        return me;
       },
     }),
     [user, loading]

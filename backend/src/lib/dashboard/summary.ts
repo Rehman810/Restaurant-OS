@@ -11,6 +11,7 @@ import {
   WaitlistStatus,
 } from "@prisma/client";
 import { prisma } from "../prisma";
+import { orderAlertThresholds } from "../order-alert-thresholds";
 import { getStoreSettings } from "../settings-data";
 import { storeTodayUtcRange } from "../reports/time-range";
 import { nextOpening } from "../hours";
@@ -156,9 +157,7 @@ export async function buildDashboardSummary(
   const lastWeekRange = utcRangeForStoreDateKey(lastWeekKey, timezone);
 
   const thresholds = {
-    lateConfirmMinutes: settings.lateConfirmMinutes ?? 15,
-    latePrepMinutes: settings.latePrepMinutes ?? 30,
-    lateDeliveryMinutes: settings.lateDeliveryMinutes ?? 45,
+    ...orderAlertThresholds(settings),
     shiftOpenWarningHours: settings.shiftOpenWarningHours ?? 12,
     riderCashWarningHours: settings.riderCashStaleHours ?? 24,
     lowRatingThreshold: settings.lowRatingThreshold ?? 2,

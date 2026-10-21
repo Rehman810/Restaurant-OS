@@ -1,5 +1,6 @@
-import { Role, type StoreSettings } from "@prisma/client";
+import type { StoreSettings } from "@prisma/client";
 import { prisma } from "./prisma";
+import { staffRolesForNewOrderEmail } from "./notification-email-matrix";
 import { getStoreSettings } from "./settings-data";
 
 export const DEFAULT_STORE_NAME = "";
@@ -32,12 +33,7 @@ export async function getEmailBranding() {
 
 /** Recipients for new-order staff alert emails (respects per-role toggles in settings). */
 export async function staffOrderAlertEmails(settings: StoreSettings) {
-  const roles: Role[] = [];
-  if (settings.emailNotifyAdmin) roles.push(Role.ADMIN);
-  if (settings.emailNotifyManager) roles.push(Role.MANAGER);
-  if (settings.emailNotifyChef) roles.push(Role.CHEF);
-  if (settings.emailNotifyCashier) roles.push(Role.CASHIER);
-  if (settings.emailNotifyWaiter) roles.push(Role.WAITER);
+  const roles = staffRolesForNewOrderEmail(settings);
 
   const staff =
     roles.length > 0

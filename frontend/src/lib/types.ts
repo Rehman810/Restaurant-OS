@@ -73,6 +73,8 @@ export type StoreHighlights = {
 
 export type StoreSettings = {
   id: string;
+  /** Optimistic concurrency token from the API */
+  version?: number;
   storeName: string;
   storeTagline: string;
   logoUrl?: string;
@@ -139,7 +141,14 @@ export type StoreSettings = {
   closeHour: number;
   closeMinute: number;
   closedMessage: string;
+  specialHours?: unknown;
   forceClosed: boolean;
+  onlineCloseReason?: string;
+  onlineClosedAt?: string | null;
+  onlineClosedByUserId?: string | null;
+  onlineClosedByName?: string | null;
+  onlineReopenAt?: string | null;
+  lastOrderCutoffMinutes?: number;
   autoConfirmOrders: boolean;
   autoAssignRiders: boolean;
   emailNotifyAdmin: boolean;

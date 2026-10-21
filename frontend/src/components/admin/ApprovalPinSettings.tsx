@@ -10,6 +10,7 @@ export function ApprovalPinSettings() {
   const { user } = useAuth();
   const allowed = user?.role === "ADMIN" || user?.role === "MANAGER";
   const [pin, setPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -17,6 +18,10 @@ export function ApprovalPinSettings() {
   if (!allowed) return null;
 
   async function save() {
+    if (pin !== confirmPin) {
+      setError("PIN and confirmation do not match.");
+      return;
+    }
     setSaving(true);
     setMsg("");
     setError("");
@@ -27,6 +32,7 @@ export function ApprovalPinSettings() {
       });
       setMsg("Approval PIN updated.");
       setPin("");
+      setConfirmPin("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save PIN.");
     } finally {
@@ -36,6 +42,7 @@ export function ApprovalPinSettings() {
 
   return (
     <SettingsSection
+      id="setting-my-account-approval-pin"
       icon={Shield}
       title="Manager approval PIN"
       description="4–6 digit PIN used to approve voids, discounts, and refunds at the POS."
@@ -51,9 +58,25 @@ export function ApprovalPinSettings() {
           onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
         />
       </SettingsField>
+      <SettingsField label="Confirm PIN">
+        <input
+          type="password"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          maxLength={6}
+          className="input max-w-xs"
+          value={confirmPin}
+          onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ""))}
+        />
+      </SettingsField>
       {msg && <p className="text-sm text-emerald-600">{msg}</p>}
       {error && <p className="text-sm text-rose-600">{error}</p>}
-      <button type="button" className="btn-primary mt-2" disabled={saving || pin.length < 4} onClick={() => void save()}>
+      <button
+        type="button"
+        className="btn-primary mt-2"
+        disabled={saving || pin.length < 4 || pin !== confirmPin}
+        onClick={() => void save()}
+      >
         {saving ? "Saving…" : "Save PIN"}
       </button>
     </SettingsSection>

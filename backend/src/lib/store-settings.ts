@@ -1,5 +1,6 @@
 import { StoreSettings } from "@prisma/client";
-import { coerceSchedule, defaultClosedMessage, hoursText, isKitchenOpen } from "./hours";
+import { coerceSchedule, hoursText } from "./hours";
+import { isOnlineOrderingOpen, onlineOrderingClosedMessage, isScheduleOpen } from "./online-ordering";
 
 export function getZonedMinutes(now = new Date(), timeZone = "Asia/Karachi") {
   const parts = new Intl.DateTimeFormat("en-GB", {
@@ -31,21 +32,19 @@ export function scheduleFor(settings: Pick<StoreSettings, "weeklySchedule" | "op
   return coerceSchedule(settings.weeklySchedule, settings);
 }
 
+/** @deprecated alias — online ordering availability */
 export function isStoreOpen(settings: StoreSettings, now = new Date()) {
-  return isKitchenOpen(
-    { forceClosed: settings.forceClosed, timezone: settings.timezone, schedule: scheduleFor(settings) },
-    now
-  );
+  return isOnlineOrderingOpen(settings, now);
 }
+
+export { isScheduleOpen, isOnlineOrderingOpen };
 
 export function publicHoursLabel(settings: StoreSettings) {
   return hoursText(scheduleFor(settings));
 }
 
 export function publicClosedMessage(settings: StoreSettings, now = new Date()) {
-  const custom = settings.closedMessage.trim();
-  if (custom) return custom;
-  return defaultClosedMessage(scheduleFor(settings), settings.timezone || "Asia/Karachi", now);
+  return onlineOrderingClosedMessage(settings, now);
 }
 
 export function formatTime12(h: number, m: number) {

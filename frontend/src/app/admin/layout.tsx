@@ -9,6 +9,7 @@ import { StoreLogo } from "@/components/StoreLogo";
 import { AdminThemeToggle } from "@/components/admin/AdminThemeToggle";
 import { BranchSwitcher } from "@/components/admin/BranchSwitcher";
 import { MOBILE_NAV_FOR_ROLE, navSectionsForRole } from "@/modules/admin/navigation";
+import { settingsPath } from "@/modules/settings/ia";
 import { isAdminNavActive } from "@/modules/admin/nav-active";
 import { fetchPendingBookingsCount } from "@/modules/dine-in/api";
 import { BranchProvider } from "@/modules/branches/BranchContext";
@@ -28,7 +29,9 @@ import { readTrackingTv } from "@/lib/tracking/display";
 import { fetchTrackingSummary } from "@/lib/admin-orders/tracking";
 import { unlockKitchenAudio } from "@/lib/kitchen-chime";
 
-const SIDEBAR_KEY = "uff-admin-sidebar-collapsed";
+import { ADMIN_SIDEBAR_COLLAPSED_KEY } from "@/lib/admin-sidebar";
+
+const SIDEBAR_KEY = ADMIN_SIDEBAR_COLLAPSED_KEY;
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, logout } = useAuth();
@@ -109,6 +112,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     setCollapsed((prev) => {
       const next = !prev;
       localStorage.setItem(SIDEBAR_KEY, next ? "1" : "0");
+      window.dispatchEvent(new Event("admin-sidebar-change"));
       return next;
     });
   }
@@ -246,6 +250,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         "/admin/dine-in",
         "/admin/riders/cash",
         "/admin/kitchen/stations",
+        "/admin/settings/my-account",
       ].some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
       if (!allowedPath) router.replace("/admin");
       return;
@@ -502,10 +507,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </button>
               {menuOpen && (
                 <div role="menu" className="absolute right-0 z-40 mt-2 w-52 rounded-xl border border-stone-200 bg-white p-1 shadow-lg dark:border-stone-600 dark:bg-stone-800 lg:hidden">
+                  {(user.role === "ADMIN" || user.role === "MANAGER") && (
+                    <Link
+                      href={user.role === "MANAGER" ? settingsPath("my-account") : "/admin/settings"}
+                      role="menuitem"
+                      className="flex min-h-11 w-full items-center rounded-lg px-3 py-2 text-sm font-semibold text-stone-800 hover:bg-stone-50 dark:text-stone-100 dark:hover:bg-stone-700"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      {user.role === "MANAGER" ? "My account" : "Settings"}
+                    </Link>
+                  )}
                   <button
                     type="button"
                     role="menuitem"
-                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                    className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
                     onClick={() => { setMenuOpen(false); logout(); router.push("/"); }}
                   >
                     <LogOut size={14} /> Log out

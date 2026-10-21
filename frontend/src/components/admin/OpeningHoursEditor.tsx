@@ -1,8 +1,16 @@
 "use client";
 
 import { Clock, Plus, X } from "lucide-react";
-import { WEEKDAYS, WeeklySchedule, coerceSchedule, formatHm, parseMinutes, type Weekday } from "@/lib/hours";
-import { isStoreOpen, scheduleHoursLabel, storeStatusLabel } from "@/lib/store-hours";
+import {
+  WEEKDAYS,
+  WeeklySchedule,
+  coerceSchedule,
+  formatHm,
+  parseMinutes,
+  type TimeSlot,
+  type Weekday,
+} from "@/lib/hours";
+import { isKitchenScheduleOpen, isStoreOpen, storeStatusLabel } from "@/lib/store-hours";
 import { StoreSettings } from "@/lib/types";
 
 const LABELS: Record<Weekday, string> = {
@@ -42,8 +50,9 @@ function TimePicker({
   const minute = total % 60;
   const period = hour24 >= 12 ? "PM" : "AM";
   const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
-  const minuteOptions = Array.from(new Set([...Array.from({ length: 12 }, (_, i) => i * 5), minute])).sort(
-    (a, b) => a - b
+  const minuteOptions = Array.from({ length: 4 }, (_, i) => i * 15);
+  const snappedMinute = minuteOptions.reduce((best, option) =>
+    Math.abs(option - minute) < Math.abs(best - minute) ? option : best
   );
 
   function emit(nextHour12: number, nextMinute: number, nextPeriod: "AM" | "PM") {
@@ -74,7 +83,7 @@ function TimePicker({
       <select
         aria-label={`${label} minute`}
         className="h-full w-11 appearance-none bg-transparent pr-1 text-center text-sm font-semibold text-stone-900 outline-none"
-        value={minute}
+        value={snappedMinute}
         onChange={(e) => emit(hour12, Number(e.target.value), period)}
       >
         {minuteOptions.map((option) => (
@@ -106,9 +115,60 @@ function endsNextDay(open: string, close: string) {
   return openMin != null && closeMin != null && closeMin <= openMin;
 }
 
+function slotDurationMinutes(slot: TimeSlot) {
+  const open = parseMinutes(slot.open);
+  const close = parseMinutes(slot.close);
+  if (open == null || close == null) return null;
+  if (open === close) return 0;
+  if (close > open) return close - open;
+  return 24 * 60 - open + close;
+}
+
+function scheduleWarnings(schedule: WeeklySchedule): string[] {
+  const warnings: string[] = [];
+  for (const day of WEEKDAYS) {
+    const row = schedule[day];
+    if (row.closed) continue;
+    for (const slot of row.slots) {
+      const open = parseMinutes(slot.open);
+      const close = parseMinutes(slot.close);
+      if (open == null || close == null) {
+        warnings.push(`${LABELS[day]}: use valid times like 19:00.`);
+        continue;
+      }
+      if (open % 15 !== 0 || close % 15 !== 0) {
+        warnings.push(`${LABELS[day]}: times snap to 15-minute steps when saved.`);
+      }
+      const duration = slotDurationMinutes(slot);
+      if (duration != null && duration > 0 && duration < 30) {
+        warnings.push(`${LABELS[day]}: slot shorter than 30 minutes may be hard to staff.`);
+      }
+    }
+    const active = row.slots
+      .map((slot) => {
+        const open = parseMinutes(slot.open);
+        const close = parseMinutes(slot.close);
+        if (open == null || close == null) return null;
+        const end = close <= open ? close + 24 * 60 : close;
+        return { open, end };
+      })
+      .filter(Boolean) as { open: number; end: number }[];
+    active.sort((a, b) => a.open - b.open);
+    for (let i = 1; i < active.length; i += 1) {
+      if (active[i].open < active[i - 1].end) {
+        warnings.push(`${LABELS[day]}: overlapping slots — customers may see confusing hours.`);
+        break;
+      }
+    }
+  }
+  return [...new Set(warnings)];
+}
+
 export function OpeningHoursEditor({ settings, onChange }: OpeningHoursEditorProps) {
   const schedule = coerceSchedule(settings.weeklySchedule, settings);
-  const open = isStoreOpen(settings);
+  const onlineOpen = isStoreOpen(settings);
+  const kitchenOpen = isKitchenScheduleOpen(settings);
+  const warnings = scheduleWarnings(schedule);
 
   function update(next: WeeklySchedule) {
     onChange(withLegacy(next));
@@ -195,7 +255,7 @@ export function OpeningHoursEditor({ settings, onChange }: OpeningHoursEditorPro
                     />
                     {endsNextDay(slot.open, slot.close) && (
                       <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
-                        +1 day
+                        closes next day
                       </span>
                     )}
                     {row.slots.length > 1 && (
@@ -226,19 +286,39 @@ export function OpeningHoursEditor({ settings, onChange }: OpeningHoursEditorPro
         })}
       </div>
 
-      <div className={`self-stretch border-t px-3 py-2.5 ${open ? "border-emerald-100 bg-emerald-50/80" : "border-amber-100 bg-amber-50/80"}`}>
+      {warnings.length > 0 && (
+        <div className="self-stretch border-t border-amber-100 bg-amber-50/60 px-3 py-2">
+          <ul className="space-y-0.5 text-[11px] font-medium text-amber-900">
+            {warnings.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div
+        className={`self-stretch border-t px-3 py-2.5 ${
+          onlineOpen ? "border-emerald-100 bg-emerald-50/80" : "border-amber-100 bg-amber-50/80"
+        }`}
+      >
         <div className="flex flex-wrap items-center gap-2">
           <span
             className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${
-              open ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"
+              onlineOpen ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"
             }`}
           >
-            <span className={`h-1.5 w-1.5 rounded-full ${open ? "bg-emerald-500" : "bg-amber-500"}`} />
-            {open ? "Open now" : "Closed now"}
+            <span className={`h-1.5 w-1.5 rounded-full ${onlineOpen ? "bg-emerald-500" : "bg-amber-500"}`} />
+            {onlineOpen ? "Online open" : "Online closed"}
           </span>
-          <span className="text-xs font-semibold text-stone-800">{scheduleHoursLabel(settings)}</span>
+          <span
+            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${
+              kitchenOpen ? "bg-sky-100 text-sky-900" : "bg-stone-100 text-stone-700"
+            }`}
+          >
+            Kitchen {kitchenOpen ? "on schedule" : "closed"}
+          </span>
         </div>
-        <p className="mt-0.5 text-[11px] text-stone-600">{storeStatusLabel(settings)}</p>
+        <p className="mt-1 text-xs font-semibold text-stone-800">{storeStatusLabel(settings)}</p>
       </div>
     </div>
   );

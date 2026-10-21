@@ -218,8 +218,8 @@ dineInPublicRouter.post("/reservations", publicBookingLimiter, async (req, res) 
 
   const hours = await loadBranchHours(branch.id);
   const schedule = hours.schedule;
-  const { forceClosed, timezone } = hours;
-  if (!isKitchenOpen({ forceClosed, timezone, schedule }, when)) {
+  const { timezone } = hours;
+  if (!isKitchenOpen({ forceClosed: false, timezone, schedule }, when)) {
     return res.status(409).json({ error: "Selected time is outside opening hours." });
   }
 

@@ -159,7 +159,9 @@ export function isKitchenOpen(
 function slotPhrase(slot: TimeSlot) {
   const open = parseMinutes(slot.open)!;
   const close = parseMinutes(slot.close)!;
-  return `${formatTime12(Math.floor(open / 60), open % 60)} – ${formatTime12(Math.floor(close / 60), close % 60)}`;
+  const overnight = close <= open;
+  const base = `${formatTime12(Math.floor(open / 60), open % 60)} – ${formatTime12(Math.floor(close / 60), close % 60)}`;
+  return overnight ? `${base}, next day` : base;
 }
 
 function dayPhrase(day: DaySchedule) {
@@ -187,10 +189,13 @@ export function hoursText(schedule: WeeklySchedule) {
 
 export function nextOpening(schedule: WeeklySchedule, timeZone: string, now = new Date()) {
   const start = zonedClock(now, timeZone);
+  if (isOpenAt(schedule, start.weekday, start.minutes)) {
+    return null;
+  }
   let weekday = start.weekday;
   let minutes = start.minutes;
-  for (let step = 1; step <= 8 * 24 * 60; step += 1) {
-    minutes += 1;
+  for (let step = 0; step <= 8 * 24 * 60; step += 1) {
+    if (step > 0) minutes += 1;
     if (minutes >= 24 * 60) {
       minutes = 0;
       weekday = nextDay(weekday);
@@ -210,6 +215,11 @@ export function nextOpening(schedule: WeeklySchedule, timeZone: string, now = ne
 
 export function defaultClosedMessage(schedule: WeeklySchedule, timeZone: string, now = new Date()) {
   const next = nextOpening(schedule, timeZone, now);
-  if (!next) return "Sorry, we are closed right now.";
-  return `Sorry, we are closed right now. We open ${next.label}.`;
+  const opensAt = next?.label ?? "soon";
+  return `Sorry, we are closed right now. We open ${opensAt}.`;
+}
+
+export function closedMessageTemplateExample(schedule: WeeklySchedule, timeZone: string, now = new Date()) {
+  const opensAt = nextOpening(schedule, timeZone, now)?.label ?? "today at 7:00 PM";
+  return `Sorry, we're closed. We open {opensAt}.`.replace("{opensAt}", opensAt);
 }

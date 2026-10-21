@@ -40,7 +40,7 @@ export function listAvailableSlotStarts(
       const local = `${dateYmd}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`;
       const utc = new Date(local + "Z");
       if (utc <= now || utc > horizon) continue;
-      if (!isKitchenOpen({ forceClosed, timezone, schedule }, utc)) continue;
+      if (!isKitchenOpen({ forceClosed: false, timezone, schedule }, utc)) continue;
       slots.push(utc.toISOString());
     }
   }

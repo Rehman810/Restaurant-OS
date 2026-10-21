@@ -91,6 +91,7 @@ export function TwoFactorSettings() {
 
   return (
     <SettingsSection
+      id="setting-my-account-two-factor"
       icon={Shield}
       title="Google Authenticator"
       description="Add a 6-digit app code for admin sign-in. Required after setup on every login."

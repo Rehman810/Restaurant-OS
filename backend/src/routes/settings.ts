@@ -3,13 +3,55 @@ import { Role } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { fetchGoogleReviews } from "../lib/google-reviews";
 import { getPublicStorePayload, getStoreSettings } from "../lib/settings-data";
-import { validateSettingsInput } from "../lib/settings-validate";
+import { firstSettingsErrorMessage, normalizeSettingsPatch, validateSettingsInput } from "../lib/settings-validate";
+import {
+  buildStoreSettingsUpdateData,
+  patchStoreSettingsSection,
+  adminSettingsWithVersion,
+  settingsWithVersion,
+} from "../lib/settings-update";
+import { assertSettingsSectionAccess, SETTINGS_SECTION_IDS } from "../lib/settings-sections";
+import { pickSectionPatch, STOREFRONT_SETTINGS_SECTIONS } from "../lib/settings-section-fields";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { diffSettingsKeys, settingsSnapshotForAudit, writeAudit } from "../lib/audit";
 import { AuditAction } from "../lib/audit-actions";
 import { clientIp } from "../lib/client-ip";
+import {
+  listSettingsSectionsForRole,
+  SETTINGS_SECTION_LABELS,
+  type SettingsSectionId,
+} from "../lib/settings-sections";
+import { checkDangerousSettingsConfirm } from "../lib/settings-save-guard";
+import { entryIsRestorable, sectionForAuditKey, settingsAuditMeta } from "../lib/settings-audit";
+import { NOTIFICATION_EMAIL_ROWS, NOTIFY_ROLE_COLUMNS } from "../lib/notification-email-matrix";
+import { CONTACT_FIELD_USAGE, CONTACT_NOT_IN_THIS_SECTION } from "../lib/contact-sot";
+import { getIntegrationsStatus } from "../lib/integrations-status";
 
 export const settingsRouter = Router();
+
+async function adminSettingsResponse(settings: Awaited<ReturnType<typeof getStoreSettings>>) {
+  return adminSettingsWithVersion(settings, async (userId) => {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
+    return user?.name ?? null;
+  });
+}
+
+settingsRouter.get("/sections", requireAuth, async (req, res) => {
+  const role = req.user!.role;
+  res.json({ sections: listSettingsSectionsForRole(role) });
+});
+
+settingsRouter.get("/notifications/email-matrix", requireAuth, requireRole(Role.ADMIN), (_req, res) => {
+  res.json({ rows: NOTIFICATION_EMAIL_ROWS, columns: NOTIFY_ROLE_COLUMNS });
+});
+
+settingsRouter.get("/contact/usage", requireAuth, requireRole(Role.ADMIN), (_req, res) => {
+  res.json({ fields: CONTACT_FIELD_USAGE, editedElsewhere: CONTACT_NOT_IN_THIS_SECTION });
+});
+
+settingsRouter.get("/integrations/status", requireAuth, requireRole(Role.ADMIN), (_req, res) => {
+  res.json(getIntegrationsStatus());
+});
 
 settingsRouter.get("/public", async (_req, res) => {
   res.json(await getPublicStorePayload());
@@ -29,314 +71,87 @@ settingsRouter.get("/", requireAuth, requireRole(Role.ADMIN), async (_req, res) 
     }),
     prisma.testimonial.findMany({ orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] }),
   ]);
-  res.json({ settings, banners, testimonials });
+  res.json({
+    settings: await adminSettingsResponse(settings),
+    banners,
+    testimonials,
+  });
 });
 
-settingsRouter.patch("/", requireAuth, requireRole(Role.ADMIN), async (req, res) => {
+settingsRouter.patch("/sections/:sectionId", requireAuth, requireRole(Role.ADMIN), async (req, res) => {
+  const sectionId = req.params.sectionId;
+  if (!SETTINGS_SECTION_IDS.includes(sectionId as SettingsSectionId)) {
+    return res.status(404).json({ code: "SECTION_NOT_FOUND", error: "Unknown settings section." });
+  }
+  assertSettingsSectionAccess(req.user!.role, sectionId);
+
   const body = req.body as Record<string, unknown>;
-  const fieldErrors = validateSettingsInput(body);
-  if (Object.keys(fieldErrors).length) {
-    return res.status(400).json({ error: Object.values(fieldErrors)[0], fields: fieldErrors });
-  }
-  const num = (v: unknown) => (v === undefined || v === "" ? undefined : Number(v));
-
-  const hour = (v: unknown) => {
-    if (v === undefined || v === "") return undefined;
-    const n = Number(v);
-    if (!Number.isFinite(n) || n < 0 || n > 23) return null;
-    return Math.floor(n);
-  };
-  const minute = (v: unknown) => {
-    if (v === undefined || v === "") return undefined;
-    const n = Number(v);
-    if (!Number.isFinite(n) || n < 0 || n > 59) return null;
-    return Math.floor(n);
-  };
-
-  if (body.openHour !== undefined && hour(body.openHour) === null) {
-    return res.status(400).json({ error: "Open hour must be between 0 and 23." });
-  }
-  if (body.closeHour !== undefined && hour(body.closeHour) === null) {
-    return res.status(400).json({ error: "Close hour must be between 0 and 23." });
-  }
-  if (body.openMinute !== undefined && minute(body.openMinute) === null) {
-    return res.status(400).json({ error: "Open minute must be between 0 and 59." });
-  }
-  if (body.closeMinute !== undefined && minute(body.closeMinute) === null) {
-    return res.status(400).json({ error: "Close minute must be between 0 and 59." });
-  }
-  if (body.minimumOrder !== undefined) {
-    const min = num(body.minimumOrder);
-    if (min !== undefined && (!Number.isFinite(min) || min < 0)) {
-      return res.status(400).json({ error: "Minimum order must be zero or greater." });
-    }
-  }
-  if (body.freeDeliveryAbove !== undefined && body.freeDeliveryAbove !== null) {
-    const free = num(body.freeDeliveryAbove);
-    if (free !== undefined && (!Number.isFinite(free) || free < 0)) {
-      return res.status(400).json({ error: "Free delivery threshold must be zero or greater." });
-    }
+  const expectedVersion = Number(body.version);
+  if (!Number.isInteger(expectedVersion) || expectedVersion < 0) {
+    return res.status(400).json({
+      code: "VERSION_REQUIRED",
+      error: "Include the current settings version when saving.",
+    });
   }
 
   const current = await getStoreSettings();
-  const beforeSnap = settingsSnapshotForAudit(current as unknown as Record<string, unknown>);
-  const touchedKeys = Object.keys(body);
-  const settings = await prisma.$transaction(async (tx) => {
-    const updated = await tx.storeSettings.update({
-    where: { id: current.id },
-    data: {
-      ...(body.storeName !== undefined ? { storeName: String(body.storeName).trim() } : {}),
-      ...(body.logoUrl !== undefined ? { logoUrl: String(body.logoUrl).trim() } : {}),
-      ...(body.faviconUrl !== undefined ? { faviconUrl: String(body.faviconUrl).trim() } : {}),
-      ...(body.primaryColor !== undefined ? { primaryColor: String(body.primaryColor).trim() || "#ea580c" } : {}),
-      ...(body.accentColor !== undefined ? { accentColor: String(body.accentColor).trim() || "#c2410c" } : {}),
-      ...(body.city !== undefined ? { city: String(body.city).trim() } : {}),
-      ...(body.timezone !== undefined ? { timezone: String(body.timezone).trim() || "Asia/Karachi" } : {}),
-      ...(body.currencyCode !== undefined ? { currencyCode: String(body.currencyCode).trim().toUpperCase() || "PKR" } : {}),
-      ...(body.currencySymbol !== undefined ? { currencySymbol: String(body.currencySymbol).trim() || "Rs" } : {}),
-      ...(body.footerText !== undefined ? { footerText: String(body.footerText) } : {}),
-      ...(body.showLiveStats !== undefined ? { showLiveStats: Boolean(body.showLiveStats) } : {}),
-      ...(body.showReviewsSection !== undefined ? { showReviewsSection: Boolean(body.showReviewsSection) } : {}),
-      ...(body.inventoryAutoHideMenu !== undefined
-        ? { inventoryAutoHideMenu: Boolean(body.inventoryAutoHideMenu) }
-        : {}),
-      ...(body.inventoryAllowNegative !== undefined
-        ? { inventoryAllowNegative: Boolean(body.inventoryAllowNegative) }
-        : {}),
-      ...(body.inventoryDeductAtPreparing !== undefined
-        ? { inventoryDeductAtPreparing: Boolean(body.inventoryDeductAtPreparing) }
-        : {}),
-      ...(body.maxCashierDiscountPercent !== undefined
-        ? { maxCashierDiscountPercent: num(body.maxCashierDiscountPercent) ?? 10 }
-        : {}),
-      ...(body.requireApprovalForVoid !== undefined
-        ? { requireApprovalForVoid: Boolean(body.requireApprovalForVoid) }
-        : {}),
-      ...(body.requireApprovalForRefund !== undefined
-        ? { requireApprovalForRefund: Boolean(body.requireApprovalForRefund) }
-        : {}),
-      ...(body.requireApprovalForPriceOverride !== undefined
-        ? { requireApprovalForPriceOverride: Boolean(body.requireApprovalForPriceOverride) }
-        : {}),
-      ...(body.voidReasonOptions !== undefined ? { voidReasonOptions: body.voidReasonOptions as object } : {}),
-      ...(body.discountReasonOptions !== undefined
-        ? { discountReasonOptions: body.discountReasonOptions as object }
-        : {}),
-      ...(body.refundReasonOptions !== undefined
-        ? { refundReasonOptions: body.refundReasonOptions as object }
-        : {}),
-      ...(body.shiftVarianceTolerance !== undefined
-        ? { shiftVarianceTolerance: num(body.shiftVarianceTolerance) ?? 500 }
-        : {}),
-      ...(body.riderCashStaleHours !== undefined
-        ? { riderCashStaleHours: Number(body.riderCashStaleHours) || 24 }
-        : {}),
-      ...(body.lateConfirmMinutes !== undefined
-        ? { lateConfirmMinutes: Math.max(1, Math.floor(Number(body.lateConfirmMinutes) || 15)) }
-        : {}),
-      ...(body.latePrepMinutes !== undefined
-        ? { latePrepMinutes: Math.max(1, Math.floor(Number(body.latePrepMinutes) || 30)) }
-        : {}),
-      ...(body.lateDeliveryMinutes !== undefined
-        ? { lateDeliveryMinutes: Math.max(1, Math.floor(Number(body.lateDeliveryMinutes) || 45)) }
-        : {}),
-      ...(body.ordersStaleHours !== undefined
-        ? { ordersStaleHours: Math.max(1, Math.floor(Number(body.ordersStaleHours) || 2)) }
-        : {}),
-      ...(body.duplicateOrderWindowMinutes !== undefined
-        ? {
-            duplicateOrderWindowMinutes: Math.max(
-              1,
-              Math.floor(Number(body.duplicateOrderWindowMinutes) || 10)
-            ),
-          }
-        : {}),
-      ...(body.trackingCompletedWindowHours !== undefined
-        ? {
-            trackingCompletedWindowHours: Math.max(
-              0,
-              Math.floor(Number(body.trackingCompletedWindowHours) || 0)
-            ),
-          }
-        : {}),
-      ...(body.shiftOpenWarningHours !== undefined
-        ? { shiftOpenWarningHours: Math.max(1, Math.floor(Number(body.shiftOpenWarningHours) || 12)) }
-        : {}),
-      ...(body.lowRatingThreshold !== undefined
-        ? { lowRatingThreshold: Math.min(5, Math.max(1, Math.floor(Number(body.lowRatingThreshold) || 2))) }
-        : {}),
-      ...(body.twoFaReminderDays !== undefined
-        ? { twoFaReminderDays: Math.max(1, Math.floor(Number(body.twoFaReminderDays) || 7)) }
-        : {}),
-      ...(body.weekStartDay !== undefined
-        ? { weekStartDay: Math.min(6, Math.max(0, Math.floor(Number(body.weekStartDay) || 1))) }
-        : {}),
-      ...(body.analyticsInsightMinDays !== undefined
-        ? { analyticsInsightMinDays: Math.max(1, Math.floor(Number(body.analyticsInsightMinDays) || 7)) }
-        : {}),
-      ...(body.analyticsInsightMinOrders !== undefined
-        ? { analyticsInsightMinOrders: Math.max(1, Math.floor(Number(body.analyticsInsightMinOrders) || 20)) }
-        : {}),
-      ...(body.analyticsLowMarginPercent !== undefined
-        ? { analyticsLowMarginPercent: Math.min(100, Math.max(0, Math.floor(Number(body.analyticsLowMarginPercent) || 15))) }
-        : {}),
-      ...(body.analyticsSlowMoverDays !== undefined
-        ? { analyticsSlowMoverDays: Math.max(1, Math.floor(Number(body.analyticsSlowMoverDays) || 30)) }
-        : {}),
-      ...(body.analyticsEmailEnabled !== undefined
-        ? { analyticsEmailEnabled: Boolean(body.analyticsEmailEnabled) }
-        : {}),
-      ...(body.analyticsEmailFrequency !== undefined
-        ? {
-            analyticsEmailFrequency:
-              String(body.analyticsEmailFrequency) === "daily" ? "daily" : "weekly",
-          }
-        : {}),
-      ...(body.analyticsEmailRecipients !== undefined
-        ? { analyticsEmailRecipients: String(body.analyticsEmailRecipients) }
-        : {}),
-      ...(body.analyticsEmailSendHour !== undefined
-        ? { analyticsEmailSendHour: Math.min(23, Math.max(0, Math.floor(Number(body.analyticsEmailSendHour) || 8))) }
-        : {}),
-      ...(body.offlinePosEnabled !== undefined
-        ? { offlinePosEnabled: Boolean(body.offlinePosEnabled) }
-        : {}),
-      ...(body.offlineClockSkewThresholdMinutes !== undefined
-        ? { offlineClockSkewThresholdMinutes: Math.max(1, Math.floor(Number(body.offlineClockSkewThresholdMinutes) || 10)) }
-        : {}),
-      ...(body.storefrontPushEnabled !== undefined
-        ? { storefrontPushEnabled: Boolean(body.storefrontPushEnabled) }
-        : {}),
-      ...(body.autoPrintKitchenTickets !== undefined
-        ? { autoPrintKitchenTickets: Boolean(body.autoPrintKitchenTickets) }
-        : {}),
-      ...(body.loyaltyEarnPer100 !== undefined
-        ? { loyaltyEarnPer100: num(body.loyaltyEarnPer100) ?? 1 }
-        : {}),
-      ...(body.loyaltyRedeemPerPoint !== undefined
-        ? { loyaltyRedeemPerPoint: num(body.loyaltyRedeemPerPoint) ?? 1 }
-        : {}),
-      ...(body.loyaltyMaxRedeemPercent !== undefined
-        ? { loyaltyMaxRedeemPercent: num(body.loyaltyMaxRedeemPercent) ?? 20 }
-        : {}),
-      ...(body.storeTagline !== undefined
-        ? { storeTagline: String(body.storeTagline).trim() || "Order in minutes" }
-        : {}),
-      ...(body.phone !== undefined ? { phone: String(body.phone) } : {}),
-      ...(body.whatsapp !== undefined ? { whatsapp: String(body.whatsapp) } : {}),
-      ...(body.address !== undefined ? { address: String(body.address) } : {}),
-      ...(body.latitude !== undefined ? { latitude: num(body.latitude) } : {}),
-      ...(body.longitude !== undefined ? { longitude: num(body.longitude) } : {}),
-      ...(body.minimumOrder !== undefined ? { minimumOrder: num(body.minimumOrder) ?? 0 } : {}),
-      ...(body.freeDeliveryAbove !== undefined
-        ? { freeDeliveryAbove: body.freeDeliveryAbove === null ? null : num(body.freeDeliveryAbove) }
-        : {}),
-      ...(body.deliveryEstimateMin !== undefined
-        ? { deliveryEstimateMin: Number(body.deliveryEstimateMin) || 45 }
-        : {}),
-      ...(body.pickupEstimateMin !== undefined
-        ? { pickupEstimateMin: Number(body.pickupEstimateMin) || 20 }
-        : {}),
-      ...(body.openHour !== undefined ? { openHour: hour(body.openHour) ?? 0 } : {}),
-      ...(body.openMinute !== undefined ? { openMinute: minute(body.openMinute) ?? 0 } : {}),
-      ...(body.closeHour !== undefined ? { closeHour: hour(body.closeHour) ?? 23 } : {}),
-      ...(body.closeMinute !== undefined ? { closeMinute: minute(body.closeMinute) ?? 59 } : {}),
-      ...(body.weeklySchedule !== undefined ? { weeklySchedule: body.weeklySchedule as object } : {}),
-      ...(body.closedMessage !== undefined ? { closedMessage: String(body.closedMessage) } : {}),
-      ...(body.forceClosed !== undefined ? { forceClosed: Boolean(body.forceClosed) } : {}),
-      ...(body.taxPercent !== undefined ? { taxPercent: num(body.taxPercent) ?? 0 } : {}),
-      ...(body.taxLabel !== undefined ? { taxLabel: String(body.taxLabel).trim() || "Tax" } : {}),
-      ...(body.taxIncluded !== undefined ? { taxIncluded: Boolean(body.taxIncluded) } : {}),
-      ...(body.serviceChargePercent !== undefined
-        ? { serviceChargePercent: num(body.serviceChargePercent) ?? 0 }
-        : {}),
-      ...(body.serviceChargeLabel !== undefined
-        ? { serviceChargeLabel: String(body.serviceChargeLabel).trim() || "Service charge" }
-        : {}),
-      ...(body.serviceIncluded !== undefined ? { serviceIncluded: Boolean(body.serviceIncluded) } : {}),
-      ...(body.acceptCash !== undefined ? { acceptCash: Boolean(body.acceptCash) } : {}),
-      ...(body.acceptCard !== undefined ? { acceptCard: Boolean(body.acceptCard) } : {}),
-      ...(body.taxNumber !== undefined ? { taxNumber: String(body.taxNumber).trim() } : {}),
-      ...(body.taxEnabled !== undefined ? { taxEnabled: Boolean(body.taxEnabled) } : {}),
-      ...(body.taxLegalName !== undefined ? { taxLegalName: String(body.taxLegalName).trim() } : {}),
-      ...(body.taxBusinessAddress !== undefined
-        ? { taxBusinessAddress: String(body.taxBusinessAddress).trim() }
-        : {}),
-      ...(body.taxStrn !== undefined ? { taxStrn: String(body.taxStrn).trim() } : {}),
-      ...(body.taxRatesByFulfillment !== undefined
-        ? { taxRatesByFulfillment: body.taxRatesByFulfillment as object }
-        : {}),
-      ...(body.taxRatesByPayment !== undefined
-        ? { taxRatesByPayment: body.taxRatesByPayment as object }
-        : {}),
-      ...(body.taxFiscalYearEnabled !== undefined
-        ? { taxFiscalYearEnabled: Boolean(body.taxFiscalYearEnabled) }
-        : {}),
-      ...(body.taxRoundingRule !== undefined
-        ? { taxRoundingRule: String(body.taxRoundingRule).trim() || "HALF_UP" }
-        : {}),
-      ...(body.pricesIncludeTax !== undefined
-        ? { pricesIncludeTax: Boolean(body.pricesIncludeTax) }
-        : {}),
-      ...(body.receiptFooter !== undefined ? { receiptFooter: String(body.receiptFooter) } : {}),
-      ...(body.confirmSlaMinutes !== undefined
-        ? { confirmSlaMinutes: Number(body.confirmSlaMinutes) || 15 }
-        : {}),
-      ...(body.deliverySlaMinutes !== undefined
-        ? { deliverySlaMinutes: Number(body.deliverySlaMinutes) || 45 }
-        : {}),
-      ...(body.autoConfirmOrders !== undefined
-        ? { autoConfirmOrders: Boolean(body.autoConfirmOrders) }
-        : {}),
-      ...(body.autoAssignRiders !== undefined
-        ? { autoAssignRiders: Boolean(body.autoAssignRiders) }
-        : {}),
-      ...(body.emailNotifyAdmin !== undefined
-        ? { emailNotifyAdmin: Boolean(body.emailNotifyAdmin) }
-        : {}),
-      ...(body.emailNotifyManager !== undefined
-        ? { emailNotifyManager: Boolean(body.emailNotifyManager) }
-        : {}),
-      ...(body.emailNotifyChef !== undefined
-        ? { emailNotifyChef: Boolean(body.emailNotifyChef) }
-        : {}),
-      ...(body.emailNotifyCashier !== undefined
-        ? { emailNotifyCashier: Boolean(body.emailNotifyCashier) }
-        : {}),
-      ...(body.emailNotifyWaiter !== undefined
-        ? { emailNotifyWaiter: Boolean(body.emailNotifyWaiter) }
-        : {}),
-      ...(body.emailNotifyRider !== undefined
-        ? { emailNotifyRider: Boolean(body.emailNotifyRider) }
-        : {}),
-      ...(body.emailNotifyCustomer !== undefined
-        ? { emailNotifyCustomer: Boolean(body.emailNotifyCustomer) }
-        : {}),
-      ...(body.facebookUrl !== undefined ? { facebookUrl: String(body.facebookUrl) } : {}),
-      ...(body.instagramUrl !== undefined ? { instagramUrl: String(body.instagramUrl) } : {}),
-      ...(body.tiktokUrl !== undefined ? { tiktokUrl: String(body.tiktokUrl) } : {}),
-      ...(body.youtubeUrl !== undefined ? { youtubeUrl: String(body.youtubeUrl) } : {}),
-      ...(body.googlePlaceId !== undefined ? { googlePlaceId: String(body.googlePlaceId).trim() } : {}),
-      ...(body.foodCostTargetPercent !== undefined
-        ? { foodCostTargetPercent: num(body.foodCostTargetPercent) ?? 32 }
-        : {}),
-      ...(body.foodCostHighPercent !== undefined
-        ? { foodCostHighPercent: num(body.foodCostHighPercent) ?? 40 }
-        : {}),
-      ...(body.suggestedPriceRoundingStep !== undefined
-        ? { suggestedPriceRoundingStep: Number(body.suggestedPriceRoundingStep) || 10 }
-        : {}),
-      ...(body.suspiciousLowCostFraction !== undefined
-        ? { suspiciousLowCostFraction: num(body.suspiciousLowCostFraction) ?? 0.25 }
-        : {}),
-      ...(body.ingredientPriceChangeAlertPercent !== undefined
-        ? { ingredientPriceChangeAlertPercent: num(body.ingredientPriceChangeAlertPercent) ?? 10 }
-        : {}),
-    },
+  const currentRow = current as unknown as Record<string, unknown>;
+  const patch = pickSectionPatch(sectionId as SettingsSectionId, body);
+  if (sectionId === "hours-availability") {
+    if (patch.forceClosed === true && !current.forceClosed) {
+      patch.onlineClosedAt = new Date();
+      patch.onlineClosedByUserId = req.user!.id;
+    }
+    if (patch.forceClosed === false && current.forceClosed) {
+      patch.onlineClosedAt = null;
+      patch.onlineClosedByUserId = null;
+    }
+  }
+  const normalized = normalizeSettingsPatch(patch);
+  const fieldErrors = validateSettingsInput(normalized);
+  if (Object.keys(fieldErrors).length) {
+    return res.status(400).json({
+      code: "VALIDATION_FAILED",
+      error: firstSettingsErrorMessage(fieldErrors),
+      fields: fieldErrors,
+    });
+  }
+  const danger = checkDangerousSettingsConfirm(currentRow, normalized, body.confirm);
+  if (!danger.ok) {
+    return res.status(400).json({
+      code: "CONFIRMATION_REQUIRED",
+      error: "Confirm this change before saving.",
+      dangerous: danger.dangerous,
+      impacts: danger.impacts,
+    });
+  }
+
+  const beforeSnap = settingsSnapshotForAudit(currentRow);
+  const touchedKeys = Object.keys(normalized);
+
+  const result = await patchStoreSettingsSection({
+    sectionId: sectionId as SettingsSectionId,
+    body: { ...body, ...patch },
+    expectedVersion,
   });
-    const afterSnap = settingsSnapshotForAudit(updated as unknown as Record<string, unknown>);
-    const { before, after } = diffSettingsKeys(beforeSnap, afterSnap, touchedKeys);
-    await writeAudit(tx, {
+
+  if (!result.ok) {
+    return res.status(409).json({
+      code: "SETTINGS_VERSION_CONFLICT",
+      error: "Someone else changed these settings.",
+      version: result.current.settingsVersion,
+      settings: settingsWithVersion(result.current),
+      diff: result.diff,
+      affectsStorefront: STOREFRONT_SETTINGS_SECTIONS.includes(sectionId as SettingsSectionId),
+    });
+  }
+
+  const updated = result.settings;
+  const afterSnap = settingsSnapshotForAudit(updated as unknown as Record<string, unknown>);
+  const { before, after } = diffSettingsKeys(beforeSnap, afterSnap, touchedKeys);
+  const changedKeys = Object.keys(after);
+  if (changedKeys.length > 0) {
+    await writeAudit(prisma, {
       actorId: req.user!.id,
       actorRole: req.user!.role,
       action: AuditAction.SETTINGS_CHANGED,
@@ -345,10 +160,224 @@ settingsRouter.patch("/", requireAuth, requireRole(Role.ADMIN), async (req, res)
       before,
       after,
       ip: clientIp(req),
+      meta: settingsAuditMeta(
+        sectionId as SettingsSectionId,
+        changedKeys,
+        SETTINGS_SECTION_LABELS[sectionId as SettingsSectionId]
+      ),
     });
-    return updated;
+  }
+
+  res.json({
+    settings: await adminSettingsResponse(updated),
+    affectsStorefront: STOREFRONT_SETTINGS_SECTIONS.includes(sectionId as SettingsSectionId),
   });
-  res.json(settings);
+});
+
+settingsRouter.get("/sections/:sectionId/history", requireAuth, requireRole(Role.ADMIN), async (req, res) => {
+  const sectionId = req.params.sectionId;
+  if (!SETTINGS_SECTION_IDS.includes(sectionId as SettingsSectionId)) {
+    return res.status(404).json({ code: "SECTION_NOT_FOUND", error: "Unknown settings section." });
+  }
+  const settings = await getStoreSettings();
+  const rows = await prisma.auditLog.findMany({
+    where: { entityType: "store_settings", entityId: settings.id, action: AuditAction.SETTINGS_CHANGED },
+    orderBy: { createdAt: "desc" },
+    take: 80,
+    include: { actor: { select: { name: true, email: true } } },
+  });
+  const entries = rows
+    .filter((row) => (row.meta as { sectionId?: string } | null)?.sectionId === sectionId)
+    .slice(0, 40)
+    .map((row) => {
+      const before = (row.before ?? {}) as Record<string, unknown>;
+      const after = (row.after ?? {}) as Record<string, unknown>;
+      return {
+        id: row.id,
+        createdAt: row.createdAt,
+        actorName: row.actor?.name || row.actor?.email || "System",
+        actorRole: row.actorRole,
+        before,
+        after,
+        changedKeys: Object.keys(after),
+        restorable: entryIsRestorable(before, after),
+      };
+    });
+  res.json({ entries });
+});
+
+settingsRouter.post("/sections/:sectionId/restore", requireAuth, requireRole(Role.ADMIN), async (req, res) => {
+  const sectionId = req.params.sectionId as SettingsSectionId;
+  if (!SETTINGS_SECTION_IDS.includes(sectionId)) {
+    return res.status(404).json({ code: "SECTION_NOT_FOUND", error: "Unknown settings section." });
+  }
+  const { auditLogId, version } = req.body as { auditLogId?: string; version?: number };
+  if (!auditLogId) {
+    return res.status(400).json({ code: "AUDIT_ID_REQUIRED", error: "Choose a history entry to restore." });
+  }
+  const expectedVersion = Number(version);
+  if (!Number.isInteger(expectedVersion) || expectedVersion < 0) {
+    return res.status(400).json({ code: "VERSION_REQUIRED", error: "Include the current settings version." });
+  }
+
+  const settings = await getStoreSettings();
+  const row = await prisma.auditLog.findFirst({
+    where: { id: auditLogId, entityType: "store_settings", entityId: settings.id },
+  });
+  if (!row) return res.status(404).json({ code: "NOT_FOUND", error: "History entry not found." });
+  if ((row.meta as { sectionId?: string } | null)?.sectionId !== sectionId) {
+    return res.status(400).json({ code: "SECTION_MISMATCH", error: "That change belongs to another section." });
+  }
+  const before = (row.before ?? {}) as Record<string, unknown>;
+  const after = (row.after ?? {}) as Record<string, unknown>;
+  if (!entryIsRestorable(before, after)) {
+    return res.status(400).json({
+      code: "NOT_RESTORABLE",
+      error: "This change cannot be restored automatically. Update the setting manually.",
+    });
+  }
+
+  const restorePatch = pickSectionPatch(sectionId, before);
+  const normalized = normalizeSettingsPatch(restorePatch);
+  const danger = checkDangerousSettingsConfirm(
+    settings as unknown as Record<string, unknown>,
+    normalized,
+    req.body.confirm
+  );
+  if (!danger.ok) {
+    return res.status(400).json({
+      code: "CONFIRMATION_REQUIRED",
+      error: "Confirm before restoring this value.",
+      dangerous: danger.dangerous,
+      impacts: danger.impacts,
+    });
+  }
+
+  const result = await patchStoreSettingsSection({
+    sectionId,
+    body: { ...normalized, version: expectedVersion },
+    expectedVersion,
+  });
+  if (!result.ok) {
+    return res.status(409).json({
+      code: "SETTINGS_VERSION_CONFLICT",
+      error: "Someone else changed these settings.",
+      version: result.current.settingsVersion,
+      settings: settingsWithVersion(result.current),
+    });
+  }
+
+  const updated = result.settings;
+  const beforeSnap = settingsSnapshotForAudit(settings as unknown as Record<string, unknown>);
+  const afterSnap = settingsSnapshotForAudit(updated as unknown as Record<string, unknown>);
+  const keys = Object.keys(normalized);
+  const diff = diffSettingsKeys(beforeSnap, afterSnap, keys);
+  if (Object.keys(diff.after).length > 0) {
+    await writeAudit(prisma, {
+      actorId: req.user!.id,
+      actorRole: req.user!.role,
+      action: AuditAction.SETTINGS_CHANGED,
+      entityType: "store_settings",
+      entityId: updated.id,
+      before: diff.before,
+      after: diff.after,
+      ip: clientIp(req),
+      meta: settingsAuditMeta(sectionId, Object.keys(diff.after), SETTINGS_SECTION_LABELS[sectionId]),
+      reason: "Restored from change history",
+    });
+  }
+
+  res.json({ settings: settingsWithVersion(updated) });
+});
+
+settingsRouter.patch("/", requireAuth, requireRole(Role.ADMIN), async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+  const normalized = normalizeSettingsPatch(body);
+  const fieldErrors = validateSettingsInput(normalized);
+  if (Object.keys(fieldErrors).length) {
+    return res.status(400).json({
+      code: "VALIDATION_FAILED",
+      error: firstSettingsErrorMessage(fieldErrors),
+      fields: fieldErrors,
+    });
+  }
+
+  const current = await getStoreSettings();
+  const expectedVersion = body.version !== undefined ? Number(body.version) : current.settingsVersion;
+  if (body.version !== undefined && expectedVersion !== current.settingsVersion) {
+    return res.status(409).json({
+      code: "SETTINGS_VERSION_CONFLICT",
+      error: "Someone else changed these settings.",
+      version: current.settingsVersion,
+      settings: settingsWithVersion(current),
+    });
+  }
+
+  const currentRow = current as unknown as Record<string, unknown>;
+  const patchBody = { ...normalized };
+  delete patchBody.version;
+  const danger = checkDangerousSettingsConfirm(currentRow, patchBody, body.confirm);
+  if (!danger.ok) {
+    return res.status(400).json({
+      code: "CONFIRMATION_REQUIRED",
+      error: "Confirm this change before saving.",
+      dangerous: danger.dangerous,
+      impacts: danger.impacts,
+    });
+  }
+
+  const beforeSnap = settingsSnapshotForAudit(currentRow);
+  const touchedKeys = Object.keys(patchBody);
+  const settings = await prisma.$transaction(async (tx) => {
+    const result = await tx.storeSettings.updateMany({
+      where: { id: current.id, settingsVersion: expectedVersion },
+      data: {
+        ...buildStoreSettingsUpdateData(patchBody),
+        settingsVersion: expectedVersion + 1,
+      },
+    });
+    if (result.count === 0) {
+      throw Object.assign(new Error("conflict"), { code: "SETTINGS_VERSION_CONFLICT" });
+    }
+    const updated = await tx.storeSettings.findUniqueOrThrow({ where: { id: current.id } });
+    return updated;
+  }).catch(async (err) => {
+    if (err?.code === "SETTINGS_VERSION_CONFLICT" || err?.message === "conflict") {
+      const latest = await getStoreSettings();
+      return { conflict: latest };
+    }
+    throw err;
+  });
+
+  if (settings && "conflict" in settings) {
+    const latest = settings.conflict as Awaited<ReturnType<typeof getStoreSettings>>;
+    return res.status(409).json({
+      code: "SETTINGS_VERSION_CONFLICT",
+      error: "Someone else changed these settings.",
+      version: latest.settingsVersion,
+      settings: settingsWithVersion(latest),
+    });
+  }
+
+  const updated = settings as Awaited<ReturnType<typeof getStoreSettings>>;
+  const afterSnap = settingsSnapshotForAudit(updated as unknown as Record<string, unknown>);
+  const { before, after } = diffSettingsKeys(beforeSnap, afterSnap, touchedKeys);
+  const changedKeys = Object.keys(after);
+  if (changedKeys.length > 0) {
+    const sectionId = sectionForAuditKey(changedKeys[0]) ?? "branding-theme";
+    await writeAudit(prisma, {
+      actorId: req.user!.id,
+      actorRole: req.user!.role,
+      action: AuditAction.SETTINGS_CHANGED,
+      entityType: "store_settings",
+      entityId: updated.id,
+      before,
+      after,
+      ip: clientIp(req),
+      meta: settingsAuditMeta(sectionId as SettingsSectionId, changedKeys),
+    });
+  }
+  res.json({ settings: settingsWithVersion(updated) });
 });
 
 settingsRouter.post("/banners", requireAuth, requireRole(Role.ADMIN), async (req, res) => {

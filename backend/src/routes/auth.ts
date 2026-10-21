@@ -312,6 +312,38 @@ authRouter.get("/me", requireAuth, async (req, res) => {
   res.json(publicUser(user));
 });
 
+authRouter.post("/change-password", requireAuth, authLimiter, async (req, res) => {
+  const { currentPassword, newPassword } = req.body as {
+    currentPassword?: string;
+    newPassword?: string;
+  };
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: "Current and new password are required." });
+  }
+  if (newPassword.length < 8) {
+    return res.status(400).json({ error: "New password must be at least 8 characters." });
+  }
+  const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
+  if (!user || !user.isActive) return res.status(404).json({ error: "User not found." });
+  if (!(await bcrypt.compare(currentPassword, user.passwordHash))) {
+    return res.status(400).json({ error: "Current password is incorrect." });
+  }
+  if (await bcrypt.compare(newPassword, user.passwordHash)) {
+    return res.status(400).json({ error: "New password must be different from your current password." });
+  }
+  const updated = await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      passwordHash: await bcrypt.hash(newPassword, 12),
+      tokenVersion: { increment: 1 },
+      passwordResetToken: null,
+      passwordResetExpires: null,
+    },
+  });
+  const token = issueSession(res, req, updated);
+  res.json({ ...authResponseBody(token, updated), message: "Password updated." });
+});
+
 authRouter.post("/2fa/setup", requireAuth, requireRole(Role.ADMIN, Role.MANAGER), async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
   if (!user) return res.status(404).json({ error: "User not found" });

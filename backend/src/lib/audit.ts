@@ -40,12 +40,19 @@ export async function writeAudit(db: AuditDb, input: WriteAuditInput) {
   });
 }
 
+const SETTINGS_AUDIT_OMIT = new Set(["id", "restaurantId", "updatedAt", "settingsVersion"]);
+
+const SETTINGS_AUDIT_REDACT = /(secret|password|pin|hash|token|apikey|api_key|vapid)/i;
+
 /** Pick safe settings fields for audit diffs (never secrets). */
 export function settingsSnapshotForAudit(row: Record<string, unknown>) {
-  const omit = new Set(["id", "restaurantId", "updatedAt"]);
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(row)) {
-    if (omit.has(k)) continue;
+    if (SETTINGS_AUDIT_OMIT.has(k)) continue;
+    if (SETTINGS_AUDIT_REDACT.test(k)) {
+      out[k] = "[redacted]";
+      continue;
+    }
     out[k] = v;
   }
   return out;
@@ -59,10 +66,11 @@ export function diffSettingsKeys(
   const b: Record<string, unknown> = {};
   const a: Record<string, unknown> = {};
   for (const key of touchedKeys) {
-    if (before[key] !== undefined || after[key] !== undefined) {
-      b[key] = before[key];
-      a[key] = after[key];
-    }
+    const bv = before[key];
+    const av = after[key];
+    if (JSON.stringify(bv) === JSON.stringify(av)) continue;
+    b[key] = bv;
+    a[key] = av;
   }
   return { before: b, after: a };
 }

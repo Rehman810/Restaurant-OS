@@ -53,7 +53,31 @@ export function validateSettingsInput(body: Record<string, unknown>): SettingsEr
     if (!Number.isFinite(n) || n < 0 || n > 100) errors[key] = "Enter a percentage from 0 to 100.";
   }
 
-  for (const key of ["confirmSlaMinutes", "deliverySlaMinutes", "deliveryEstimateMin", "pickupEstimateMin"] as const) {
+  for (const mapKey of ["taxRatesByFulfillment", "taxRatesByPayment"] as const) {
+    if (body[mapKey] === undefined) continue;
+    const raw = body[mapKey];
+    if (raw !== null && (typeof raw !== "object" || Array.isArray(raw))) {
+      errors[mapKey] = "Rates must be a map of percentages.";
+      continue;
+    }
+    if (!raw) continue;
+    for (const v of Object.values(raw as Record<string, unknown>)) {
+      const n = Number(v);
+      if (!Number.isFinite(n) || n < 0 || n > 100) {
+        errors[mapKey] = "Each rate must be between 0 and 100.";
+        break;
+      }
+    }
+  }
+
+  if (body.taxRoundingRule !== undefined && body.taxRoundingRule !== "") {
+    const rule = String(body.taxRoundingRule);
+    if (!["HALF_UP", "HALF_DOWN", "FLOOR", "CEILING"].includes(rule)) {
+      errors.taxRoundingRule = "Choose a valid rounding rule.";
+    }
+  }
+
+  for (const key of ["deliveryEstimateMin", "pickupEstimateMin"] as const) {
     if (body[key] === undefined || body[key] === "") continue;
     const n = Number(body[key]);
     if (!Number.isInteger(n) || n < 1 || n > 24 * 60) errors[key] = "Enter whole minutes between 1 and 1440.";

@@ -3,6 +3,7 @@ import { OrderStatus, Role } from "@prisma/client";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { ORDER_OPS } from "../lib/roles";
 import { branchScopeError, isOrderOutsideUserBranch, resolveBranchScope } from "../lib/branch-scope";
+import { orderAlertThresholds } from "../lib/order-alert-thresholds";
 import { getStoreSettings } from "../lib/settings-data";
 import { clientIp } from "../lib/client-ip";
 import { listAdminOrders } from "../lib/admin-orders/list";
@@ -36,9 +37,7 @@ async function prismaBranchTimezone(branchId: string) {
 async function dispatchSettings() {
   const settings = await getStoreSettings();
   return {
-    lateConfirmMinutes: settings.lateConfirmMinutes ?? 15,
-    latePrepMinutes: settings.latePrepMinutes ?? 30,
-    lateDeliveryMinutes: settings.lateDeliveryMinutes ?? 45,
+    ...orderAlertThresholds(settings),
     ordersStaleHours: settings.ordersStaleHours ?? 2,
     duplicateOrderWindowMinutes: settings.duplicateOrderWindowMinutes ?? 10,
   };

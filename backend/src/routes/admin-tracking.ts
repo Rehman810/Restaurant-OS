@@ -3,6 +3,7 @@ import { Role } from "@prisma/client";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { ORDER_OPS } from "../lib/roles";
 import { branchScopeError, resolveBranchScope } from "../lib/branch-scope";
+import { orderAlertThresholds } from "../lib/order-alert-thresholds";
 import { getStoreSettings } from "../lib/settings-data";
 import { buildTrackingBoard, buildTrackingSummary } from "../lib/admin-orders/board";
 import { buildTrackingRidersPanel } from "../lib/admin-orders/riders-panel";
@@ -27,9 +28,7 @@ async function resolveTimezone(scope: Awaited<ReturnType<typeof resolveBranchSco
 async function dispatchSettings() {
   const settings = await getStoreSettings();
   return {
-    lateConfirmMinutes: settings.lateConfirmMinutes ?? 15,
-    latePrepMinutes: settings.latePrepMinutes ?? 30,
-    lateDeliveryMinutes: settings.lateDeliveryMinutes ?? 45,
+    ...orderAlertThresholds(settings),
     ordersStaleHours: settings.ordersStaleHours ?? 2,
     trackingCompletedWindowHours: settings.trackingCompletedWindowHours ?? 0,
     duplicateOrderWindowMinutes: settings.duplicateOrderWindowMinutes ?? 10,

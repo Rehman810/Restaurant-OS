@@ -1,4 +1,16 @@
-import { coerceSchedule, defaultClosedMessage, hoursText, isKitchenOpen, nextOpening } from "./hours";
+import {
+  closedMessageTemplateExample,
+  defaultClosedMessage,
+  hoursText,
+  nextOpening,
+  coerceSchedule,
+} from "./hours";
+import {
+  isOnlineOrderingOpen,
+  isScheduleOpen,
+  onlineOrderingClosedMessage,
+  type OnlineOrderingSettings,
+} from "./online-ordering";
 
 export type DayPeriod = "AM" | "PM";
 
@@ -56,26 +68,18 @@ export function isWithinHours(
   return nowMinutes >= open || nowMinutes < close;
 }
 
-type HoursSettings = {
-  forceClosed: boolean;
-  openHour: number;
-  openMinute: number;
-  closeHour: number;
-  closeMinute: number;
-  timezone?: string;
-  weeklySchedule?: unknown;
-  closedMessage?: string;
-};
+export type HoursSettings = OnlineOrderingSettings;
 
 function scheduleOf(settings: HoursSettings) {
   return coerceSchedule(settings.weeklySchedule, settings);
 }
 
 export function isStoreOpen(settings: HoursSettings, now = new Date()) {
-  return isKitchenOpen(
-    { forceClosed: settings.forceClosed, timezone: settings.timezone, schedule: scheduleOf(settings) },
-    now
-  );
+  return isOnlineOrderingOpen(settings, now);
+}
+
+export function isKitchenScheduleOpen(settings: HoursSettings, now = new Date()) {
+  return isScheduleOpen(settings, now);
 }
 
 export function scheduleHoursLabel(settings: HoursSettings) {
@@ -83,13 +87,30 @@ export function scheduleHoursLabel(settings: HoursSettings) {
 }
 
 export function generatedClosedMessage(settings: HoursSettings, now = new Date()) {
-  return defaultClosedMessage(scheduleOf(settings), settings.timezone || "Asia/Karachi", now);
+  const schedule = scheduleOf(settings);
+  const tz = settings.timezone || "Asia/Karachi";
+  if (isKitchenScheduleOpen(settings, now)) {
+    return closedMessageTemplateExample(schedule, tz, now);
+  }
+  return onlineOrderingClosedMessage(settings, now);
 }
 
 export function storeStatusLabel(settings: HoursSettings, now = new Date()) {
-  const open = isStoreOpen(settings, now);
+  const schedule = scheduleOf(settings);
+  const tz = settings.timezone || "Asia/Karachi";
+  const online = isStoreOpen(settings, now);
+  const kitchen = isKitchenScheduleOpen(settings, now);
   const hours = scheduleHoursLabel(settings);
-  if (open) return `Open now · ${hours}`;
-  const next = nextOpening(scheduleOf(settings), settings.timezone || "Asia/Karachi", now);
-  return next ? `Closed · Opens ${next.label}` : "Closed";
+
+  if (online) return `Online ordering open · ${hours}`;
+  if (settings.forceClosed && kitchen) {
+    return `Online ordering paused · Kitchen on schedule (${hours})`;
+  }
+  if (!kitchen) {
+    const next = nextOpening(schedule, tz, now);
+    return next ? `Closed · Opens ${next.label}` : `Closed · ${hours}`;
+  }
+  const cutoff = settings.lastOrderCutoffMinutes ?? 0;
+  if (cutoff > 0) return `Last orders for today · ${hours}`;
+  return `Online ordering closed · ${hours}`;
 }

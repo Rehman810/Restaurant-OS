@@ -4,6 +4,7 @@ import {
   Role,
 } from "@prisma/client";
 import { prisma } from "../prisma";
+import { orderAlertThresholds } from "../order-alert-thresholds";
 import { getStoreSettings } from "../settings-data";
 import { resolveDashboardTimezone } from "../dashboard/summary";
 import { storeTodayUtcRange } from "../reports/time-range";
@@ -89,11 +90,7 @@ export async function listAdminBranches(opts: {
         return { branchId, ...m };
       })
     ),
-    Promise.resolve({
-      lateConfirmMinutes: settings.lateConfirmMinutes ?? 15,
-      latePrepMinutes: settings.latePrepMinutes ?? 30,
-      lateDeliveryMinutes: settings.lateDeliveryMinutes ?? 45,
-    }),
+    Promise.resolve(orderAlertThresholds(settings)),
   ]);
 
   const deliveryAreaCount = await prisma.deliveryArea.count({ where: { isDelivering: true } });

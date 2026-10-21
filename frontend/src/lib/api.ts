@@ -38,13 +38,24 @@ export function getSocketUrl() {
 
 export const SOCKET_URL = getSocketUrl();
 
+export type ApiFieldErrors = Record<string, { code: string; message: string }>;
+
 export class ApiError extends Error {
   status: number;
   code?: string;
-  constructor(message: string, status: number, code?: string) {
+  fields?: ApiFieldErrors;
+  payload?: Record<string, unknown>;
+  constructor(
+    message: string,
+    status: number,
+    code?: string,
+    extras?: { fields?: ApiFieldErrors; payload?: Record<string, unknown> }
+  ) {
     super(message);
     this.status = status;
     this.code = code;
+    this.fields = extras?.fields;
+    this.payload = extras?.payload;
   }
 }
 
@@ -86,14 +97,20 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   if (!res.ok) {
     let message = "Request failed";
     let code: string | undefined;
+    let fields: ApiFieldErrors | undefined;
+    let payload: Record<string, unknown> | undefined;
     try {
-      const data = await res.json();
-      message = data.error || message;
+      const data = (await res.json()) as Record<string, unknown>;
+      message = (data.error as string) || message;
       code = typeof data.code === "string" ? data.code : undefined;
+      if (data.fields && typeof data.fields === "object") {
+        fields = data.fields as ApiFieldErrors;
+      }
+      payload = data;
     } catch {
       /* ignore */
     }
-    throw new ApiError(message, res.status, code);
+    throw new ApiError(message, res.status, code, { fields, payload });
   }
   if (res.headers.get("content-type")?.includes("application/json")) {
     return res.json() as Promise<T>;

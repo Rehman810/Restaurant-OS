@@ -11,24 +11,23 @@ export function AdminScopeBanner({ variant }: { variant: Variant }) {
 
   if (variant === "chain") {
     return (
-      <div
-        className="flex flex-col gap-2 rounded-2xl border border-stone-200/80 bg-stone-50/90 px-4 py-3 text-sm text-stone-600 dark:border-stone-700 dark:bg-stone-800/50 dark:text-stone-300 sm:flex-row sm:items-center sm:justify-between"
+      <p
+        className="flex items-start gap-2 rounded-lg border border-stone-200/80 bg-stone-50/80 px-3 py-2.5 text-xs leading-relaxed text-stone-600 dark:border-stone-700 dark:bg-stone-800/40 dark:text-stone-400"
         role="status"
       >
-        <div className="flex items-start gap-2.5">
-          <Globe2 className="mt-0.5 shrink-0 text-brand-600 dark:text-brand-400" size={18} />
-          <p>
-            <span className="font-semibold text-stone-800 dark:text-stone-100">Chain-wide settings</span>
-            {" — "}
-            These apply to every branch (storefront, hours, delivery rules). Per-outlet address and phone are managed
-            under{" "}
-            <Link href="/admin/branches" className="font-semibold text-brand-600 underline-offset-2 hover:underline dark:text-brand-400">
-              Branches
-            </Link>
-            .
-          </p>
-        </div>
-      </div>
+        <Globe2 className="mt-0.5 shrink-0 text-brand-600 dark:text-brand-400" size={15} aria-hidden />
+        <span>
+          <span className="font-semibold text-stone-800 dark:text-stone-200">Chain-wide.</span> Applies to all branches.
+          Outlet-specific contact is under{" "}
+          <Link
+            href="/admin/branches"
+            className="font-semibold text-brand-700 underline-offset-2 hover:underline dark:text-brand-400"
+          >
+            Branches
+          </Link>
+          .
+        </span>
+      </p>
     );
   }
 
