@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { storeTodayUtcRange } from "../src/lib/reports/time-range";
+import { parseDateRangeQuery, storeTodayUtcRange } from "../src/lib/reports/time-range";
 import { branchDayRangeUtc } from "../src/lib/dine-in/branch-time";
 
 describe("[RPT-02] store today boundary", () => {
@@ -8,6 +8,11 @@ describe("[RPT-02] store today boundary", () => {
     const b = branchDayRangeUtc("Asia/Karachi");
     expect(a.start.getTime()).toBe(b.startUtc.getTime());
     expect(a.end.getTime()).toBe(b.endUtc.getTime());
+  });
+
+  it("empty menu-engineering range spans fallbackDays through today", () => {
+    const { from, to } = parseDateRangeQuery(undefined, undefined, "Asia/Karachi", 30);
+    expect(from).not.toEqual(to);
   });
 
   it("dashboard and analytics share the same today window helper", () => {

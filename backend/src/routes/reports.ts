@@ -49,30 +49,50 @@ reportsRouter.get(
         timezone,
         30
       );
-      const category = req.query.category ? String(req.query.category) : undefined;
-      const rows = await buildMenuEngineeringReport(branchId, startUtc, endUtc, category);
+      const categoryRaw =
+        req.query.categories ?? req.query.category ?? undefined;
+      const report = await buildMenuEngineeringReport(branchId, startUtc, endUtc, categoryRaw);
+      const { rows, noRecipeRows, thresholds, summary, categories } = report;
 
       if (req.query.format === "csv") {
-        const header = "name,category,class,qtySold,revenue,marginPercent,foodCostPercent\n";
+        const meta = [
+          `# from,${from}`,
+          `# to,${to}`,
+          `# timezone,${timezone}`,
+          `# popularShareMinPercent,${thresholds.popularitySharePercent}`,
+          `# highMarginRsPerUnit,${thresholds.weightedAvgMarginPerUnit}`,
+          `# classifiedItems,${thresholds.classifiedItemCount}`,
+          `# totalUnitsSold,${thresholds.totalUnitsSold}`,
+          `# enoughData,${thresholds.hasEnoughData}`,
+        ].join("\n");
+        const header =
+          "name,category,class,qtySold,shareOfSalesPercent,revenue,marginRsPerUnit,totalProfitRs,foodCostPercent,costStatus\n";
         const body = rows
           .map((r) =>
             [
               csvEscape(r.name),
               csvEscape(r.category),
-              r.classification,
+              r.classificationLabel,
               r.quantitySold,
+              r.shareOfSalesPercent,
               r.revenue,
-              r.marginPercent ?? "",
+              r.marginPerUnit,
+              r.totalProfit,
               r.foodCostPercent ?? "",
+              r.costStatus,
             ].join(",")
           )
           .join("\n");
+        const noRecipeHeader = "\n# no_recipe_items\nname,category,status\n";
+        const noRecipeBody = noRecipeRows
+          .map((r) => [csvEscape(r.name), csvEscape(r.category), "no_recipe"].join(","))
+          .join("\n");
         res.setHeader("Content-Type", "text/csv; charset=utf-8");
         res.setHeader("Content-Disposition", `attachment; filename="menu-engineering-${from}-${to}.csv"`);
-        return res.send(header + body);
+        return res.send(meta + "\n" + header + body + noRecipeHeader + noRecipeBody);
       }
 
-      res.json({ from, to, timezone, rows });
+      res.json({ from, to, timezone, rows, noRecipeRows, thresholds, summary, categories });
     } catch (err) {
       return branchScopeError(res, err);
     }

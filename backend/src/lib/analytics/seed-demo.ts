@@ -55,11 +55,14 @@ export async function seedAnalyticsDemo(
   const menuItems = await prisma.menuItem.findMany({
     where: { isAvailable: true },
     select: { id: true, name: true, price: true, category: true },
-    take: 24,
+    orderBy: [{ category: "asc" }, { name: "asc" }],
   });
   if (menuItems.length < 3) {
     return { created: 0, deleted: existing.length };
   }
+
+  /** Never sold in demo data — shows zero-qty rows on menu engineering. */
+  const zeroSaleIds = new Set(menuItems.slice(0, Math.min(3, menuItems.length)).map((m) => m.id));
 
   const coupon = await prisma.coupon.findFirst({ where: { code: "WELCOME10" }, select: { id: true, code: true } });
   const city =
@@ -68,7 +71,7 @@ export async function seedAnalyticsDemo(
   let seq = 1000;
   let created = 0;
 
-  for (let daysAgo = 0; daysAgo <= 34; daysAgo++) {
+  for (let daysAgo = 0; daysAgo <= 74; daysAgo++) {
     const dow = atDayOffset(daysAgo, 12, 0).getDay();
     const isWeekend = dow === 5 || dow === 6;
     const ordersToday = isWeekend ? 3 + (daysAgo % 2) : 1 + (daysAgo % 3);
@@ -99,8 +102,20 @@ export async function seedAnalyticsDemo(
       const lineCount = 1 + (i % 3);
       const lines = [];
       for (let L = 0; L < lineCount; L++) {
-        const item = menuItems[(i + L + daysAgo) % menuItems.length];
-        const qty = 1 + ((i + L) % 2);
+        let pick = (i + L + daysAgo) % menuItems.length;
+        let item = menuItems[pick];
+        let guard = 0;
+        while (zeroSaleIds.has(item.id) && guard < menuItems.length) {
+          pick = (pick + 1) % menuItems.length;
+          item = menuItems[pick];
+          guard += 1;
+        }
+        const qty =
+          item.id === menuItems[3 % menuItems.length]?.id
+            ? 3 + (i % 2)
+            : item.id === menuItems[4 % menuItems.length]?.id
+              ? 2
+              : 1 + ((i + L) % 2);
         lines.push({
           menuItemId: item.id,
           quantity: qty,

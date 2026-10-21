@@ -10,6 +10,9 @@ export function parseDateRangeQuery(
   const now = new Date();
   const { startUtc: todayStart, endUtc: todayEnd } = branchDayRangeUtc(timezone, now);
 
+  const fromProvided = Boolean(fromRaw && String(fromRaw).trim());
+  const toProvided = Boolean(toRaw && String(toRaw).trim());
+
   let from = fromRaw ? String(fromRaw).trim() : "";
   let to = toRaw ? String(toRaw).trim() : "";
 
@@ -27,7 +30,22 @@ export function parseDateRangeQuery(
     const d = parts.find((p) => p.type === "day")?.value ?? "01";
     from = `${y}-${m}-${d}`;
   }
-  if (!to) to = from;
+  if (!to) {
+    if (!fromProvided && !toProvided) {
+      const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: timezone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).formatToParts(now);
+      const y = parts.find((p) => p.type === "year")?.value ?? "1970";
+      const m = parts.find((p) => p.type === "month")?.value ?? "01";
+      const d = parts.find((p) => p.type === "day")?.value ?? "01";
+      to = `${y}-${m}-${d}`;
+    } else {
+      to = from;
+    }
+  }
 
   const startUtc = branchDayRangeUtc(timezone, new Date(`${from}T12:00:00Z`)).startUtc;
   const endUtc = branchDayRangeUtc(timezone, new Date(`${to}T12:00:00Z`)).endUtc;
