@@ -45,7 +45,7 @@ import { signOrderViewToken } from "../lib/order-access";
 import { effectiveItemPrice, isStoreOpen, publicClosedMessage } from "../lib/store-settings";
 import { quoteCharges } from "../lib/charges";
 import { cleanText } from "../lib/text";
-import { writeAudit } from "../lib/audit";
+import { orderStatusAuditPayload, writeAudit } from "../lib/audit";
 import { AuditAction } from "../lib/audit-actions";
 import { recalculateOrderTotals } from "../lib/order-totals";
 import { recordRiderCodOnDelivered, releaseRiderCashOnCancel } from "../lib/rider-cod";
@@ -839,8 +839,8 @@ ordersRouter.patch("/:id/cancel", optionalAuth, async (req, res) => {
       action: auditAction,
       entityType: "order",
       entityId: updated.id,
-      before: { status: existing.status },
-      after: { status: OrderStatus.CANCELLED },
+      entityLabel: existing.orderNumber,
+      ...orderStatusAuditPayload(existing.status, OrderStatus.CANCELLED),
       reason: voidCheck.reasonCode,
       ip: clientIp(req) ?? undefined,
     });
@@ -1018,8 +1018,8 @@ ordersRouter.patch("/:id/status", requireAuth, requireRole(...ORDER_OPS), async 
       action: auditAction,
       entityType: "order",
       entityId: updated.id,
-      before: { status: existing.status, riderId: existing.riderId },
-      after: { status, riderId: updated.riderId },
+      entityLabel: existing.orderNumber,
+      ...orderStatusAuditPayload(existing.status, status, { riderId: updated.riderId }),
       reason: voidMeta?.reasonCode || reason || null,
       ip: clientIp(req) ?? undefined,
     });

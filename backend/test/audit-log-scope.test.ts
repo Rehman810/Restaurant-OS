@@ -19,7 +19,10 @@ describe("[AUD-02] audit log branch scope", () => {
   });
 
   it("does not apply branch filter for admins when omitted", () => {
-    const where = buildAuditLogWhere({ branchId: null, allBranches: true, where: {} }, { action: "LOGIN_FAILED" });
-    expect(where).toEqual({ action: "LOGIN_FAILED" });
+    const where = buildAuditLogWhere(
+      { branchId: null, allBranches: true, where: {} },
+      { action: "security.login_failed" }
+    );
+    expect(where).toEqual({ action: "security.login_failed" });
   });
 });

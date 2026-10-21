@@ -443,6 +443,9 @@ async function main() {
       const { seedCustomersDemo } = await import("../src/lib/customers/seed-demo");
       const customersDemo = await seedCustomersDemo(prisma, mainBranch.id, riderUser?.id);
       console.log(`Customers demo: ${customersDemo.created} orders (CUS-*), ${customersDemo.registered} registered accounts.`);
+      const { seedAuditLogDemo } = await import("../src/lib/audit/seed-demo");
+      const auditDemo = await seedAuditLogDemo(prisma, mainBranch.id);
+      console.log(`Audit log demo: ${auditDemo.created} entries.`);
     }
     await seedDemoCoupons();
     console.log("Demo data already present. Passwords and existing store settings were not changed.");
@@ -964,6 +967,9 @@ async function main() {
   const { seedCustomersDemo } = await import("../src/lib/customers/seed-demo");
   const customersDemo = await seedCustomersDemo(prisma, mainBranch.id, rider.id);
   console.log(`Customers demo: ${customersDemo.created} orders (CUS-*), ${customersDemo.registered} registered accounts.`);
+  const { seedAuditLogDemo } = await import("../src/lib/audit/seed-demo");
+  const auditDemo = await seedAuditLogDemo(prisma, mainBranch.id);
+  console.log(`Audit log demo: ${auditDemo.created} entries.`);
   await seedDemoCoupons();
 
   console.log(`Seeded ${BRAND_NAME} in ${CITY}.`);

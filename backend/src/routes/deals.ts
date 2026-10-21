@@ -101,32 +101,45 @@ dealsRouter.post("/", requireAuth, requireRole(...ADMIN_LIKE), async (req, res) 
     return res.status(400).json({ error: "Cannot add archived dishes to a deal." });
   }
 
-  const deal = await prisma.deal.create({
-    data: {
-      title: String(title).trim(),
-      description: description || "",
-      category: canonicalDealCategory(category),
-      dealPrice: Number(dealPrice),
-      imageUrl: imageUrl || "",
-      isActive: extras.isActive,
-      isVisible: extras.isVisible,
-      channelOnline: extras.channelOnline,
-      channelPos: extras.channelPos,
-      channelDineIn: extras.channelDineIn,
-      perOrderLimit: extras.perOrderLimit,
-      ...(extras.scheduleDays !== undefined && { scheduleDays: extras.scheduleDays }),
-      ...(extras.scheduleStartMinutes !== undefined && { scheduleStartMinutes: extras.scheduleStartMinutes }),
-      ...(extras.scheduleEndMinutes !== undefined && { scheduleEndMinutes: extras.scheduleEndMinutes }),
-      ...(extras.scheduleStartsAt !== undefined && { scheduleStartsAt: extras.scheduleStartsAt }),
-      ...(extras.scheduleEndsAt !== undefined && { scheduleEndsAt: extras.scheduleEndsAt }),
-      items: {
-        create: dealItems.map((row: { menuItemId: string; quantity?: number }) => ({
-          menuItemId: row.menuItemId,
-          quantity: row.quantity ?? 1,
-        })),
+  const deal = await prisma.$transaction(async (tx) => {
+    const created = await tx.deal.create({
+      data: {
+        title: String(title).trim(),
+        description: description || "",
+        category: canonicalDealCategory(category),
+        dealPrice: Number(dealPrice),
+        imageUrl: imageUrl || "",
+        isActive: extras.isActive,
+        isVisible: extras.isVisible,
+        channelOnline: extras.channelOnline,
+        channelPos: extras.channelPos,
+        channelDineIn: extras.channelDineIn,
+        perOrderLimit: extras.perOrderLimit,
+        ...(extras.scheduleDays !== undefined && { scheduleDays: extras.scheduleDays }),
+        ...(extras.scheduleStartMinutes !== undefined && { scheduleStartMinutes: extras.scheduleStartMinutes }),
+        ...(extras.scheduleEndMinutes !== undefined && { scheduleEndMinutes: extras.scheduleEndMinutes }),
+        ...(extras.scheduleStartsAt !== undefined && { scheduleStartsAt: extras.scheduleStartsAt }),
+        ...(extras.scheduleEndsAt !== undefined && { scheduleEndsAt: extras.scheduleEndsAt }),
+        items: {
+          create: dealItems.map((row: { menuItemId: string; quantity?: number }) => ({
+            menuItemId: row.menuItemId,
+            quantity: row.quantity ?? 1,
+          })),
+        },
       },
-    },
-    include: dealInclude,
+      include: dealInclude,
+    });
+    await writeAudit(tx, {
+      actorId: req.user!.id,
+      actorRole: req.user!.role,
+      action: AuditAction.DEAL_CHANGED,
+      entityType: "deal",
+      entityId: created.id,
+      entityLabel: created.title,
+      after: { title: created.title, dealPrice: created.dealPrice },
+      ip: clientIp(req),
+    });
+    return created;
   });
   const warnings = dealWarningsFromItems(Number(dealPrice), deal.items);
   notifyMenuChanged();
@@ -213,7 +226,22 @@ dealsRouter.put("/:id", requireAuth, requireRole(...ADMIN_LIKE), async (req, res
 
 dealsRouter.delete("/:id", requireAuth, requireRole(...ADMIN_LIKE), async (req, res) => {
   try {
-    await prisma.deal.delete({ where: { id: req.params.id } });
+    const existing = await prisma.deal.findUnique({ where: { id: req.params.id } });
+    if (!existing) return res.status(404).json({ error: "Deal not found." });
+    await prisma.$transaction(async (tx) => {
+      await tx.deal.delete({ where: { id: req.params.id } });
+      await writeAudit(tx, {
+        actorId: req.user!.id,
+        actorRole: req.user!.role,
+        action: AuditAction.DEAL_CHANGED,
+        entityType: "deal",
+        entityId: existing.id,
+        entityLabel: existing.title,
+        before: { title: existing.title, deleted: false },
+        after: { deleted: true },
+        ip: clientIp(req),
+      });
+    });
     notifyMenuChanged();
     res.json({ ok: true });
   } catch {

@@ -65,6 +65,7 @@ posShiftRouter.post("/open", requireAuth, requireRole(...POS_SHIFT_ROLES), async
       action: AuditAction.SHIFT_OPENED,
       entityType: "cash_shift",
       entityId: shift.id,
+      entityLabel: `Shift · ${new Date(shift.openedAt).toISOString().slice(0, 10)}`,
       after: { openingCash },
       ip: clientIp(req) ?? undefined,
     });
@@ -155,9 +156,12 @@ posShiftRouter.post("/close", requireAuth, requireRole(...POS_SHIFT_ROLES), asyn
       action: AuditAction.SHIFT_CLOSED,
       entityType: "cash_shift",
       entityId: closed.id,
+      entityLabel: `Shift · ${new Date(closed.openedAt).toISOString().slice(0, 10)}`,
+      before: { openingCash: Number(shift.openingCash) },
       after: {
+        openingCash: Number(shift.openingCash),
         expectedCash: closed.expectedCash,
-        closingCountedCash: closed.closingCountedCash,
+        countedCash: closed.closingCountedCash,
         variance: closed.variance,
       },
       ip: clientIp(req) ?? undefined,

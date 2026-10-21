@@ -1,0 +1,3 @@
+ALTER TABLE "AuditLog" DROP CONSTRAINT IF EXISTS "AuditLog_branchId_fkey";
+ALTER TABLE "AuditLog" ADD CONSTRAINT "AuditLog_branchId_fkey"
+  FOREIGN KEY ("branchId") REFERENCES "Branch"("id") ON DELETE SET NULL ON UPDATE CASCADE;

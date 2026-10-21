@@ -3,7 +3,7 @@ import { prisma } from "../prisma";
 import { canTransitionStatus, chefKitchenUndoStatus, chefNextStatus } from "../order-status";
 import { deliveryNeedsRider, pickLeastBusyRider } from "../rider-assign";
 import { getStoreSettings } from "../settings-data";
-import { writeAudit } from "../audit";
+import { orderStatusAuditPayload, writeAudit } from "../audit";
 import { AuditAction } from "../audit-actions";
 import { recordRiderCodOnDelivered, releaseRiderCashOnCancel } from "../rider-cod";
 import { maybeAwardLoyalty } from "../loyalty-award";
@@ -188,6 +188,9 @@ export async function transitionOrder(user: AuthUser, input: TransitionInput) {
           : AuditAction.ORDER_CANCELLED
         : AuditAction.ORDER_STATUS_CHANGED;
 
+    const statusPayload = orderStatusAuditPayload(existing.status, status, {
+      riderId: updated.riderId,
+    });
     await writeAudit(tx, {
       actorId: user.id,
       actorRole: user.role,
@@ -195,8 +198,8 @@ export async function transitionOrder(user: AuthUser, input: TransitionInput) {
       action: auditAction,
       entityType: "order",
       entityId: updated.id,
-      before: { status: existing.status, riderId: existing.riderId },
-      after: { status, riderId: updated.riderId },
+      entityLabel: existing.orderNumber,
+      ...statusPayload,
       reason: voidMeta?.reasonCode || input.reason || null,
       ip: input.ip,
     });

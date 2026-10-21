@@ -1,6 +1,12 @@
 import { Request } from "express";
 
 /** Best-effort client IP (respects trust proxy). */
+export function clientUserAgent(req: Request): string | null {
+  const ua = req.headers["user-agent"];
+  if (typeof ua !== "string" || !ua.trim()) return null;
+  return ua.trim().slice(0, 512);
+}
+
 export function clientIp(req: Request): string | null {
   const forwarded = req.headers["x-forwarded-for"];
   if (typeof forwarded === "string" && forwarded.trim()) {

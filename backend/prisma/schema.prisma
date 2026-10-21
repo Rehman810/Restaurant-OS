@@ -430,21 +430,23 @@ model WaitlistEntry {
 }
 
 model AuditLog {
-  id         String   @id @default(uuid())
-  createdAt  DateTime @default(now())
-  actorId    String?
-  actor      User?    @relation(fields: [actorId], references: [id])
-  actorRole  Role?
-  branchId   String?
-  branch     Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  action     String
-  entityType String   @map("entity")
-  entityId   String
-  before     Json?
-  after      Json?
-  reason     String?
-  ip         String?
-  meta       Json?
+  id          String   @id @default(uuid())
+  createdAt   DateTime @default(now())
+  actorId     String?
+  actor       User?    @relation(fields: [actorId], references: [id])
+  actorRole   Role?
+  branchId    String?
+  branch      Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  action      String
+  entityType  String   @map("entity")
+  entityId    String
+  entityLabel String?
+  before      Json?
+  after       Json?
+  reason      String?
+  ip          String?
+  userAgent   String?
+  meta        Json?
 
   @@index([createdAt])
   @@index([actorId])

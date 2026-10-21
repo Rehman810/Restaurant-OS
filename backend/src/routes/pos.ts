@@ -23,9 +23,9 @@ import {
   resolveSensitiveApproval,
   validateReasonCode,
 } from "../lib/order-approval";
-import { writeAudit } from "../lib/audit";
+import { writeAudit, writeAuditSafe } from "../lib/audit";
 import { AuditAction } from "../lib/audit-actions";
-import { clientIp } from "../lib/client-ip";
+import { clientIp, clientUserAgent } from "../lib/client-ip";
 import { cleanText } from "../lib/text";
 import { getStoreSettings } from "../lib/settings-data";
 import { branchScopeError, getDefaultBranchId, resolveBranchScope } from "../lib/branch-scope";
@@ -460,28 +460,32 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
   }
 
   if (pct > 0) {
-    await writeAudit(prisma, {
+    await writeAuditSafe(prisma, {
       actorId: req.user!.id,
       actorRole: req.user!.role,
       branchId: resolvedBranchId,
       action: AuditAction.DISCOUNT_APPLIED,
       entityType: "order",
       entityId: order.id,
+      entityLabel: order.orderNumber,
       after: { discountPercent: pct, discountAmount: discounted.discountAmount },
       reason: String(discountReasonCode || ""),
       ip: clientIp(req) ?? undefined,
+      userAgent: clientUserAgent(req) ?? undefined,
     });
   }
   if (built.hadPriceOverride) {
-    await writeAudit(prisma, {
+    await writeAuditSafe(prisma, {
       actorId: req.user!.id,
       actorRole: req.user!.role,
       branchId: resolvedBranchId,
-      action: AuditAction.ITEM_PRICE_CHANGED,
+      action: AuditAction.ORDER_PRICE_OVERRIDE,
       entityType: "order",
       entityId: order.id,
+      entityLabel: order.orderNumber,
       after: { priceOverride: true },
       ip: clientIp(req) ?? undefined,
+      userAgent: clientUserAgent(req) ?? undefined,
     });
   }
   emitOrderChange("order:created", order);
@@ -644,9 +648,11 @@ posRouter.post(
         action: AuditAction.REFUND_ISSUED,
         entityType: "order",
         entityId: updated.id,
+        entityLabel: existing.orderNumber,
         after: { refundAmount: amount },
         reason: code,
         ip: clientIp(req) ?? undefined,
+        userAgent: clientUserAgent(req) ?? undefined,
       });
       if (existing.paymentMethod === PaymentMethod.CASH && existing.branchId) {
         await recordRefundCash(

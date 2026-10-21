@@ -22,7 +22,7 @@ describe.skipIf(!hasDb)("[AUD-01] writeAudit", () => {
     });
     expect(row).toBeTruthy();
     expect(row?.entityType).toBe("test");
-    if (row) await prisma.auditLog.delete({ where: { id: row.id } });
+    // Row is append-only; left in DB for integration verification.
   });
 
   it("rolls back parent transaction when audit insert fails", async () => {

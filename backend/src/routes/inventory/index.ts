@@ -341,6 +341,23 @@ inventoryRouter.post("/adjust", requireAuth, requireRole(...WRITE_ROLES), async 
         referenceType: StockReferenceType.ADJUSTMENT,
       });
     }
+    const item = await prisma.inventoryItem.findUnique({ where: { id: body.itemId } });
+    const { writeAuditSafe } = await import("../../lib/audit");
+    const { AuditAction } = await import("../../lib/audit-actions");
+    const { clientIp, clientUserAgent } = await import("../../lib/client-ip");
+    await writeAuditSafe(prisma, {
+      actorId: req.user!.id,
+      actorRole: req.user!.role,
+      branchId,
+      action: AuditAction.STOCK_ADJUSTED,
+      entityType: "inventory_item",
+      entityId: body.itemId!,
+      entityLabel: item?.name ?? body.itemId,
+      after: { quantityDelta: delta, newBalance: roundQty(current + delta), type },
+      reason: body.reason ?? null,
+      ip: clientIp(req) ?? undefined,
+      userAgent: clientUserAgent(req) ?? undefined,
+    });
     res.json({ ok: true, newBalance: roundQty(current + delta) });
   } catch (err) {
     return handleErr(res, err);

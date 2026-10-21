@@ -14,10 +14,12 @@ export type WriteAuditInput = {
   action: string;
   entityType: string;
   entityId: string;
+  entityLabel?: string | null;
   before?: unknown;
   after?: unknown;
   reason?: string | null;
   ip?: string | null;
+  userAgent?: string | null;
   /** Legacy dine-in payloads */
   meta?: Record<string, unknown>;
 };
@@ -31,13 +33,28 @@ export async function writeAudit(db: AuditDb, input: WriteAuditInput) {
       action: input.action,
       entityType: input.entityType,
       entityId: input.entityId,
+      entityLabel: input.entityLabel?.trim() || null,
       before: input.before === undefined ? undefined : (input.before as Prisma.InputJsonValue),
       after: input.after === undefined ? undefined : (input.after as Prisma.InputJsonValue),
       reason: input.reason ?? null,
       ip: input.ip ?? null,
+      userAgent: input.userAgent ?? null,
       meta: input.meta === undefined ? undefined : (input.meta as Prisma.InputJsonValue),
     },
   });
+}
+
+/** Log audit failures without throwing (use outside transactions or when business action must succeed). */
+export async function writeAuditSafe(db: AuditDb, input: WriteAuditInput) {
+  try {
+    await writeAudit(db, input);
+  } catch (err) {
+    console.error("[audit] write failed", err instanceof Error ? err.message : err, {
+      action: input.action,
+      entityType: input.entityType,
+      entityId: input.entityId,
+    });
+  }
 }
 
 const SETTINGS_AUDIT_OMIT = new Set(["id", "restaurantId", "updatedAt", "settingsVersion"]);
@@ -73,4 +90,12 @@ export function diffSettingsKeys(
     a[key] = av;
   }
   return { before: b, after: a };
+}
+
+/** Normalize order status audit payloads to { from, to } for new writes. */
+export function orderStatusAuditPayload(beforeStatus: string, afterStatus: string, extra?: Record<string, unknown>) {
+  return {
+    before: { from: beforeStatus, status: beforeStatus },
+    after: { to: afterStatus, status: afterStatus, ...extra },
+  };
 }

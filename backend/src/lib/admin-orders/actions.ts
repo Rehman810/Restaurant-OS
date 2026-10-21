@@ -108,9 +108,10 @@ export async function recordKotPrint(user: AuthUser, orderId: string, ip?: strin
       actorId: user.id,
       actorRole: user.role,
       branchId: order.branchId,
-      action: AuditAction.ORDER_STATUS_CHANGED,
+      action: AuditAction.ORDER_KOT_REPRINTED,
       entityType: "order",
       entityId: orderId,
+      entityLabel: order.orderNumber,
       after: { kotPrint: true, isReprint },
       ip,
     });

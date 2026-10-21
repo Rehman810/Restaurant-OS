@@ -12,6 +12,9 @@ import {
   type CouponChannel,
 } from "../lib/coupon";
 import { couponWriteData } from "../lib/coupon-payload";
+import { writeAuditSafe } from "../lib/audit";
+import { AuditAction } from "../lib/audit-actions";
+import { clientIp, clientUserAgent } from "../lib/client-ip";
 
 export const couponsPublicRouter = Router();
 
@@ -91,6 +94,18 @@ couponsAdminRouter.post("/", requireAuth, requireRole(...ADMIN_LIKE), async (req
     const coupon = await prisma.coupon.create({
       data: { ...(parsed.data as Prisma.CouponUncheckedCreateInput), branchId },
     });
+    await writeAuditSafe(prisma, {
+      actorId: req.user!.id,
+      actorRole: req.user!.role,
+      branchId,
+      action: AuditAction.COUPON_CREATED,
+      entityType: "coupon",
+      entityId: coupon.id,
+      entityLabel: coupon.code,
+      after: { code: coupon.code, type: coupon.type, value: coupon.value },
+      ip: clientIp(req) ?? undefined,
+      userAgent: clientUserAgent(req) ?? undefined,
+    });
     res.status(201).json(coupon);
   } catch {
     res.status(400).json({ error: "Could not create coupon. Code may already exist." });
@@ -115,6 +130,19 @@ couponsAdminRouter.patch("/:id", requireAuth, requireRole(...ADMIN_LIKE), async 
     const coupon = await prisma.coupon.update({
       where: { id: existing.id },
       data: parsed.data as Prisma.CouponUncheckedUpdateInput,
+    });
+    await writeAuditSafe(prisma, {
+      actorId: req.user!.id,
+      actorRole: req.user!.role,
+      branchId: existing.branchId,
+      action: AuditAction.COUPON_UPDATED,
+      entityType: "coupon",
+      entityId: coupon.id,
+      entityLabel: coupon.code,
+      before: { code: existing.code, isActive: existing.isActive },
+      after: { code: coupon.code, isActive: coupon.isActive },
+      ip: clientIp(req) ?? undefined,
+      userAgent: clientUserAgent(req) ?? undefined,
     });
     res.json(coupon);
   } catch {
