@@ -14,6 +14,7 @@ test.describe("Phase 3 — admin reports", () => {
   test("dish costing and tax reports load", async ({ page }) => {
     await page.goto("/admin/reports/dish-costing");
     await expect(page.getByRole("heading", { name: /dish costing/i })).toBeVisible();
+    await expect(page.getByText(/average purchase price/i)).toBeVisible();
 
     await page.goto("/admin/reports/tax");
     await expect(page.getByRole("heading", { name: /tax reports/i })).toBeVisible();

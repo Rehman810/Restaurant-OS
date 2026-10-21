@@ -97,6 +97,17 @@ export async function applyStockChange(input: LedgerInput) {
         where: { id: item.id },
         data: { defaultCost: new Prisma.Decimal(newAvg) },
       });
+      if (input.type === "PURCHASE" && oldAvg > 0 && newAvg !== oldAvg) {
+        void import("../costing/price-alert").then(({ maybeNotifyIngredientCostChange }) =>
+          maybeNotifyIngredientCostChange({
+            branchId: input.branchId,
+            itemId: input.itemId,
+            itemName: item.name,
+            oldAvg,
+            newAvg,
+          }).catch((err) => console.error("[costing] price alert failed", err))
+        );
+      }
     }
 
     if (delta < 0 && item.trackExpiry) {

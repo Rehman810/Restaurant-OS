@@ -5,7 +5,7 @@ import { ADMIN_LIKE } from "../lib/roles";
 import { branchScopeError, getDefaultBranchId, resolveBranchScope } from "../lib/branch-scope";
 import { getStoreSettings } from "../lib/settings-data";
 import { parseDateRangeQuery } from "../lib/reports/time-range";
-import { buildDishCostingReport } from "../lib/reports/dish-costing";
+import { dishCostingReportRouter } from "./dish-costing-report";
 import { buildMenuEngineeringReport } from "../lib/reports/menu-engineering";
 import { buildVarianceReport } from "../lib/reports/variance";
 import { buildSalesIntelligence } from "../lib/reports/sales-intelligence";
@@ -34,25 +34,7 @@ function csvEscape(v: string | number | null | undefined) {
   return s;
 }
 
-reportsRouter.get(
-  "/dish-costing",
-  requireAuth,
-  requireRole(...ADMIN_LIKE, Role.MANAGER),
-  async (req, res) => {
-    try {
-      const { branchId } = await resolveBranch(req);
-      const category = req.query.category ? String(req.query.category) : undefined;
-      const dishes = await buildDishCostingReport(branchId, category);
-      res.json({
-        branchId,
-        costBasis: "Branch weighted-average (BranchStock.avgCost), fallback defaultCost",
-        dishes,
-      });
-    } catch (err) {
-      return branchScopeError(res, err);
-    }
-  }
-);
+reportsRouter.use(dishCostingReportRouter);
 
 reportsRouter.get(
   "/menu-engineering",

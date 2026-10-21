@@ -38,10 +38,32 @@ export function validateSettingsInput(body: Record<string, unknown>): SettingsEr
     if (!Number.isFinite(lng) || lng < -180 || lng > 180) errors.longitude = "Longitude must be between -180 and 180.";
   }
 
-  for (const key of ["taxPercent", "serviceChargePercent"] as const) {
+  for (const key of ["taxPercent", "serviceChargePercent", "foodCostTargetPercent", "foodCostHighPercent", "ingredientPriceChangeAlertPercent"] as const) {
     if (body[key] === undefined || body[key] === null || body[key] === "") continue;
     const n = Number(body[key]);
     if (!Number.isFinite(n) || n < 0 || n > 100) errors[key] = "Enter a percentage from 0 to 100.";
+  }
+
+  if (body.foodCostTargetPercent !== undefined && body.foodCostHighPercent !== undefined) {
+    const target = Number(body.foodCostTargetPercent);
+    const high = Number(body.foodCostHighPercent);
+    if (Number.isFinite(target) && Number.isFinite(high) && high < target) {
+      errors.foodCostHighPercent = "High food cost threshold must be at or above your target.";
+    }
+  }
+
+  if (body.suggestedPriceRoundingStep !== undefined && body.suggestedPriceRoundingStep !== "") {
+    const step = Number(body.suggestedPriceRoundingStep);
+    if (![1, 5, 10].includes(step)) {
+      errors.suggestedPriceRoundingStep = "Rounding step must be 1, 5, or 10.";
+    }
+  }
+
+  if (body.suspiciousLowCostFraction !== undefined && body.suspiciousLowCostFraction !== "") {
+    const f = Number(body.suspiciousLowCostFraction);
+    if (!Number.isFinite(f) || f <= 0 || f > 1) {
+      errors.suspiciousLowCostFraction = "Enter a fraction between 0 and 1 (default 0.25).";
+    }
   }
 
   for (const key of ["confirmSlaMinutes", "deliverySlaMinutes", "deliveryEstimateMin", "pickupEstimateMin"] as const) {

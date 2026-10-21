@@ -317,6 +317,21 @@ settingsRouter.patch("/", requireAuth, requireRole(Role.ADMIN), async (req, res)
       ...(body.tiktokUrl !== undefined ? { tiktokUrl: String(body.tiktokUrl) } : {}),
       ...(body.youtubeUrl !== undefined ? { youtubeUrl: String(body.youtubeUrl) } : {}),
       ...(body.googlePlaceId !== undefined ? { googlePlaceId: String(body.googlePlaceId).trim() } : {}),
+      ...(body.foodCostTargetPercent !== undefined
+        ? { foodCostTargetPercent: num(body.foodCostTargetPercent) ?? 32 }
+        : {}),
+      ...(body.foodCostHighPercent !== undefined
+        ? { foodCostHighPercent: num(body.foodCostHighPercent) ?? 40 }
+        : {}),
+      ...(body.suggestedPriceRoundingStep !== undefined
+        ? { suggestedPriceRoundingStep: Number(body.suggestedPriceRoundingStep) || 10 }
+        : {}),
+      ...(body.suspiciousLowCostFraction !== undefined
+        ? { suspiciousLowCostFraction: num(body.suspiciousLowCostFraction) ?? 0.25 }
+        : {}),
+      ...(body.ingredientPriceChangeAlertPercent !== undefined
+        ? { ingredientPriceChangeAlertPercent: num(body.ingredientPriceChangeAlertPercent) ?? 10 }
+        : {}),
     },
   });
     const afterSnap = settingsSnapshotForAudit(updated as unknown as Record<string, unknown>);

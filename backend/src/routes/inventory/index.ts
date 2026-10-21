@@ -826,38 +826,56 @@ inventoryRouter.get("/waste", requireAuth, requireRole(...READ_ROLES), async (re
 });
 
 inventoryRouter.get("/recipes/:menuItemId", requireAuth, requireRole(...WRITE_ROLES), async (req, res) => {
-  const [lines, meta, menu] = await Promise.all([
-    prisma.recipeLine.findMany({
-      where: { menuItemId: req.params.menuItemId },
-      include: { item: { select: { id: true, name: true, unit: true, defaultCost: true } } },
-    }),
-    prisma.menuRecipe.findUnique({ where: { menuItemId: req.params.menuItemId } }),
-    prisma.menuItem.findUnique({ where: { id: req.params.menuItemId }, select: { price: true, name: true } }),
-  ]);
-  const yieldPortions = meta?.yieldPortions ?? 1;
-  let recipeCost = 0;
-  for (const l of lines) {
-    recipeCost += Number(l.quantity) * Number(l.item.defaultCost);
+  try {
+    const branchId = await resolveBranchId(req);
+    const menuItemId = req.params.menuItemId;
+    const [lines, meta, menu] = await Promise.all([
+      prisma.recipeLine.findMany({
+        where: { menuItemId },
+        include: { item: { select: { id: true, name: true, unit: true, defaultCost: true } } },
+      }),
+      prisma.menuRecipe.findUnique({ where: { menuItemId } }),
+      prisma.menuItem.findUnique({
+        where: { id: menuItemId },
+        select: { price: true, discountPrice: true, name: true },
+      }),
+    ]);
+    if (!menu) return res.status(404).json({ error: "Menu item not found." });
+    const { buildDishEconomics } = await import("../../lib/costing/compute");
+    const { loadCostingContext } = await import("../../lib/costing/report");
+    const { settings, costByIngredient } = await loadCostingContext(branchId);
+    const yieldPortions = Math.max(1, meta?.yieldPortions ?? 1);
+    const econ = buildDishEconomics(menu, lines, costByIngredient, yieldPortions, settings, null);
+    const costWarning =
+      econ.status === "NO_RECIPE"
+        ? "This dish has no recipe yet."
+        : econ.status === "INCOMPLETE"
+          ? `Missing ingredient costs: ${econ.missingIngredients.join(", ")}`
+          : econ.status === "SUSPICIOUS_LOW"
+            ? "Recipe cost looks unusually low — check quantities and costs."
+            : null;
+    res.json({
+      yieldPortions,
+      notes: meta?.notes ?? "",
+      recipeCost: econ.recipeCostDisplay ?? 0,
+      price: econ.price,
+      netPrice: econ.netPrice,
+      marginPercent: econ.marginPercent ?? 0,
+      foodCostPercent: econ.foodCostPercent ?? 0,
+      costStatus: econ.status,
+      missingIngredients: econ.missingIngredients,
+      costWarning,
+      lines: lines.map((l) => ({
+        id: l.id,
+        itemId: l.itemId,
+        itemName: l.item.name,
+        unit: l.item.unit,
+        quantity: Number(l.quantity),
+      })),
+    });
+  } catch (err) {
+    return branchScopeError(res, err);
   }
-  recipeCost /= yieldPortions;
-  const price = Number(menu?.price ?? 0);
-  const margin = price > 0 ? ((price - recipeCost) / price) * 100 : 0;
-  const foodCostPct = price > 0 ? (recipeCost / price) * 100 : 0;
-  res.json({
-    yieldPortions,
-    notes: meta?.notes ?? "",
-    recipeCost,
-    price,
-    marginPercent: margin,
-    foodCostPercent: foodCostPct,
-    lines: lines.map((l) => ({
-      id: l.id,
-      itemId: l.itemId,
-      itemName: l.item.name,
-      unit: l.item.unit,
-      quantity: Number(l.quantity),
-    })),
-  });
 });
 
 inventoryRouter.put("/recipes/:menuItemId", requireAuth, requireRole(...WRITE_ROLES), async (req, res) => {

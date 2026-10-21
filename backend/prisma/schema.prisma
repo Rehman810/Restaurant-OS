@@ -974,6 +974,11 @@ model StoreSettings {
   analyticsEmailRecipients  String  @default("")
   analyticsEmailSendHour    Int     @default(8)
   analyticsEmailLastSentAt  DateTime?
+  foodCostTargetPercent           Decimal @default(32) @db.Decimal(5, 2)
+  foodCostHighPercent             Decimal @default(40) @db.Decimal(5, 2)
+  suggestedPriceRoundingStep      Int     @default(10)
+  suspiciousLowCostFraction       Decimal @default(0.25) @db.Decimal(5, 4)
+  ingredientPriceChangeAlertPercent Decimal @default(10) @db.Decimal(5, 2)
   updatedAt           DateTime @updatedAt
 }
 

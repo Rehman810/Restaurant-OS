@@ -168,7 +168,13 @@ export function InventoryModule() {
   const [recipeMenuId, setRecipeMenuId] = useState("");
   const [recipeLines, setRecipeLines] = useState<{ itemId: string; quantity: string }[]>([]);
   const [recipeYield, setRecipeYield] = useState("1");
-  const [recipeMeta, setRecipeMeta] = useState({ recipeCost: 0, marginPercent: 0, foodCostPercent: 0, price: 0 });
+  const [recipeMeta, setRecipeMeta] = useState({
+    recipeCost: 0,
+    marginPercent: 0,
+    foodCostPercent: 0,
+    price: 0,
+    costWarning: null as string | null,
+  });
 
   const [wasteItem, setWasteItem] = useState("");
   const [wasteQty, setWasteQty] = useState("");
@@ -349,6 +355,7 @@ export function InventoryModule() {
         marginPercent: d.marginPercent,
         foodCostPercent: d.foodCostPercent,
         price: d.price,
+        costWarning: d.costWarning ?? null,
       });
       setRecipeLines(
         d.lines.length ? d.lines.map((l) => ({ itemId: l.itemId, quantity: String(l.quantity) })) : [{ itemId: "", quantity: "" }]
@@ -754,6 +761,14 @@ export function InventoryModule() {
                     }}
                     className="space-y-4"
                   >
+                    {recipeMeta.costWarning && (
+                      <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+                        {recipeMeta.costWarning}{" "}
+                        <a className="font-semibold underline" href="/admin/reports/dish-costing">
+                          Open dish costing
+                        </a>
+                      </p>
+                    )}
                     <div className="grid gap-2 rounded-xl bg-stone-50 p-3 text-sm dark:bg-stone-800/50 sm:grid-cols-2 lg:grid-cols-4">
                       <div><p className="text-xs text-stone-500">Recipe cost</p><p className="font-bold">{pkr(recipeMeta.recipeCost)}</p></div>
                       <div><p className="text-xs text-stone-500">Menu price</p><p className="font-bold">{pkr(recipeMeta.price)}</p></div>

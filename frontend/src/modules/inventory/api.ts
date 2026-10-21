@@ -145,8 +145,12 @@ export async function fetchRecipe(menuItemId: string) {
     notes: string;
     recipeCost: number;
     price: number;
+    netPrice?: number;
     marginPercent: number;
     foodCostPercent: number;
+    costStatus?: string;
+    missingIngredients?: string[];
+    costWarning?: string | null;
     lines: { id: string; itemId: string; itemName: string; unit: InventoryUnit; quantity: number }[];
   }>(`/admin/inventory/recipes/${menuItemId}`);
 }

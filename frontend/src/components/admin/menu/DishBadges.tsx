@@ -5,9 +5,11 @@ import type { AdminDishRow } from "@/lib/admin-menu/types";
 export function DishBadges({
   row,
   showMargin,
+  recipeCostFlag,
 }: {
   row: AdminDishRow;
   showMargin?: boolean;
+  recipeCostFlag?: "NO_RECIPE" | "INCOMPLETE" | "SUSPICIOUS_LOW" | null;
 }) {
   const margin =
     showMargin && row.marginPercent != null
@@ -54,6 +56,14 @@ export function DishBadges({
         <span className="rounded-md bg-stone-100 px-1.5 py-0.5 text-[11px] font-semibold text-stone-600 dark:bg-stone-800">
           Cost unknown
         </span>
+      )}
+      {recipeCostFlag && (
+        <a
+          href="/admin/reports/dish-costing?status=needs_check"
+          className="rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900 underline-offset-2 hover:underline dark:bg-amber-950/50 dark:text-amber-100"
+        >
+          Check recipe
+        </a>
       )}
     </div>
   );

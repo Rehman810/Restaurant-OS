@@ -173,6 +173,11 @@ export type StoreSettings = {
   taxFiscalYearEnabled?: boolean;
   taxRoundingRule?: string;
   pricesIncludeTax?: boolean;
+  foodCostTargetPercent?: string | number;
+  foodCostHighPercent?: string | number;
+  suggestedPriceRoundingStep?: number;
+  suspiciousLowCostFraction?: string | number;
+  ingredientPriceChangeAlertPercent?: string | number;
   storefrontPushEnabled?: boolean;
   receiptFooter?: string;
   confirmSlaMinutes?: number;

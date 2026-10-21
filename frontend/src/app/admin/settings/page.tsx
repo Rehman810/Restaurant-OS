@@ -84,6 +84,7 @@ const SETTINGS_TABS = [
   { id: "social", label: "Social" },
   { id: "banners", label: "Banners" },
   { id: "inventory", label: "Inventory" },
+  { id: "costing", label: "Costing" },
   { id: "controls", label: "Controls" },
   { id: "security", label: "Security" },
 ] as const;
@@ -1489,6 +1490,79 @@ export default function AdminSettingsPage() {
                   ...settings,
                   refundReasonOptions: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean),
                 })
+              }
+            />
+          </SettingsField>
+        </SettingsSection>
+      )}
+
+      {tab === "costing" && settings && (
+        <SettingsSection
+          icon={Package}
+          title="Costing"
+          description="Targets used on the dish costing report, menu engineering, and profit estimates."
+        >
+          <SettingsField label="Target food cost %" hint="Default 32. Dishes at or below this are on target.">
+            <input
+              className="input w-full max-w-xs"
+              type="number"
+              min={0}
+              max={100}
+              step={0.5}
+              value={Number(settings.foodCostTargetPercent ?? 32)}
+              onChange={(e) => setSettings({ ...settings, foodCostTargetPercent: e.target.value })}
+            />
+          </SettingsField>
+          <SettingsField label="High food cost %" hint="Default 40. Between target and this is “watch”; above is high.">
+            <input
+              className="input w-full max-w-xs"
+              type="number"
+              min={0}
+              max={100}
+              step={0.5}
+              value={Number(settings.foodCostHighPercent ?? 40)}
+              onChange={(e) => setSettings({ ...settings, foodCostHighPercent: e.target.value })}
+            />
+          </SettingsField>
+          <SettingsField label="Suggested price rounding" hint="Round suggested prices up to this step (1, 5, or 10). Default 10.">
+            <select
+              className="input w-full max-w-xs"
+              value={settings.suggestedPriceRoundingStep ?? 10}
+              onChange={(e) =>
+                setSettings({ ...settings, suggestedPriceRoundingStep: Number(e.target.value) })
+              }
+            >
+              <option value={1}>1</option>
+              <option value={5}>5</option>
+              <option value={10}>10</option>
+            </select>
+          </SettingsField>
+          <SettingsField
+            label="Suspicious low cost fraction"
+            hint="Default 0.25. Flag dishes whose cost is below this fraction of the category median."
+          >
+            <input
+              className="input w-full max-w-xs"
+              type="number"
+              min={0.01}
+              max={1}
+              step={0.05}
+              value={Number(settings.suspiciousLowCostFraction ?? 0.25)}
+              onChange={(e) => setSettings({ ...settings, suspiciousLowCostFraction: e.target.value })}
+            />
+          </SettingsField>
+          <SettingsField
+            label="Ingredient price change alert %"
+            hint="Default 10. Used for the price-change panel and staff alerts."
+          >
+            <input
+              className="input w-full max-w-xs"
+              type="number"
+              min={1}
+              max={100}
+              value={Number(settings.ingredientPriceChangeAlertPercent ?? 10)}
+              onChange={(e) =>
+                setSettings({ ...settings, ingredientPriceChangeAlertPercent: e.target.value })
               }
             />
           </SettingsField>

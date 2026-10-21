@@ -100,6 +100,24 @@ export function DishesTab({
   const [priceEdit, setPriceEdit] = useState<{ row: AdminDishRow; value: string } | null>(null);
   const [importPreview, setImportPreview] = useState<string | null>(null);
   const [selectMode, setSelectMode] = useState(false);
+  const [recipeCostFlags, setRecipeCostFlags] = useState<Record<string, "NO_RECIPE" | "INCOMPLETE" | "SUSPICIOUS_LOW">>({});
+
+  useEffect(() => {
+    if (!canSeeMargin) return;
+    void api<{ items: { id: string; status: string }[] }>(
+      "/admin/reports/dish-costing?pageSize=500&includeCombos=false"
+    )
+      .then((d) => {
+        const next: Record<string, "NO_RECIPE" | "INCOMPLETE" | "SUSPICIOUS_LOW"> = {};
+        for (const item of d.items) {
+          if (item.status === "NO_RECIPE" || item.status === "INCOMPLETE" || item.status === "SUSPICIOUS_LOW") {
+            next[item.id] = item.status;
+          }
+        }
+        setRecipeCostFlags(next);
+      })
+      .catch(() => setRecipeCostFlags({}));
+  }, [canSeeMargin]);
 
   const setQuery = useCallback(
     (patch: Record<string, string | undefined>) => {
@@ -435,7 +453,7 @@ export function DishesTab({
                     )}
                   </td>
                   <td className="hidden px-3 py-2 lg:table-cell">
-                    <DishBadges row={row} showMargin={false} />
+                    <DishBadges row={row} showMargin={false} recipeCostFlag={recipeCostFlags[row.id]} />
                   </td>
                   {canSeeMargin && (
                     <td className="hidden px-3 py-2 text-xs xl:table-cell">
@@ -546,7 +564,7 @@ export function DishesTab({
                   </div>
                   <p className="shrink-0 text-sm font-bold text-brand-700 dark:text-brand-300">{pkr(row.price)}</p>
                 </div>
-                <DishBadges row={row} showMargin={canSeeMargin} />
+                <DishBadges row={row} showMargin={canSeeMargin} recipeCostFlag={recipeCostFlags[row.id]} />
                 <div className="flex flex-wrap gap-2">
                   <DishAvailabilityToggle
                     availability={row.availability}
