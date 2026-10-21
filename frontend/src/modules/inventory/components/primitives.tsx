@@ -243,7 +243,7 @@ export function DateInput({
           type="date"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="input admin-select w-full pl-9"
+          className="input admin-select w-full pl-9 pr-10"
         />
       </div>
     </Field>
@@ -351,6 +351,175 @@ export function SelectField({
   );
 }
 
+export type SearchableIngredient = {
+  id: string;
+  name: string;
+  unit?: string;
+  quantity?: number;
+  status?: "ok" | "low" | "out" | "expiring";
+};
+
+export function StatusChip({
+  status,
+}: {
+  status: "ok" | "low" | "out" | "expiring" | string;
+}) {
+  const tone =
+    status === "out"
+      ? "bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-200"
+      : status === "low"
+        ? "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-100"
+        : status === "expiring"
+          ? "bg-purple-100 text-purple-900 dark:bg-purple-950/50 dark:text-purple-100"
+          : "bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-100";
+  const label =
+    status === "out" ? "Out" : status === "low" ? "Low" : status === "expiring" ? "Expiring" : "OK";
+  return (
+    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${tone}`}>
+      {label}
+    </span>
+  );
+}
+
+export function SearchableSelect({
+  label,
+  value,
+  onChange,
+  options,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (id: string) => void;
+  options: SearchableIngredient[];
+  placeholder?: string;
+}) {
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const filtered = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    if (!s) return options;
+    return options.filter((i) => i.name.toLowerCase().includes(s));
+  }, [options, q]);
+  const selected = options.find((o) => o.id === value);
+
+  return (
+    <Field label={label}>
+      <div className="relative">
+        <input
+          className="input w-full text-sm"
+          placeholder={placeholder ?? "Search ingredient…"}
+          value={open ? q : selected?.name ?? q}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setOpen(true);
+            setActive(0);
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={(e) => {
+            if (!open && (e.key === "ArrowDown" || e.key === "Enter")) setOpen(true);
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setActive((i) => Math.min(i + 1, filtered.length - 1));
+            }
+            if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setActive((i) => Math.max(i - 1, 0));
+            }
+            if (e.key === "Enter" && filtered[active]) {
+              e.preventDefault();
+              onChange(filtered[active].id);
+              setOpen(false);
+              setQ("");
+            }
+            if (e.key === "Escape") setOpen(false);
+          }}
+          aria-autocomplete="list"
+          aria-expanded={open}
+        />
+        {open && filtered.length > 0 && (
+          <ul
+            className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-stone-200 bg-white py-1 shadow-lg dark:border-stone-700 dark:bg-stone-900"
+            role="listbox"
+          >
+            {filtered.map((opt, idx) => (
+              <li key={opt.id}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={value === opt.id}
+                  className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm ${
+                    idx === active ? "bg-brand-50 dark:bg-brand-950/40" : "hover:bg-stone-50 dark:hover:bg-stone-800"
+                  }`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    onChange(opt.id);
+                    setOpen(false);
+                    setQ("");
+                  }}
+                >
+                  <span>
+                    <span className="font-medium">{opt.name}</span>
+                    {opt.unit && <span className="ml-1 text-xs text-stone-400">{opt.unit}</span>}
+                  </span>
+                  <span className="flex items-center gap-2 text-xs text-stone-500">
+                    {opt.quantity != null && <span className="font-mono tabular-nums">{opt.quantity}</span>}
+                    {opt.status && opt.status !== "ok" && <StatusChip status={opt.status} />}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Field>
+  );
+}
+
+export function DetailDrawer({
+  open,
+  title,
+  onClose,
+  children,
+}: {
+  open: boolean;
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[90] flex justify-end bg-stone-900/40 backdrop-blur-sm">
+      <div className="flex h-full w-full max-w-md flex-col border-l border-stone-200 bg-white shadow-2xl dark:border-stone-700 dark:bg-stone-900">
+        <div className="flex items-center justify-between border-b border-stone-100 px-4 py-3 dark:border-stone-800">
+          <h3 className="font-display text-lg font-bold">{title}</h3>
+          <button type="button" className="btn-secondary text-xs" onClick={onClose}>Close</button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+export function InventoryEmptyState({
+  title,
+  description,
+  action,
+}: {
+  title: string;
+  description: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-dashed border-stone-200 px-4 py-10 text-center dark:border-stone-700">
+      <p className="font-semibold text-stone-800 dark:text-stone-100">{title}</p>
+      <p className="mt-1 text-sm text-stone-500">{description}</p>
+      {action && <div className="mt-4">{action}</div>}
+    </div>
+  );
+}
+
 export function IngredientPicker({
   label,
   value,
@@ -361,45 +530,17 @@ export function IngredientPicker({
   label: string;
   value: string;
   onChange: (id: string) => void;
-  items: { id: string; name: string; unit?: string }[];
+  items: SearchableIngredient[];
   placeholder?: string;
 }) {
-  const [q, setQ] = useState("");
-  const filtered = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    if (!s) return items;
-    return items.filter((i) => i.name.toLowerCase().includes(s));
-  }, [items, q]);
-
-  const options = useMemo(
-    () =>
-      filtered.map((i) => ({
-        value: i.id,
-        label: i.unit ? `${i.name} (${i.unit})` : i.name,
-      })),
-    [filtered]
-  );
-
   return (
-    <div className="space-y-1">
-      <Field label={label}>
-        <input
-          className="input admin-select mb-1 w-full text-xs"
-          placeholder="Type to filter…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          aria-label={`Filter ${label}`}
-        />
-        <AdminSelect
-          value={value}
-          onChange={onChange}
-          placeholder={placeholder ?? "Choose ingredient"}
-          options={[{ value: "", label: "—" }, ...options]}
-          className="w-full"
-          minWidth="min-w-0"
-        />
-      </Field>
-    </div>
+    <SearchableSelect
+      label={label}
+      value={value}
+      onChange={onChange}
+      options={items}
+      placeholder={placeholder ?? "Search ingredient…"}
+    />
   );
 }
 
