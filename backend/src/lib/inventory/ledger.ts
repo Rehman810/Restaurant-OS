@@ -81,7 +81,9 @@ export async function applyStockChange(input: LedgerInput) {
     await tx.$executeRaw`
       SELECT id FROM "BranchStock" WHERE id = ${stock.id} FOR UPDATE
     `;
-    const oldQty = Number(stock.quantity);
+    const lockedRow = await tx.branchStock.findUnique({ where: { id: stock.id } });
+    if (!lockedRow) throw Object.assign(new Error("Branch stock row missing."), { status: 500 });
+    const oldQty = Number(lockedRow.quantity);
     const oldAvg = Number(stock.avgCost);
     const delta = roundQty(input.quantityDelta);
     const nextQty = roundQty(oldQty + delta);

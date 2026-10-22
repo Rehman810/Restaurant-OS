@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo } from "react";
 import { api } from "@/lib/api";
+import { apiUpgradeMessage, isRouteMissingError, loadApiCapabilities } from "@/lib/api-capabilities";
 import type { AnalyticsOverview, AnalyticsPreset, CompareMode } from "@/lib/analytics/types";
 import { usePoll } from "@/hooks/usePoll";
 
@@ -25,7 +26,17 @@ function buildQueryString(q: AnalyticsQuery) {
 
 export function useAnalyticsOverview(query: AnalyticsQuery) {
   const qs = useMemo(() => buildQueryString(query), [query]);
-  const fetcher = useCallback(() => api<AnalyticsOverview>(`/admin/analytics/overview?${qs}`), [qs]);
+  const fetcher = useCallback(async () => {
+    try {
+      return await api<AnalyticsOverview>(`/admin/analytics/overview?${qs}`);
+    } catch (err) {
+      if (isRouteMissingError(err)) {
+        await loadApiCapabilities(true);
+        throw new Error(apiUpgradeMessage());
+      }
+      throw err;
+    }
+  }, [qs]);
   const poll = usePoll(fetcher, 60_000);
   return poll;
 }
