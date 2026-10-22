@@ -81,6 +81,7 @@ model Branch {
   posHolds             PosHold[]
   menuItemAvailability MenuItemBranchAvailability[]
   dealAvailability     DealBranchAvailability[]
+  deliveryAreaLinks    DeliveryAreaBranch[]
 
   @@unique([restaurantId, code])
   @@index([restaurantId, isActive])
@@ -314,6 +315,7 @@ model User {
   pushSubscriptions         CustomerPushSubscription[]
   staffPushSubscriptions    StaffPushSubscription[]
   posHolds                  PosHold[]
+  deliveryPauses            DeliveryPause[] @relation("DeliveryPauses")
 }
 
 model DiningFloor {
@@ -933,6 +935,8 @@ model StoreSettings {
   minimumOrder        Decimal  @default(500) @db.Decimal(10, 2)
   freeDeliveryAbove   Decimal? @db.Decimal(10, 2)
   deliveryEstimateMin Int      @default(45)
+  deliveryEstimateMax Int      @default(60)
+  deliveryChargeSanityLimit Int @default(3000)
   pickupEstimateMin   Int      @default(20)
   openHour            Int      @default(19)
   openMinute          Int      @default(0)
@@ -1260,12 +1264,50 @@ model DeliveryArea {
   id             String     @id @default(uuid())
   restaurantId   String     @default("11111111-1111-4111-8111-111111111111")
   restaurant     Restaurant @relation(fields: [restaurantId], references: [id])
-  name           String     @unique
-  deliveryCharge Decimal  @db.Decimal(10, 2)
-  isDelivering   Boolean  @default(false)
-  sortOrder      Int      @default(0)
-  createdAt      DateTime @default(now())
+  name           String
+  slug           String     @default("")
+  covers         String[]   @default([])
+  deliveryCharge Decimal    @db.Decimal(10, 2)
+  minOrder       Decimal?   @db.Decimal(10, 2)
+  freeAbove      Decimal?   @db.Decimal(10, 2)
+  etaMinMinutes  Int?
+  etaMaxMinutes  Int?
+  isDelivering   Boolean    @default(false)
+  isActive       Boolean    @default(true)
+  archivedAt     DateTime?
+  sortOrder      Int        @default(0)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
   orders         Order[]
+  branchLinks    DeliveryAreaBranch[]
+
+  @@index([restaurantId, archivedAt, isDelivering, sortOrder])
+  @@index([restaurantId, name])
+}
+
+model DeliveryAreaBranch {
+  areaId   String
+  area     DeliveryArea @relation(fields: [areaId], references: [id], onDelete: Cascade)
+  branchId String
+  branch   Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@id([areaId, branchId])
+  @@index([branchId])
+}
+
+model DeliveryPause {
+  id           String    @id @default(uuid())
+  restaurantId String    @default("11111111-1111-4111-8111-111111111111")
+  scope        String
+  areaIds      String[]  @default([])
+  pausedById   String
+  pausedBy     User      @relation("DeliveryPauses", fields: [pausedById], references: [id])
+  pausedAt     DateTime  @default(now())
+  until        DateTime?
+  reason       String    @default("")
+  resumedAt    DateTime?
+
+  @@index([restaurantId, resumedAt, pausedAt])
 }
 
 model Order {
@@ -1297,6 +1339,10 @@ model Order {
   fulfillmentType  FulfillmentType @default(DELIVERY)
   deliveryAreaId   String?
   deliveryArea     DeliveryArea?   @relation(fields: [deliveryAreaId], references: [id])
+  deliveryAreaNameSnap String?
+  deliveryEtaMinSnap   Int?
+  deliveryEtaMaxSnap   Int?
+  deliveryAddressAreaWarning Boolean @default(false)
   subtotal         Decimal         @db.Decimal(10, 2)
   deliveryCharge   Decimal         @default(0) @db.Decimal(10, 2)
   taxAmount        Decimal         @default(0) @db.Decimal(10, 2)

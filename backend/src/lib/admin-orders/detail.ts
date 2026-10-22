@@ -222,7 +222,12 @@ export async function getAdminOrderDetail(
     },
     table: order.diningTable?.label || order.tableNumber || null,
     address: order.deliveryAddress,
-    deliveryArea: order.deliveryArea?.name ?? null,
+    deliveryArea: order.deliveryAreaNameSnap ?? order.deliveryArea?.name ?? null,
+    deliveryAddressAreaWarning: order.deliveryAddressAreaWarning === true,
+    deliveryEta:
+      order.deliveryEtaMinSnap != null && order.deliveryEtaMaxSnap != null
+        ? { minMinutes: order.deliveryEtaMinSnap, maxMinutes: order.deliveryEtaMaxSnap }
+        : null,
     rider: order.rider
       ? { id: order.rider.id, name: order.rider.name, phone: order.rider.phone }
       : null,

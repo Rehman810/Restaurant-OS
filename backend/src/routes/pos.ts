@@ -212,16 +212,16 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
   let resolvedSessionId: string | null = tableSessionId || null;
   let resolvedWaiterId: string | null = waiterId || null;
 
+  let deliverySnap: {
+    name: string;
+    etaMin: number;
+    etaMax: number;
+    addressWarning: boolean;
+  } | null = null;
   if (mode === FulfillmentType.DELIVERY) {
     if (!deliveryAreaId) {
       return res.status(400).json({ error: "Select a delivery area for delivery orders." });
     }
-    const area = await prisma.deliveryArea.findUnique({ where: { id: deliveryAreaId } });
-    if (!area || !area.isDelivering) {
-      return res.status(400).json({ error: "Selected area is not available." });
-    }
-    deliveryCharge = Number(area.deliveryCharge);
-    areaId = area.id;
     const addr = String(deliveryAddress || "").trim();
     if (!addr) {
       return res.status(400).json({ error: "Delivery address is required." });
@@ -235,12 +235,29 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
     if (!phoneCheck) {
       return res.status(400).json({ error: "Customer phone is required for delivery." });
     }
-    if (
-      storeSettings.freeDeliveryAbove != null &&
-      built.subtotal >= Number(storeSettings.freeDeliveryAbove)
-    ) {
-      deliveryCharge = 0;
-    }
+    const { loadActivePauses } = await import("../lib/delivery/pause");
+    const { assertDeliveryAreaForOrder } = await import("../lib/delivery/resolve-order");
+    const [area, pauses] = await Promise.all([
+      prisma.deliveryArea.findUnique({ where: { id: deliveryAreaId } }),
+      loadActivePauses(storeSettings.restaurantId),
+    ]);
+    const checked = assertDeliveryAreaForOrder({
+      area,
+      subtotal: built.subtotal,
+      settings: storeSettings,
+      pauses,
+      address: addr,
+      expectedDeliveryCharge: null,
+    });
+    if (!checked.ok) return res.status(checked.status).json({ error: checked.error });
+    deliveryCharge = checked.resolved.deliveryCharge;
+    areaId = checked.resolved.areaId;
+    deliverySnap = {
+      name: checked.resolved.areaName,
+      etaMin: checked.resolved.fee.etaMinMinutes,
+      etaMax: checked.resolved.fee.etaMaxMinutes,
+      addressWarning: checked.resolved.addressWarning,
+    };
   } else if (mode === FulfillmentType.DINE_IN) {
     const dine = await resolvePosDineIn(resolvedBranchId, {
       tableNumber,
@@ -376,6 +393,10 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
           createdById: req.user!.id,
           fulfillmentType: mode,
           deliveryAreaId: areaId,
+          deliveryAreaNameSnap: deliverySnap?.name ?? null,
+          deliveryEtaMinSnap: deliverySnap?.etaMin ?? null,
+          deliveryEtaMaxSnap: deliverySnap?.etaMax ?? null,
+          deliveryAddressAreaWarning: deliverySnap?.addressWarning ?? false,
           subtotal: built.subtotal,
           deliveryCharge,
           taxAmount: quoted.tax,

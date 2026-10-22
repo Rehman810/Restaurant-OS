@@ -197,7 +197,7 @@ export default function PosPage() {
       if (!m.length) throw new Error("offline");
     }
     const [a, s] = await Promise.all([
-      api<DeliveryArea[]>("/delivery-areas").catch(() => [] as DeliveryArea[]),
+      import("@/lib/delivery-areas-public").then((m) => m.fetchPublicDeliveryAreas()).then((r) => r.areas),
       api<{ settings: { storeName?: string; phone: string; address: string; freeDeliveryAbove?: string | number | null } }>(
         "/settings/public"
       ).catch(() => null),

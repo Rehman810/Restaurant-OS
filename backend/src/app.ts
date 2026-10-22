@@ -14,6 +14,7 @@ import { uploadRouter } from "./routes/upload";
 import { categoriesRouter } from "./routes/categories";
 import { dealsRouter } from "./routes/deals";
 import { deliveryAreasRouter } from "./routes/delivery-areas";
+import { adminAreasRouter } from "./routes/admin-areas";
 import { settingsRouter } from "./routes/settings";
 import { staffRouter } from "./routes/staff";
 import { staffNotificationsRouter } from "./routes/staff-notifications";
@@ -87,6 +88,7 @@ export function createApp() {
   app.use("/categories", categoriesRouter);
   app.use("/deals", dealsRouter);
   app.use("/delivery-areas", deliveryAreasRouter);
+  app.use("/admin/areas", adminAreasRouter);
   app.use("/settings", settingsRouter);
   app.use("/coupons", couponsPublicRouter);
   app.use("/admin/coupons", couponsAdminRouter);

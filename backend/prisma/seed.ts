@@ -22,7 +22,7 @@ function cliArg(flag: string, envName: string, fallback: string) {
 }
 
 const BRAND_NAME = cliArg("--name", "SEED_NAME", "Demo Restaurant");
-const CITY = cliArg("--city", "SEED_CITY", "Lahore");
+const CITY = cliArg("--city", "SEED_CITY", "Karachi");
 const CURRENCY = cliArg("--currency", "SEED_CURRENCY", "PKR").toUpperCase();
 const TIMEZONE = cliArg("--timezone", "SEED_TIMEZONE", "Asia/Karachi");
 

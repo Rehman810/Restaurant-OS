@@ -206,3 +206,11 @@ export function emitMenuCatalogChanged(branchIds?: string[]) {
     io.to(`branch:${branchId}`).emit("menu:availability-changed", { branchId, ...payload });
   }
 }
+
+/** Storefront/POS refetch delivery areas when charges, pause, or coverage change. */
+export function emitDeliveryAreasChanged() {
+  if (!io) return;
+  const payload = { at: Date.now() };
+  io.emit("delivery:areas-changed", payload);
+  io.to("ops").emit("delivery:areas-changed", payload);
+}

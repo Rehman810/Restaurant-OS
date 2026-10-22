@@ -48,6 +48,8 @@ import { cleanText } from "../lib/text";
 import { orderStatusAuditPayload, writeAudit } from "../lib/audit";
 import { AuditAction } from "../lib/audit-actions";
 import { recalculateOrderTotals } from "../lib/order-totals";
+import { loadActivePauses } from "../lib/delivery/pause";
+import { assertDeliveryAreaForOrder } from "../lib/delivery/resolve-order";
 import { recordRiderCodOnDelivered, releaseRiderCashOnCancel } from "../lib/rider-cod";
 import {
   couponCustomerStats,
@@ -138,6 +140,7 @@ ordersRouter.post("/", optionalAuth, async (req, res) => {
     idempotencyKey,
     couponCode: couponCodeBody,
     loyaltyPointsRedeem,
+    expectedDeliveryCharge,
   } = req.body as {
     items?: {
       menuItemId: string;
@@ -162,6 +165,7 @@ ordersRouter.post("/", optionalAuth, async (req, res) => {
     idempotencyKey?: string;
     couponCode?: string;
     loyaltyPointsRedeem?: number;
+    expectedDeliveryCharge?: number;
   };
   const checkoutKey = idempotencyKey ? cleanText(String(idempotencyKey), 120) : "";
   if (checkoutKey) {
@@ -241,15 +245,12 @@ ordersRouter.post("/", optionalAuth, async (req, res) => {
 
   let deliveryCharge = 0;
   let areaId: string | null = null;
-  if (mode === FulfillmentType.DELIVERY) {
-    const area = await prisma.deliveryArea.findUnique({ where: { id: deliveryAreaId } });
-    if (!area || !area.isDelivering) {
-      return res.status(400).json({ error: "Selected area is not available for delivery." });
-    }
-    deliveryCharge = Number(area.deliveryCharge);
-    areaId = area.id;
-  }
-
+  let deliverySnap: {
+    name: string;
+    etaMin: number;
+    etaMax: number;
+    addressWarning: boolean;
+  } | null = null;
   const user = req.user;
   const isRegisteredCustomer = user?.role === Role.CUSTOMER;
   const guestAccessToken = isRegisteredCustomer ? null : crypto.randomBytes(32).toString("base64url");
@@ -382,19 +383,33 @@ ordersRouter.post("/", optionalAuth, async (req, res) => {
     }
   }
 
-  const minimumOrder = Number(storeSettings.minimumOrder);
-  if (subtotal < minimumOrder) {
-    return res.status(400).json({
-      error: `Minimum order is ${formatMoney(minimumOrder, storeSettings)}. Add more items to continue.`,
+  if (mode === FulfillmentType.DELIVERY && areaId) {
+    const area = await prisma.deliveryArea.findUnique({ where: { id: areaId } });
+    const pauses = await loadActivePauses(storeSettings.restaurantId);
+    const checked = assertDeliveryAreaForOrder({
+      area,
+      subtotal,
+      settings: storeSettings,
+      pauses,
+      address: trimmedAddress,
+      expectedDeliveryCharge:
+        expectedDeliveryCharge != null ? Number(expectedDeliveryCharge) : null,
     });
-  }
-
-  if (
-    mode === FulfillmentType.DELIVERY &&
-    storeSettings.freeDeliveryAbove != null &&
-    subtotal >= Number(storeSettings.freeDeliveryAbove)
-  ) {
-    deliveryCharge = 0;
+    if (!checked.ok) return res.status(checked.status).json({ error: checked.error });
+    deliveryCharge = checked.resolved.deliveryCharge;
+    deliverySnap = {
+      name: checked.resolved.areaName,
+      etaMin: checked.resolved.fee.etaMinMinutes,
+      etaMax: checked.resolved.fee.etaMaxMinutes,
+      addressWarning: checked.resolved.addressWarning,
+    };
+  } else {
+    const minimumOrder = Number(storeSettings.minimumOrder);
+    if (subtotal < minimumOrder) {
+      return res.status(400).json({
+        error: `Minimum order is ${formatMoney(minimumOrder, storeSettings)}. Add more items to continue.`,
+      });
+    }
   }
 
   if (mode === FulfillmentType.DELIVERY && !storeSettings.acceptCash) {
@@ -486,6 +501,10 @@ ordersRouter.post("/", optionalAuth, async (req, res) => {
           guestAccessToken,
           fulfillmentType: mode,
           deliveryAreaId: areaId,
+          deliveryAreaNameSnap: deliverySnap?.name ?? null,
+          deliveryEtaMinSnap: deliverySnap?.etaMin ?? null,
+          deliveryEtaMaxSnap: deliverySnap?.etaMax ?? null,
+          deliveryAddressAreaWarning: deliverySnap?.addressWarning ?? false,
           subtotal,
           deliveryCharge,
           taxAmount: quoted.tax,

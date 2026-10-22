@@ -64,7 +64,7 @@ export function FulfillmentModal() {
     if (!show) return;
     setLoading(true);
     Promise.all([
-      api<DeliveryArea[]>("/delivery-areas").catch(() => [] as DeliveryArea[]),
+      import("@/lib/delivery-areas-public").then((m) => m.fetchPublicDeliveryAreas()).then((r) => r.areas),
       fetchPublicBranches().catch(() => ({ branches: [] as StorefrontBranch[], defaultBranchId: "" })),
     ])
       .then(([areaList, branchData]) => {

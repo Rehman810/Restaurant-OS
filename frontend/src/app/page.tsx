@@ -27,7 +27,7 @@ export default function HomePage() {
     fetchAllDeals(true)
       .then(setDeals)
       .catch(() => setDeals([]));
-    api<DeliveryArea[]>("/delivery-areas")
+    import("@/lib/delivery-areas-public").then((m) => m.fetchPublicDeliveryAreas().then((r) => r.areas))
       .then((areas) => setZones(areas.map((a) => a.name)))
       .catch(() => setZones([]));
   }, []);

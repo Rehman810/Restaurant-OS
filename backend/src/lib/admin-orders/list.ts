@@ -136,7 +136,8 @@ function mapRow(
       order.fulfillmentType === FulfillmentType.DELIVERY
         ? {
             text: order.deliveryAddress,
-            area: order.deliveryArea?.name ?? null,
+            area: order.deliveryAreaNameSnap ?? order.deliveryArea?.name ?? null,
+            areaMismatchWarning: order.deliveryAddressAreaWarning === true,
           }
         : null,
     rider:

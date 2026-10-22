@@ -283,9 +283,18 @@ export type PaymentMethod = "CASH" | "CARD";
 export type DeliveryArea = {
   id: string;
   name: string;
+  slug?: string;
+  covers?: string[];
+  charge?: number;
+  minOrder?: number | null;
+  freeAbove?: number | null;
+  etaMinMinutes?: number | null;
+  etaMaxMinutes?: number | null;
   deliveryCharge: string | number;
   isDelivering: boolean;
   sortOrder: number;
+  position?: number;
+  paused?: boolean;
 };
 
 export type OrderStatus =

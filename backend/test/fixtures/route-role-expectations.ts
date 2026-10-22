@@ -50,6 +50,7 @@ export const ROUTE_ROLE_MATRIX: RouteRoleProbe[] = [
   { method: "POST", path: "/pos/", allowed: [...ADMIN_LIKE, Role.CASHIER, Role.WAITER], body: { items: [] } },
   { method: "GET", path: "/admin/approval/controls", allowed: [...ORDER_OPS] },
   { method: "GET", path: "/delivery-areas/all", allowed: [...ADMIN_LIKE] },
+  { method: "GET", path: "/admin/areas/", allowed: [...ADMIN_LIKE] },
   { method: "GET", path: "/branches/", allowed: [Role.ADMIN, Role.MANAGER, Role.WAITER, Role.CHEF, Role.RIDER, Role.CASHIER] },
 ];
 
