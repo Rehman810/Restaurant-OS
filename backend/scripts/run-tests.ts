@@ -4,12 +4,21 @@ import dotenv from "dotenv";
 import { isTestDatabaseUrl } from "../src/lib/test-users";
 
 const backendRoot = path.resolve(__dirname, "..");
-/** CI/workflow sets DATABASE_URL — must not be replaced by committed backend/.env.test (local port 5433). */
+const isCi = process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true";
+/** Snapshot workflow env before dotenv — npm test must not use committed backend/.env.test (port 5433) on CI. */
 const databaseUrlFromEnv = process.env.DATABASE_URL;
+
 dotenv.config({ path: path.join(backendRoot, ".env") });
-dotenv.config({ path: path.join(backendRoot, ".env.test"), override: true });
+if (!isCi) {
+  dotenv.config({ path: path.join(backendRoot, ".env.test"), override: true });
+}
+
 if (databaseUrlFromEnv) {
   process.env.DATABASE_URL = databaseUrlFromEnv;
+} else if (isCi) {
+  process.env.DATABASE_URL =
+    process.env.DATABASE_URL ||
+    "postgresql://postgres:postgres@localhost:5432/restaurant_os_ci?schema=public";
 }
 
 process.env.NODE_ENV = process.env.NODE_ENV || "test";
