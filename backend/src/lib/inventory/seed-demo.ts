@@ -2,7 +2,7 @@ import { InventoryUnit, StockCountStatus, StockMovementType, WasteReason } from 
 import { prisma } from "../prisma";
 import { applyStockChange } from "./ledger";
 
-const RESTAURANT_ID = "11111111-1111-4111-8111-111111111111";
+import { getRestaurantId } from "../restaurant-context";
 
 const CATEGORIES = [
   "Meat",
@@ -426,7 +426,7 @@ async function upsertIngredient(
   refreshStock: boolean
 ) {
   const item = await prisma.inventoryItem.upsert({
-    where: { restaurantId_name: { restaurantId: RESTAURANT_ID, name: d.name } },
+    where: { restaurantId_name: { restaurantId: getRestaurantId(), name: d.name } },
     create: {
       name: d.name,
       category: d.category,
@@ -492,7 +492,7 @@ export async function seedInventoryDemo(branchId: string, options?: { refreshSto
 
   for (let i = 0; i < CATEGORIES.length; i++) {
     await prisma.ingredientCategory.upsert({
-      where: { restaurantId_name: { restaurantId: RESTAURANT_ID, name: CATEGORIES[i] } },
+      where: { restaurantId_name: { restaurantId: getRestaurantId(), name: CATEGORIES[i] } },
       create: { name: CATEGORIES[i], sortOrder: i + 1 },
       update: { sortOrder: i + 1 },
     });
@@ -508,7 +508,7 @@ export async function seedInventoryDemo(branchId: string, options?: { refreshSto
   }
 
   const supplier = await prisma.supplier.upsert({
-    where: { restaurantId_name: { restaurantId: RESTAURANT_ID, name: "Metro Fresh Supplies" } },
+    where: { restaurantId_name: { restaurantId: getRestaurantId(), name: "Metro Fresh Supplies" } },
     create: {
       name: "Metro Fresh Supplies",
       phone: "042-111-222-333",
@@ -572,7 +572,7 @@ export async function seedInventoryDemo(branchId: string, options?: { refreshSto
   });
 
   const supplier2 = await prisma.supplier.upsert({
-    where: { restaurantId_name: { restaurantId: RESTAURANT_ID, name: "City Wholesale" } },
+    where: { restaurantId_name: { restaurantId: getRestaurantId(), name: "City Wholesale" } },
     create: {
       name: "City Wholesale",
       phone: "0300-555-0101",

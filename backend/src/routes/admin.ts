@@ -803,7 +803,7 @@ adminRouter.post("/riders", requireAuth, requireRole(Role.ADMIN), async (req, re
   }
 
   const normalizedEmail = email.trim().toLowerCase();
-  const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+  const existing = await prisma.user.findFirst({ where: { email: normalizedEmail } });
   if (existing) return res.status(409).json({ error: "An account with this email already exists." });
 
   const plainPassword = password?.trim() || crypto.randomBytes(9).toString("base64url");

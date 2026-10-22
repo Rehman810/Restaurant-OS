@@ -16,6 +16,8 @@ function csrfExempt(path: string) {
 }
 
 export function csrfProtection(req: Request, res: Response, next: NextFunction) {
+  // Platform panel uses its own cookies/CSRF; localhost shares cookies across ports with the tenant app.
+  if (req.path.startsWith("/platform")) return next();
   if (SAFE.has(req.method) || csrfExempt(req.path)) return next();
   if (req.headers.authorization?.startsWith("Bearer ")) return next();
 

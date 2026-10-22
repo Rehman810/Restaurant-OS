@@ -8,6 +8,13 @@ import { storeDateKey } from "../dashboard/dates";
 import { runDailyCloseoutEmailJob } from "../reports/daily-closeout-email";
 
 export async function runAnalyticsEmailJob(now = new Date()) {
+  const { forEachJobTenant } = await import("../tenant-jobs");
+  await forEachJobTenant("analytics email scheduler", async () => {
+    await runAnalyticsEmailJobForTenant(now);
+  });
+}
+
+async function runAnalyticsEmailJobForTenant(now = new Date()) {
   const settings = await getStoreSettings();
   if (!settings.analyticsEmailEnabled) return;
   const recipients = settings.analyticsEmailRecipients
@@ -65,7 +72,7 @@ export async function runAnalyticsEmailJob(now = new Date()) {
     }
 
     await prisma.storeSettings.update({
-      where: { id: "default" },
+      where: { id: settings.id },
       data: { analyticsEmailLastSentAt: now },
     });
   } catch (err) {
@@ -79,7 +86,12 @@ export function startAnalyticsEmailScheduler() {
   if (timer) return;
   timer = setInterval(() => {
     void runAnalyticsEmailJob();
-    void runDailyCloseoutEmailJob();
+    void (async () => {
+      const { forEachJobTenant } = await import("../tenant-jobs");
+      await forEachJobTenant("daily closeout scheduler", async () => {
+        await runDailyCloseoutEmailJob();
+      });
+    })();
   }, 15 * 60 * 1000);
   timer.unref();
 }

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { requireEntitlement } from "../lib/platform/entitlement-middleware";
 import {
   CashMovementType,
   CashShiftStatus,
@@ -63,6 +64,7 @@ import { listRecentPosOrders } from "../lib/pos-recent";
 import { posPopularMenuItemIds } from "../lib/pos-popular";
 
 export const posRouter = Router();
+posRouter.use(requireEntitlement("pos"));
 posRouter.use("/shift", posShiftRouter);
 
 async function recordRefundCash(
@@ -173,7 +175,7 @@ posRouter.post("/", posLimiter, requireAuth, requireRole(...ADMIN_LIKE, Role.CAS
 
   const idemKey = String(idempotencyKey || "").trim();
   if (idemKey) {
-    const existing = await prisma.order.findUnique({
+    const existing = await prisma.order.findFirst({
       where: { posClientOrderId: idemKey },
       include,
     });

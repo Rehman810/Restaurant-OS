@@ -25,7 +25,9 @@ import {
 } from "../lib/login-guard";
 import { createRecoveryCodes, matchRecoveryCode } from "../lib/recovery-codes";
 import { clearCsrfCookie, issueCsrfCookie } from "../lib/csrf-cookie";
+import { getRestaurantId } from "../lib/restaurant-context";
 import { clearSessionCookie, cookieSecure, sessionCookie } from "../lib/session-cookie";
+import { exchangeSupportAccessToken } from "../lib/platform/support-access";
 
 const JWT_SECRET = jwtSecret();
 
@@ -44,6 +46,7 @@ function issueSession(res: import("express").Response, req: import("express").Re
     email: user.email,
     name: user.name,
     tv: user.tokenVersion,
+    rid: getRestaurantId(),
   });
   const secure = cookieSecure(req.header("x-forwarded-proto") || undefined);
   res.setHeader("Set-Cookie", sessionCookie(token, secure));
@@ -96,7 +99,7 @@ authRouter.post("/register", authLimiter, async (req, res) => {
   if (password.length < 8) {
     return res.status(400).json({ error: "Password must be at least 8 characters." });
   }
-  const exists = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+  const exists = await prisma.user.findFirst({ where: { email: email.toLowerCase() } });
   if (exists) return res.status(409).json({ error: "An account with this email already exists." });
 
   const normalizedPhone = phone?.replace(/[^\d+]/g, "").trim() || null;
@@ -129,7 +132,7 @@ authRouter.post("/login", authLimiter, async (req, res) => {
   const { email, password } = req.body as { email?: string; password?: string };
   if (!email || !password) return res.status(400).json({ error: "Email and password are required." });
 
-  const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
+  const user = await prisma.user.findFirst({ where: { email: email.toLowerCase().trim() } });
   if (user && isLocked(user.lockedUntil)) {
     return res.status(429).json({ error: LOCKED_LOGIN_ERROR });
   }
@@ -211,7 +214,15 @@ authRouter.get("/socket-token", requireAuth, async (req, res) => {
   });
   if (!user?.isActive) return res.status(401).json({ error: "Session expired." });
   const token = jwt.sign(
-    { id: user.id, role: user.role, email: user.email, name: user.name, tv: user.tokenVersion, typ: "ws" },
+    {
+      id: user.id,
+      role: user.role,
+      email: user.email,
+      name: user.name,
+      tv: user.tokenVersion,
+      rid: getRestaurantId(),
+      typ: "ws",
+    },
     JWT_SECRET,
     { expiresIn: "15m" }
   );
@@ -267,7 +278,7 @@ authRouter.post("/forgot-password", authLimiter, async (req, res) => {
     .toLowerCase();
   if (!email) return res.status(400).json({ error: "Email is required." });
 
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await prisma.user.findFirst({ where: { email } });
   if (
     user &&
     user.isActive &&
@@ -410,6 +421,23 @@ authRouter.post("/2fa/disable", requireAuth, requireRole(Role.ADMIN, Role.MANAGE
     data: { totpEnabled: false, totpSecret: null, recoveryCodes: null },
   });
   res.json({ ok: true, totpEnabled: false });
+});
+
+authRouter.post("/support-exchange", authLimiter, async (req, res) => {
+  const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+  if (!token) return res.status(400).json({ error: "Support token is required." });
+  try {
+    const exchanged = await exchangeSupportAccessToken(token);
+    const tenantId = getRestaurantId();
+    if (exchanged.restaurantId !== tenantId) {
+      return res.status(403).json({ error: "Open this link on the correct store domain." });
+    }
+    res.json({ token: exchanged.accessToken, expiresAt: exchanged.expiresAt });
+  } catch (err) {
+    const status = typeof err === "object" && err && "status" in err ? Number((err as { status: number }).status) : 401;
+    const message = err instanceof Error ? err.message : "Invalid support link.";
+    return res.status(status).json({ error: message });
+  }
 });
 
 authRouter.post("/logout", (req, res) => {

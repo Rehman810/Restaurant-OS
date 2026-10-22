@@ -3,11 +3,13 @@
   "private": true,
   "version": "1.0.0",
   "description": "White-label restaurant ordering and kitchen OS",
-  "workspaces": ["backend", "frontend"],
+  "workspaces": ["backend", "frontend", "platform"],
   "scripts": {
     "dev": "node scripts/dev.js",
     "dev:backend": "npm run dev -w restaurant-os-api",
     "dev:frontend": "npm run dev -w restaurant-os-web",
+    "dev:platform": "npm run dev -w restaurant-os-platform",
+    "build:platform": "npm run build -w restaurant-os-platform",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "test:db:up": "docker compose up -d db_test",
@@ -19,6 +21,6 @@
     "test": "npm run test -w restaurant-os-api",
     "report-test-staff": "npx tsx scripts/report-test-staff.ts",
     "cleanup-test-staff": "npx tsx scripts/cleanup-test-staff.ts",
-    "typecheck": "npm run build -w restaurant-os-api --silent && npm run typecheck -w restaurant-os-web"
+    "typecheck": "npm run build -w restaurant-os-api --silent && npm run typecheck -w restaurant-os-web && npm run typecheck -w restaurant-os-platform"
   }
 }

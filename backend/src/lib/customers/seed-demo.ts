@@ -7,6 +7,7 @@ import {
   Role,
 } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { getRestaurantId } from "../restaurant-context";
 
 const ORDER_PREFIX = "CUS-";
 
@@ -129,7 +130,7 @@ export async function seedCustomersDemo(
   for (const person of REGISTERED) {
     const createdAt = atDayOffset(joinedDaysAgo(registeredUsers.length, 4), 10, 0);
     const user = await prisma.user.upsert({
-      where: { email: person.email },
+      where: { restaurantId_email: { restaurantId: getRestaurantId(), email: person.email } },
       create: {
         name: person.name,
         email: person.email,

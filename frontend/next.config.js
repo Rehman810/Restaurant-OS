@@ -35,14 +35,6 @@ const nextConfig = {
       apiPattern,
     ],
   },
-  async rewrites() {
-    return [
-      {
-        source: "/api/proxy/:path*",
-        destination: `${proxyTarget}/:path*`,
-      },
-    ];
-  },
 };
 
 module.exports = nextConfig;

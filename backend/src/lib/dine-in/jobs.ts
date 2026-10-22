@@ -28,12 +28,15 @@ function logDineInJobDbIssue(err: unknown) {
 }
 
 export async function runDineInJobs(now = new Date()) {
+  const { forEachJobTenant } = await import("../tenant-jobs");
   try {
-    await processPendingEmailQueue(30);
-    await markNoShows(now);
-    await expireUnconfirmedPending(now);
-    await sendReminders(now);
-    await sendFollowUps(now);
+    await forEachJobTenant("dine-in scheduler", async () => {
+      await processPendingEmailQueue(30);
+      await markNoShows(now);
+      await expireUnconfirmedPending(now);
+      await sendReminders(now);
+      await sendFollowUps(now);
+    });
   } catch (err) {
     logDineInJobDbIssue(err);
   }

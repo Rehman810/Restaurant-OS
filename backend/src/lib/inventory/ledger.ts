@@ -1,5 +1,7 @@
 import { Prisma, StockMovementType, StockReferenceType } from "@prisma/client";
 import { prisma } from "../prisma";
+import { getRestaurantId } from "../restaurant-context";
+import { tenantExecuteRaw } from "../tenant-sql";
 import { maybeEmitStockAlerts } from "./stock-notify";
 import { roundQty, weightedAverageCost } from "./units";
 
@@ -78,9 +80,11 @@ export async function applyStockChange(input: LedgerInput) {
       input.itemId,
       tx as unknown as Prisma.TransactionClient
     );
-    await tx.$executeRaw`
-      SELECT id FROM "BranchStock" WHERE id = ${stock.id} FOR UPDATE
-    `;
+    const restaurantId = getRestaurantId();
+    await tenantExecuteRaw(
+      tx,
+      Prisma.sql`SELECT id FROM "BranchStock" WHERE id = ${stock.id} AND "restaurantId" = ${restaurantId} FOR UPDATE`
+    );
     const lockedRow = await tx.branchStock.findUnique({ where: { id: stock.id } });
     if (!lockedRow) throw Object.assign(new Error("Branch stock row missing."), { status: 500 });
     const oldQty = Number(lockedRow.quantity);

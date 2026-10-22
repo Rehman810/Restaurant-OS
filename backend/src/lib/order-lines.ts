@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { allocateCounter, type CounterTx } from "./counters";
 import { effectiveItemPrice } from "./store-settings";
 import { getDefaultBranchId } from "./branch-scope";
 import { loadMenuOrderableMap } from "./admin-menu/orderable";
@@ -195,19 +196,24 @@ export async function buildOrderLines(
   return { ok: true, lines, subtotal, hadPriceOverride, warnings: warnings.length ? warnings : undefined };
 }
 
-export async function nextOrderNumber() {
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const last = await prisma.order.findFirst({
-      orderBy: { orderNumber: "desc" },
-      select: { orderNumber: true },
-    });
-    const n = last ? parseInt(last.orderNumber.replace(/\D/g, ""), 10) || 1000 : 1000;
-    const candidate = `ORD-${n + 1 + attempt}`;
-    const exists = await prisma.order.findFirst({
-      where: { orderNumber: candidate },
+export async function nextOrderNumber(tx?: CounterTx & { tenantCounter: { findFirst: Function }; order: { findFirst: Function } }) {
+  const run = async (db: NonNullable<typeof tx>) => {
+    const existing = await db.tenantCounter.findFirst({
+      where: { name: "order", branchId: "", periodKey: "" },
       select: { id: true },
     });
-    if (!exists) return candidate;
-  }
-  return `ORD-${Date.now().toString().slice(-6)}`;
+    let floor = 1000;
+    if (!existing) {
+      const last = await db.order.findFirst({
+        orderBy: { orderNumber: "desc" },
+        select: { orderNumber: true },
+      });
+      const n = last ? parseInt(last.orderNumber.replace(/\D/g, ""), 10) || 1000 : 1000;
+      floor = Number.isFinite(n) ? n : 1000;
+    }
+    const seq = await allocateCounter(db, { name: "order", floor });
+    return `ORD-${seq}`;
+  };
+  if (tx) return run(tx);
+  return prisma.$transaction(run);
 }

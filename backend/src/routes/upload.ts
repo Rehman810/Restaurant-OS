@@ -25,8 +25,8 @@ uploadRouter.post(
         .then((processed) => {
           const host = req.get("host");
           const protocol = req.protocol;
-          const url = `${protocol}://${host}/uploads/${processed.filename}`;
-          const thumbnailUrl = `${protocol}://${host}/uploads/${processed.thumbnailFilename}`;
+          const url = `${protocol}://${host}${processed.publicPath}`;
+          const thumbnailUrl = `${protocol}://${host}${processed.thumbnailPublicPath}`;
           res.status(201).json({
             url,
             thumbnailUrl,

@@ -89,7 +89,7 @@ export async function syncPosOrderFromOffline(
     throw Object.assign(new Error(gate.error), { status: gate.status });
   }
 
-  const existing = await prisma.order.findUnique({
+  const existing = await prisma.order.findFirst({
     where: { posClientOrderId: body.clientOrderId.trim() },
     include: { items: true },
   });
@@ -286,7 +286,7 @@ export async function syncPosCashMovementFromOffline(
   const type =
     body.type === "PAID_OUT" ? CashMovementType.PAID_OUT : CashMovementType.PAID_IN;
 
-  const existing = await prisma.cashMovement.findUnique({
+  const existing = await prisma.cashMovement.findFirst({
     where: { posClientMovementId: body.clientMovementId.trim() },
   });
   if (existing) return { movement: existing, created: false };

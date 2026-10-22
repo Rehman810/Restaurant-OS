@@ -25,8 +25,13 @@ import {
 } from "../../lib/inventory/validate-qty";
 import { READ_ROLES, WRITE_ROLES, assertInventoryBranch, itemStatus, resolveBranchId } from "./shared";
 import { inventoryExtraRouter } from "./extra-routes";
+import { requireEntitlement } from "../../lib/platform/entitlement-middleware";
 
 export const inventoryRouter = Router();
+inventoryRouter.use((req, res, next) => {
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
+  return requireEntitlement("inventory")(req, res, next);
+});
 inventoryRouter.use(inventoryExtraRouter);
 
 function handleErr(res: import("express").Response, err: unknown) {

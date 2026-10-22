@@ -1,6 +1,10 @@
 import "dotenv/config";
 import crypto from "crypto";
-import { PrismaClient, OrderStatus, Role } from "@prisma/client";
+import { OrderStatus, PrismaClient, Role } from "@prisma/client";
+import { PlatformRole } from "@prisma/client";
+import { prisma } from "../src/lib/prisma";
+import { basePrisma } from "../src/lib/prisma-base";
+import { DEFAULT_RESTAURANT_ID, runWithRestaurant } from "../src/lib/restaurant-context";
 import bcrypt from "bcryptjs";
 import fs from "fs";
 import path from "path";
@@ -10,8 +14,6 @@ import {
   KARACHI_AREAS,
   defaultChargeForArea,
 } from "../src/lib/karachi-areas";
-
-const prisma = new PrismaClient();
 
 function cliArg(flag: string, envName: string, fallback: string) {
   const idx = process.argv.indexOf(flag);
@@ -406,12 +408,16 @@ async function main() {
 
   await prisma.restaurant.upsert({
     where: { id: "11111111-1111-4111-8111-111111111111" },
-    create: { id: "11111111-1111-4111-8111-111111111111" },
+    create: {
+      id: "11111111-1111-4111-8111-111111111111",
+      slug: "main",
+      displayName: BRAND_NAME,
+    },
     update: {},
   });
   await seedDeliveryAreas(CITY);
 
-  const already = await prisma.user.findUnique({
+  const already = await prisma.user.findFirst({
     where: { email: "admin@admin.com" },
   });
   if (already && process.env.FORCE_SEED !== "1") {
@@ -438,13 +444,13 @@ async function main() {
       console.log(`Inventory demo refreshed: ${inv.ingredients} ingredients, ${inv.recipes} menu recipes.`);
       const riderUser = await prisma.user.findFirst({ where: { email: "rider@demo.restaurant" }, select: { id: true } });
       const { seedAnalyticsDemo } = await import("../src/lib/analytics/seed-demo");
-      const analytics = await seedAnalyticsDemo(prisma, mainBranch.id, riderUser?.id);
+      const analytics = await seedAnalyticsDemo(prisma as unknown as PrismaClient, mainBranch.id, riderUser?.id);
       console.log(`Analytics demo: ${analytics.created} orders (numbers ANL-*). Run npm run seed:analytics anytime to refresh.`);
       const { seedCustomersDemo } = await import("../src/lib/customers/seed-demo");
-      const customersDemo = await seedCustomersDemo(prisma, mainBranch.id, riderUser?.id);
+      const customersDemo = await seedCustomersDemo(prisma as unknown as PrismaClient, mainBranch.id, riderUser?.id);
       console.log(`Customers demo: ${customersDemo.created} orders (CUS-*), ${customersDemo.registered} registered accounts.`);
       const { seedAuditLogDemo } = await import("../src/lib/audit/seed-demo");
-      const auditDemo = await seedAuditLogDemo(prisma, mainBranch.id);
+      const auditDemo = await seedAuditLogDemo(prisma as unknown as PrismaClient, mainBranch.id);
       console.log(`Audit log demo: ${auditDemo.created} entries.`);
     }
     await seedDemoCoupons();
@@ -963,13 +969,13 @@ async function main() {
   const { seedInventoryDemo } = await import("../src/lib/inventory/seed-demo");
   await seedInventoryDemo(mainBranch.id);
   const { seedAnalyticsDemo } = await import("../src/lib/analytics/seed-demo");
-  const analytics = await seedAnalyticsDemo(prisma, mainBranch.id, rider.id);
+  const analytics = await seedAnalyticsDemo(prisma as unknown as PrismaClient, mainBranch.id, rider.id);
   console.log(`Analytics demo: ${analytics.created} historical orders (ANL-*).`);
   const { seedCustomersDemo } = await import("../src/lib/customers/seed-demo");
-  const customersDemo = await seedCustomersDemo(prisma, mainBranch.id, rider.id);
+  const customersDemo = await seedCustomersDemo(prisma as unknown as PrismaClient, mainBranch.id, rider.id);
   console.log(`Customers demo: ${customersDemo.created} orders (CUS-*), ${customersDemo.registered} registered accounts.`);
   const { seedAuditLogDemo } = await import("../src/lib/audit/seed-demo");
-  const auditDemo = await seedAuditLogDemo(prisma, mainBranch.id);
+  const auditDemo = await seedAuditLogDemo(prisma as unknown as PrismaClient, mainBranch.id);
   console.log(`Audit log demo: ${auditDemo.created} entries.`);
   await seedDemoCoupons();
 
@@ -983,9 +989,30 @@ async function main() {
   console.log("  cashier@demo.restaurant");
   console.log("  manager@demo.restaurant");
   console.log(`Admin password: ${adminPassword}`);
+  await seedPlatformOperator();
 }
 
-main()
+async function seedPlatformOperator() {
+  const email = (process.env.PLATFORM_SEED_EMAIL || "ops@platform.local").trim().toLowerCase();
+  const password = process.env.PLATFORM_SEED_PASSWORD || process.env.SEED_ADMIN_PASSWORD || "change-me-platform";
+  const hash = await bcrypt.hash(password, 12);
+  await basePrisma.platformUser.upsert({
+    where: { email },
+    create: {
+      email,
+      name: "Platform Operator",
+      passwordHash: hash,
+      role: PlatformRole.SUPER_ADMIN,
+      isActive: true,
+    },
+    update: { name: "Platform Operator", role: PlatformRole.SUPER_ADMIN, isActive: true },
+  });
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`Platform operator: ${email} (set PLATFORM_SEED_PASSWORD to change password)`);
+  }
+}
+
+runWithRestaurant(DEFAULT_RESTAURANT_ID, () => main())
   .catch((e) => {
     console.error(e);
     process.exit(1);

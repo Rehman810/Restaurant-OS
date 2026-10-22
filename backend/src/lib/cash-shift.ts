@@ -1,5 +1,6 @@
 import { CashMovementType, CashShiftStatus, Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
+import { allocateCounter } from "./counters";
 import { toMinorUnits } from "./money";
 
 export const SHIFT_REQUIRED_CODE = "SHIFT_REQUIRED";
@@ -162,12 +163,14 @@ export async function openCashShift(
     if (existing) {
       throw Object.assign(new Error("You already have an open shift."), { status: 409 });
     }
+    const shiftNumber = await allocateCounter(tx, { name: "shift", branchId, floor: 0 });
     return tx.cashShift.create({
       data: {
         branchId,
         cashierId,
         openingCash,
         status: CashShiftStatus.OPEN,
+        shiftNumber,
       },
       include: { movements: true },
     });

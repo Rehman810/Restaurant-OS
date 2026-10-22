@@ -1,7 +1,19 @@
 import { Request, Response, NextFunction } from "express";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import { getRestaurantId } from "../lib/restaurant-context";
 import { safeErrorForLog } from "../lib/safe-log";
+
+function rateLimitKey(req: Request) {
+  let tenant = "unknown";
+  try {
+    tenant = getRestaurantId();
+  } catch {
+    tenant = "none";
+  }
+  const ip = req.ip || req.socket.remoteAddress || "unknown";
+  return `${tenant}:${ip}`;
+}
 
 export function securityHeaders() {
   return helmet({
@@ -17,6 +29,7 @@ export const globalLimiter = rateLimit({
   limit: 400,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: rateLimitKey,
   message: { error: "Too many requests. Please wait a moment." },
 });
 
@@ -94,7 +107,8 @@ export function allowedOrigins():
     try {
       const host = new URL(normalized).hostname;
       const devLocal =
-        process.env.NODE_ENV !== "production" && (host === "localhost" || host === "127.0.0.1");
+        process.env.NODE_ENV !== "production" &&
+        (host === "localhost" || host === "127.0.0.1" || host.endsWith(".localhost"));
       if (devLocal) {
         callback(null, true);
         return;

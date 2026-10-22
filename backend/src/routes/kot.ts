@@ -92,10 +92,19 @@ kotRouter.post("/orders/:orderId/print", requireAuth, requireRole(...ORDER_OPS),
   const isReprint = (order.kotPrintCount ?? 0) > 0;
   const now = new Date();
   const updated = await prisma.$transaction(async (tx) => {
+    const { allocateCounter } = await import("../lib/counters");
+    const { branchDayKey } = await import("../lib/dine-in/branch-time");
+    const kotNumber = await allocateCounter(tx, {
+      name: "kot",
+      branchId: order.branchId || "",
+      periodKey: branchDayKey("Asia/Karachi"),
+      floor: 0,
+    });
     await tx.kotPrintLog.create({
       data: {
         orderId: order.id,
         isReprint,
+        kotNumber,
         actorId: req.user!.id,
       },
     });

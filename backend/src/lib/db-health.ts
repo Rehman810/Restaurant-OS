@@ -1,8 +1,9 @@
-import { prisma } from "./prisma";
+import { Prisma } from "@prisma/client";
+import { unscopedQueryRaw } from "./tenant-sql";
 
 export async function verifyDatabaseConnection(): Promise<{ ok: true } | { ok: false; message: string }> {
   try {
-    await prisma.$queryRaw`SELECT 1`;
+    await unscopedQueryRaw("connectivity probe does not read tenant rows", Prisma.sql`SELECT 1`);
     return { ok: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

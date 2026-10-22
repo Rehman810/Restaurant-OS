@@ -12,17 +12,16 @@ import {
   writeDeliveryAreasPublicCache,
 } from "../lib/delivery/public-cache";
 import { listAdminAreas } from "../lib/delivery/list-admin";
+import { getRestaurantId } from "../lib/restaurant-context";
 
 export const deliveryAreasRouter = Router();
 
-const RESTAURANT_ID = "11111111-1111-4111-8111-111111111111";
-
 async function buildPublicPayload(branchId?: string) {
   const settings = await getStoreSettings();
-  const pauses = await loadActivePauses(RESTAURANT_ID);
+  const pauses = await loadActivePauses(getRestaurantId());
   const globalPaused = pauses.some((p) => p.scope === "all");
   const areas = await prisma.deliveryArea.findMany({
-    where: { restaurantId: RESTAURANT_ID, archivedAt: null, isActive: true, isDelivering: true },
+    where: { archivedAt: null, isActive: true, isDelivering: true },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     include: { branchLinks: { select: { branchId: true } } },
   });
@@ -75,7 +74,7 @@ deliveryAreasRouter.get("/preview", async (req, res) => {
     where: { id: areaId, archivedAt: null, isActive: true },
   });
   if (!area) return res.status(404).json({ error: "Area not found." });
-  const pauses = await loadActivePauses(RESTAURANT_ID);
+  const pauses = await loadActivePauses(getRestaurantId());
   if (areaIsPausedByRecords(area.id, pauses) || !area.isDelivering) {
     return res.status(400).json({ error: "Delivery to this area is paused." });
   }
@@ -95,7 +94,7 @@ deliveryAreasRouter.get("/preview", async (req, res) => {
 
 /** Legacy admin list — prefer GET /admin/areas */
 deliveryAreasRouter.get("/all", requireAuth, requireRole(...ADMIN_LIKE), async (_req, res) => {
-  const data = await listAdminAreas(RESTAURANT_ID, { pageSize: 500 });
+  const data = await listAdminAreas(getRestaurantId(), { pageSize: 500 });
   res.json(data.rows);
 });
 

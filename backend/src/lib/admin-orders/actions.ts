@@ -101,8 +101,16 @@ export async function recordKotPrint(user: AuthUser, orderId: string, ip?: strin
   const isReprint = (order.kotPrintCount ?? 0) > 0;
   const now = new Date();
   const updated = await prisma.$transaction(async (tx) => {
+    const { allocateCounter } = await import("../counters");
+    const { branchDayKey } = await import("../dine-in/branch-time");
+    const kotNumber = await allocateCounter(tx, {
+      name: "kot",
+      branchId: order.branchId || "",
+      periodKey: branchDayKey("Asia/Karachi"),
+      floor: 0,
+    });
     await tx.kotPrintLog.create({
-      data: { orderId, isReprint, actorId: user.id },
+      data: { orderId, isReprint, kotNumber, actorId: user.id },
     });
     await writeAudit(tx, {
       actorId: user.id,

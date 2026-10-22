@@ -40,7 +40,7 @@ categoriesRouter.post("/", requireAuth, requireRole(...ADMIN_LIKE), async (req, 
   const name = String(req.body.name || "").trim();
   if (!name) return res.status(400).json({ error: "Category name is required." });
 
-  const existing = await prisma.category.findUnique({ where: { name } });
+  const existing = await prisma.category.findFirst({ where: { name } });
   if (existing) return res.status(409).json({ error: "Category already exists." });
 
   const defaults = defaultsForCategory(name);
@@ -75,7 +75,7 @@ categoriesRouter.put("/:id", requireAuth, requireRole(...ADMIN_LIKE), async (req
   }
 
   if (name && name !== category.name) {
-    const existing = await prisma.category.findUnique({ where: { name } });
+    const existing = await prisma.category.findFirst({ where: { name } });
     if (existing) return res.status(409).json({ error: "Category name already exists." });
     await prisma.menuItem.updateMany({
       where: { category: category.name },

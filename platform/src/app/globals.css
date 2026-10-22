@@ -1,0 +1,39 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-dm-sans: "DM Sans", system-ui, sans-serif;
+  --panel-bg: #f1f5f9;
+}
+
+.dark {
+  --panel-bg: #020617;
+}
+
+body {
+  @apply antialiased;
+  font-family: var(--font-dm-sans), system-ui, sans-serif;
+}
+
+.input {
+  @apply w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100;
+}
+
+.btn-primary {
+  @apply inline-flex items-center justify-center rounded-xl bg-accent-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-accent-600/20 transition hover:bg-accent-700 disabled:opacity-60;
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800;
+}
+
+.panel-surface {
+  background: var(--panel-bg);
+}
+
+.table-row-hover {
+  @apply transition hover:bg-slate-50/80 dark:hover:bg-slate-800/40;
+}

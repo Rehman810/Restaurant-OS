@@ -4,9 +4,19 @@ import jwt from "jsonwebtoken";
 import { Role } from "@prisma/client";
 import { allowedOrigins } from "../middleware/security";
 import { prisma } from "./prisma";
-
 import { jwtSecret } from "./jwt-secret";
 import { readSessionCookie } from "./session-cookie";
+import { resolveRestaurantIdFromSocketHeaders } from "./tenant-resolve";
+import { runWithRestaurant } from "./restaurant-context";
+import {
+  tenantBranchRoom,
+  tenantCustomerRoom,
+  tenantOpsRoom,
+  tenantOrderRoom,
+  tenantPublicRoom,
+  tenantRiderRoom,
+  tenantUserRoom,
+} from "./tenant-rooms";
 
 const JWT_SECRET = jwtSecret();
 
@@ -21,72 +31,88 @@ export function initRealtime(httpServer: HttpServer) {
   });
 
   io.use(async (socket, next) => {
-    const token =
-      String(socket.handshake.auth?.token || "") ||
-      readSessionCookie(socket.handshake.headers.cookie) ||
-      "";
-    if (!token) return next();
-    try {
-      const payload = jwt.verify(token, JWT_SECRET) as SocketUser & { tv?: number; typ?: string };
-      const account = await prisma.user.findUnique({
-        where: { id: payload.id },
-        select: { isActive: true, role: true, tokenVersion: true },
-      });
-      if (!account?.isActive) return next();
-      const tv = typeof payload.tv === "number" ? payload.tv : 0;
-      if (tv !== account.tokenVersion) return next();
-      socket.data.user = { id: payload.id, role: account.role };
-      next();
-    } catch {
-      next();
-    }
+    const restaurantId = await resolveRestaurantIdFromSocketHeaders(socket.handshake.headers as Record<string, unknown>);
+    if (!restaurantId) return next(new Error("Not found."));
+    socket.data.restaurantId = restaurantId;
+    await runWithRestaurant(restaurantId, async () => {
+      const token =
+        String(socket.handshake.auth?.token || "") ||
+        readSessionCookie(socket.handshake.headers.cookie) ||
+        "";
+      if (!token) return next();
+      try {
+        const payload = jwt.verify(token, JWT_SECRET) as SocketUser & { tv?: number; typ?: string; rid?: string };
+        if (payload.rid && payload.rid !== restaurantId) return next();
+        const account = await prisma.user.findUnique({
+          where: { id: payload.id },
+          select: { isActive: true, role: true, tokenVersion: true, restaurantId: true },
+        });
+        if (!account?.isActive || account.restaurantId !== restaurantId) return next();
+        const tv = typeof payload.tv === "number" ? payload.tv : 0;
+        if (tv !== account.tokenVersion) return next();
+        socket.data.user = { id: payload.id, role: account.role };
+        next();
+      } catch {
+        next();
+      }
+    });
   });
 
-  io.on("connection", async (socket) => {
-    const user = socket.data.user as SocketUser | undefined;
-    if (
-      user?.role === Role.ADMIN ||
-      user?.role === Role.MANAGER ||
-      user?.role === Role.CHEF ||
-      user?.role === Role.CASHIER ||
-      user?.role === Role.WAITER
-    ) {
-      socket.join("ops");
-      if (user) {
-        const memberships = await prisma.branchMember.findMany({
-          where: { userId: user.id },
-          select: { branchId: true },
-        });
-        for (const m of memberships) socket.join(`branch:${m.branchId}`);
+  io.on("connection", (socket) => {
+    const restaurantId = String(socket.data.restaurantId || "");
+    if (!restaurantId) {
+      socket.disconnect(true);
+      return;
+    }
+    void runWithRestaurant(restaurantId, async () => {
+      socket.join(tenantPublicRoom(restaurantId));
+      const user = socket.data.user as SocketUser | undefined;
+      if (
+        user?.role === Role.ADMIN ||
+        user?.role === Role.MANAGER ||
+        user?.role === Role.CHEF ||
+        user?.role === Role.CASHIER ||
+        user?.role === Role.WAITER
+      ) {
+        socket.join(tenantOpsRoom(restaurantId));
+        if (user) {
+          const memberships = await prisma.branchMember.findMany({
+            where: { userId: user.id },
+            select: { branchId: true },
+          });
+          for (const m of memberships) socket.join(tenantBranchRoom(m.branchId, restaurantId));
+        }
       }
-    }
-    if (user?.role === Role.RIDER) {
-      socket.join(`rider:${user.id}`);
-    }
-    if (user?.role === Role.CUSTOMER) {
-      socket.join(`customer:${user.id}`);
-    }
-    if (user) socket.join(`user:${user.id}`);
+      if (user?.role === Role.RIDER) {
+        socket.join(tenantRiderRoom(user.id, restaurantId));
+      }
+      if (user?.role === Role.CUSTOMER) {
+        socket.join(tenantCustomerRoom(user.id, restaurantId));
+      }
+      if (user) socket.join(tenantUserRoom(user.id, restaurantId));
 
-    socket.on("watch-order", async (payload: string | { orderId?: string; token?: string }) => {
-      const orderId = typeof payload === "string" ? payload : payload?.orderId;
-      const token = typeof payload === "object" ? payload?.token : undefined;
-      if (!orderId || orderId.length > 80) return;
+      socket.on("watch-order", async (payload: string | { orderId?: string; token?: string }) => {
+        const orderId = typeof payload === "string" ? payload : payload?.orderId;
+        const token = typeof payload === "object" ? payload?.token : undefined;
+        if (!orderId || orderId.length > 80) return;
 
-      const order = await prisma.order.findUnique({
-        where: { id: orderId },
-        select: { id: true, customerId: true, riderId: true, guestAccessToken: true },
+        const order = await prisma.order.findUnique({
+          where: { id: orderId },
+          select: { id: true, customerId: true, riderId: true, guestAccessToken: true },
+        });
+        if (!order) return;
+
+        const u = socket.data.user as SocketUser | undefined;
+        const allowed =
+          u?.role === Role.ADMIN ||
+          u?.role === Role.CHEF ||
+          u?.role === Role.CASHIER ||
+          (u && order.customerId === u.id) ||
+          (u && order.riderId === u.id) ||
+          (token && order.guestAccessToken && token === order.guestAccessToken);
+
+        if (allowed) socket.join(tenantOrderRoom(orderId, restaurantId));
       });
-      if (!order) return;
-
-      const u = socket.data.user as SocketUser | undefined;
-      const allowed =
-        (u?.role === Role.ADMIN || u?.role === Role.CHEF || u?.role === Role.CASHIER) ||
-        (u && order.customerId === u.id) ||
-        (u && order.riderId === u.id) ||
-        (token && order.guestAccessToken && token === order.guestAccessToken);
-
-      if (allowed) socket.join(`order:${orderId}`);
     });
   });
 
@@ -120,10 +146,12 @@ export function emitOrderChange(
 ) {
   if (!io) return;
   const payload = { event, orderId: order.id, at: Date.now() };
-  io.to("ops").emit(event, payload);
-  io.to(`order:${order.id}`).emit(event, payload);
-  if (order.customerId) io.to(`customer:${order.customerId}`).emit(event, payload);
-  if (order.riderId) io.to(`rider:${order.riderId}`).emit(event, payload);
+  const ops = tenantOpsRoom();
+  const orderRoom = tenantOrderRoom(order.id);
+  io.to(ops).emit(event, payload);
+  io.to(orderRoom).emit(event, payload);
+  if (order.customerId) io.to(tenantCustomerRoom(order.customerId)).emit(event, payload);
+  if (order.riderId) io.to(tenantRiderRoom(order.riderId)).emit(event, payload);
   emitTrackingBoardDelta(
     order.branchId,
     event === "order:created" ? "order_created" : "order_transitioned",
@@ -156,8 +184,8 @@ export function emitTrackingBoardDelta(
 ) {
   if (!io) return;
   const body = { kind, at: Date.now(), ...payload };
-  io.to("ops").emit("tracking:board-delta", body);
-  if (branchId) io.to(`branch:${branchId}`).emit("tracking:board-delta", body);
+  io.to(tenantOpsRoom()).emit("tracking:board-delta", body);
+  if (branchId) io.to(tenantBranchRoom(branchId)).emit("tracking:board-delta", body);
 }
 
 export type KitchenAlertPayload = {
@@ -169,7 +197,7 @@ export type KitchenAlertPayload = {
 
 export function emitKitchenAlert(alert: KitchenAlertPayload) {
   if (!io) return;
-  io.to("ops").emit("kitchen:alert", { ...alert, at: Date.now() });
+  io.to(tenantOpsRoom()).emit("kitchen:alert", { ...alert, at: Date.now() });
   void import("./notifications/ops").then(({ notifyKitchenAlert }) => notifyKitchenAlert(alert));
 }
 
@@ -188,9 +216,9 @@ export type OpsNotificationPayload = {
 /** Unified staff notification feed (orders, inventory, menu, bookings). */
 export function emitOpsNotification(notification: OpsNotificationPayload) {
   if (!io) return;
-  io.to("ops").emit("ops:notification", notification);
+  io.to(tenantOpsRoom()).emit("ops:notification", notification);
   if (notification.branchId) {
-    io.to(`branch:${notification.branchId}`).emit("ops:notification", notification);
+    io.to(tenantBranchRoom(notification.branchId)).emit("ops:notification", notification);
   }
   void import("./web-push").then(({ notifyStaffOpsPush }) => notifyStaffOpsPush(notification));
 }
@@ -199,11 +227,12 @@ export function emitOpsNotification(notification: OpsNotificationPayload) {
 export function emitMenuCatalogChanged(branchIds?: string[]) {
   if (!io) return;
   const payload = { at: Date.now() };
-  io.emit("menu:catalog-changed", payload);
-  io.to("ops").emit("menu:catalog-changed", payload);
+  const publicRoom = tenantPublicRoom();
+  io.to(publicRoom).emit("menu:catalog-changed", payload);
+  io.to(tenantOpsRoom()).emit("menu:catalog-changed", payload);
   const ids = branchIds?.length ? [...new Set(branchIds)] : [];
   for (const branchId of ids) {
-    io.to(`branch:${branchId}`).emit("menu:availability-changed", { branchId, ...payload });
+    io.to(tenantBranchRoom(branchId)).emit("menu:availability-changed", { branchId, ...payload });
   }
 }
 
@@ -211,6 +240,7 @@ export function emitMenuCatalogChanged(branchIds?: string[]) {
 export function emitDeliveryAreasChanged() {
   if (!io) return;
   const payload = { at: Date.now() };
-  io.emit("delivery:areas-changed", payload);
-  io.to("ops").emit("delivery:areas-changed", payload);
+  const publicRoom = tenantPublicRoom();
+  io.to(publicRoom).emit("delivery:areas-changed", payload);
+  io.to(tenantOpsRoom()).emit("delivery:areas-changed", payload);
 }

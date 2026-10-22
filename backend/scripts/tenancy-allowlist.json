@@ -1,0 +1,29 @@
+{
+  "modelsWithoutRestaurantId": {
+    "Restaurant": "Tenant root. The row is the tenant, so it has no parent restaurantId. Row-level security matches Restaurant.id to app.tenant_id.",
+    "Plan": "Platform catalog. Plans are global, not owned by a single restaurant row.",
+    "PlatformUser": "Platform operator identity. Separate from tenant User rows.",
+    "PlatformAuditLog": "Append-only log of platform operator actions.",
+    "TenantSupportSession": "Platform-issued support login. Scoped by subjectRestaurantId, not restaurantId.",
+    "PlatformAnnouncement": "Operator broadcasts; not tenant-owned rows.",
+    "PlatformSettings": "Singleton platform configuration.",
+    "PlatformJobRun": "Scheduler metadata for platform jobs."
+  },
+  "withoutTenantFiles": [
+    "backend/src/lib/db-health.ts",
+    "backend/src/lib/tenant-sql.ts",
+    "backend/src/lib/tenant-jobs.ts",
+    "backend/src/lib/platform/billing-job.ts",
+    "backend/src/lib/platform/payments.ts",
+    "backend/src/lib/platform/platform-audit.ts",
+    "backend/src/lib/platform/lifecycle-job.ts",
+    "backend/src/lib/platform/provision.ts",
+    "backend/src/lib/platform/support-access.ts",
+    "backend/src/lib/platform/job-runs.ts",
+    "backend/src/lib/platform/platform-settings.ts",
+    "backend/src/lib/platform/overview.ts",
+    "backend/src/lib/platform/announcements.ts",
+    "backend/src/lib/platform/tenant-health.ts",
+    "backend/src/lib/platform/usage-rollup-job.ts"
+  ]
+}

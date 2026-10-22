@@ -19,7 +19,15 @@
     "test:unit": "vitest run",
     "check:images": "tsx scripts/check-menu-images.ts",
     "test:email": "tsx scripts/test-email.ts",
-    "test:whatsapp": "tsx scripts/test-whatsapp.ts"
+    "test:whatsapp": "tsx scripts/test-whatsapp.ts",
+    "tenancy:check": "tsx scripts/tenancy-check.ts",
+    "tenancy:local-dev": "tsx scripts/tenancy-local-dev.ts",
+    "tenancy:backfill-verify": "tsx scripts/tenancy-backfill-verify.ts",
+    "platform:create-admin": "tsx scripts/platform-create-admin.ts",
+    "platform:reset-access": "tsx scripts/platform-reset-access.ts",
+    "platform:reset-2fa": "tsx scripts/platform-reset-access.ts",
+    "tenant:export": "tsx scripts/tenant-export.ts",
+    "tenant:delete-dry-run": "tsx scripts/tenant-delete-dry-run.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

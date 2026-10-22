@@ -162,7 +162,7 @@ export async function updateCategoryFields(
   }
 
   if (name && name !== category.name) {
-    const existing = await prisma.category.findUnique({ where: { name } });
+    const existing = await prisma.category.findFirst({ where: { name } });
     if (existing) return { status: 409 as const, error: "Category name already exists." };
     await prisma.menuItem.updateMany({
       where: { category: category.name },

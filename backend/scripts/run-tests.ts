@@ -22,6 +22,8 @@ if (databaseUrlFromEnv) {
 }
 
 process.env.NODE_ENV = process.env.NODE_ENV || "test";
+// The test database is one restaurant. Keep that id when a test sets NODE_ENV=production.
+if (!process.env.SINGLE_TENANT_MODE) process.env.SINGLE_TENANT_MODE = "true";
 
 if (
   process.env.DATABASE_URL &&
@@ -58,6 +60,12 @@ if (!process.env.DATABASE_URL) {
     });
   }
 }
+
+execSync("npm run tenancy:check", {
+  cwd: backendRoot,
+  stdio: "inherit",
+  env: process.env,
+});
 
 const vitestArgs = process.argv.slice(2);
 execSync(`npx vitest run ${vitestArgs.join(" ")}`.trim(), {

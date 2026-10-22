@@ -18,6 +18,7 @@ import { clientIp } from "../lib/client-ip";
 import { loadActivePauses, resolvePauseUntil } from "../lib/delivery/pause";
 import { invalidateDeliveryAreas } from "../lib/delivery/mutations";
 import { serializeAdminAreaRow } from "../lib/delivery/serialize";
+import { getRestaurantId } from "../lib/restaurant-context";
 
 export const adminAreasRouter = Router();
 
@@ -33,7 +34,7 @@ adminAreasRouter.get("/", requireAuth, requireRole(...EDIT_ROLES), async (req, r
   const sort = String(req.query.sort || "position") as "position" | "name" | "charge" | "orders";
   const page = Number(req.query.page) || 1;
   const pageSize = Number(req.query.pageSize) || 50;
-  const data = await listAdminAreas("11111111-1111-4111-8111-111111111111", {
+  const data = await listAdminAreas(getRestaurantId(), {
     q,
     status,
     sort,
@@ -209,6 +210,6 @@ adminAreasRouter.post("/resume", requireAuth, requireRole(...EDIT_ROLES), async 
     ip: clientIp(req),
   });
   await invalidateDeliveryAreas();
-  const pauses = await loadActivePauses("11111111-1111-4111-8111-111111111111");
+  const pauses = await loadActivePauses(getRestaurantId());
   res.json({ ok: true, activePauses: pauses.length });
 });

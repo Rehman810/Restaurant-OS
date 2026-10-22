@@ -38,7 +38,20 @@ Customer sign-in: http://localhost:3000/login
 
 6. Sign in as admin and open **Settings**. Set the phone, address, logo, colors, currency, and hours. The storefront title, footer, and receipts follow those values without a redeploy.
 
-`RESTAURANT_ID` in the API env selects which restaurant this deployment serves. The default id is created by the migration. One process is one restaurant; every menu, order, and settings query is still filtered by that id.
+### Multi-tenant SaaS mode
+
+Production uses **shared Postgres** and resolves the tenant from the **hostname** (plus optional custom domains). Set `SINGLE_TENANT_MODE=false` and do not rely on `RESTAURANT_ID` in production.
+
+| Mode | When | Tenant selection |
+| --- | --- | --- |
+| Multi-tenant (default for SaaS) | `SINGLE_TENANT_MODE=false` | Host / `TenantDomain` / slug |
+| Single-tenant dev | `SINGLE_TENANT_MODE=true` | `RESTAURANT_ID` or tenant #1 |
+
+Docs: [docs/MULTI_TENANCY.md](docs/MULTI_TENANCY.md), [docs/PLATFORM_PANEL.md](docs/PLATFORM_PANEL.md), [docs/OPS_MULTI_TENANT.md](docs/OPS_MULTI_TENANT.md).
+
+**Platform panel:** `npm run dev:platform` → http://localhost:3100 (API on :4000). Create operators with `npm run platform:create-admin -w restaurant-os-api` (see `docs/PLATFORM_PANEL.md`).
+
+**Two tenants locally:** `npm run tenancy:local-dev -w restaurant-os-api` then open `http://main.localhost:3000` and `http://<slug>.localhost:3000` — [docs/LOCAL_MULTI_TENANT.md](docs/LOCAL_MULTI_TENANT.md).
 
 ## Stack
 
@@ -53,17 +66,21 @@ npm run dev          # Docker, migrate, seed, API, and web
 npm run test:db:up   # Postgres for integration tests (port 5433)
 cp backend/env.test.example backend/.env.test
 npm test             # migrate test DB + backend Vitest
-npm run typecheck    # API build + frontend tsc
+npm run typecheck    # API build + frontend + platform tsc
+npm run dev:platform # Platform operator UI (:3100)
 ```
+
+Backend ops CLIs (`TENANT_ID`, `PLATFORM_ADMIN_*`): `tenancy:check`, `tenancy:backfill-verify`, `tenant:export`, `tenant:delete-dry-run`, `platform:create-admin`, `platform:reset-access` — see [docs/PLATFORM_PANEL.md](docs/PLATFORM_PANEL.md).
 
 **Production API start** (no demo seed): `cd backend && npm run start` → `prisma migrate deploy` then `index.ts`. Run `npm run seed:demo` only on empty dev DBs (`ALLOW_DEMO_SEED=true` required if `NODE_ENV=production`).
 
-### Deploy one restaurant (checklist)
+### Deploy (single VPS checklist)
 
-1. Set `DATABASE_URL`, `JWT_SECRET` (32+ chars), `CLIENT_URL`, `RESTAURANT_ID` (default from migration).
-2. `npm run start` in `backend/` (migrations only — create admin via your own onboarding, not demo seed).
-3. Frontend: `NEXT_PUBLIC_API_URL` → API origin; never enable `NEXT_PUBLIC_ENABLE_DEMO_LOGIN` in production.
-4. Optional: VAPID keys for storefront push; tax fields in Settings after go-live.
+1. Set `DATABASE_URL`, `JWT_SECRET`, `PLATFORM_JWT_SECRET`, `CLIENT_URL` (tenant + platform origins), `SINGLE_TENANT_MODE=false`.
+2. `npm run start` in `backend/`; build and start `frontend` and `platform`.
+3. `npm run platform:create-admin -w restaurant-os-api` for the first operator (not demo seed in production).
+4. Caddy/nginx: wildcard tenant hosts → frontend; `platform.*` → platform app; proxy API with tenant host headers — [docs/OPS_MULTI_TENANT.md](docs/OPS_MULTI_TENANT.md).
+5. Never enable `NEXT_PUBLIC_ENABLE_DEMO_LOGIN` in production.
 
 ### Vercel frontend + remote API
 

@@ -1,4 +1,6 @@
+import { TenantStatus } from "@prisma/client";
 import { prisma } from "./prisma";
+import { tenantAccessForStatus } from "./platform/tenant-lifecycle";
 import { DEFAULT_RESTAURANT_ID, getRestaurantId } from "./restaurant-context";
 import { isStoreOpen, publicClosedMessage, publicHoursLabel } from "./store-settings";
 
@@ -18,6 +20,10 @@ export async function getStoreSettings() {
 
 export async function getPublicStorePayload() {
   const settings = await getStoreSettings();
+  const tenant = await prisma.restaurant.findFirst({
+    select: { status: true, statusReason: true },
+  });
+  const access = tenantAccessForStatus(tenant?.status ?? TenantStatus.ACTIVE, tenant?.statusReason ?? "");
   const [banners, areaCount, testimonials, orderCount] = await Promise.all([
     prisma.promoBanner.findMany({
       where: { isActive: true },
@@ -54,5 +60,11 @@ export async function getPublicStorePayload() {
     isOpen: open,
     hoursLabel: publicHoursLabel(settings),
     closedMessage: publicClosedMessage(settings),
+    storeAccess: {
+      status: access.status,
+      orderingEnabled: access.allowStorefrontOrders,
+      message: access.publicMessage,
+      readOnlyAdmin: access.adminReadOnly,
+    },
   };
 }

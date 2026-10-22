@@ -48,6 +48,7 @@ import {
 } from "../lib/staff/serialize";
 import { validatePasswordPolicy } from "../lib/staff/password-policy";
 import { staffPermissionsSummary } from "../lib/staff/permissions-summary";
+import { assertCanAddStaff, EntitlementError } from "../lib/platform/entitlements";
 
 export const staffRouter = Router();
 
@@ -253,8 +254,17 @@ staffRouter.post("/", requireAuth, requireStaffDirectory, async (req, res) => {
   const createErr = canCreateRole(actor, actorFlags.isOwner, role);
   if (createErr) return res.status(403).json({ error: createErr });
 
+  try {
+    await assertCanAddStaff();
+  } catch (err) {
+    if (err instanceof EntitlementError) {
+      return res.status(403).json({ error: err.message, code: err.code });
+    }
+    throw err;
+  }
+
   const normalizedEmail = email.trim().toLowerCase();
-  const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+  const existing = await prisma.user.findFirst({ where: { email: normalizedEmail } });
   if (existing) return res.status(409).json({ error: "An account with this email already exists." });
 
   const useInvite = sendInvite !== false;

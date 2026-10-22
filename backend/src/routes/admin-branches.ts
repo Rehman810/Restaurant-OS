@@ -15,6 +15,7 @@ import {
 import { listAdminBranches, parseListRangeQuery } from "../lib/branches/list";
 import { branchDataFromParsed, parseBranchCreateBody, validateBranchFields } from "../lib/branches/validate";
 import { copyBranchSetup, type CopyFromOptions } from "../lib/branches/copy-from";
+import { assertCanAddBranch, EntitlementError } from "../lib/platform/entitlements";
 
 export const adminBranchesRouter = Router();
 
@@ -50,6 +51,7 @@ adminBranchesRouter.post("/", requireAuth, requireRole(...ADMIN_ONLY), async (re
   const copyFrom = parseCopyFromBody(body.copyFrom);
 
   try {
+    await assertCanAddBranch();
     const result = await prisma.$transaction(async (tx) => {
       if (parsed.isDefault) {
         await tx.branch.updateMany({ data: { isDefault: false } });
@@ -81,6 +83,9 @@ adminBranchesRouter.post("/", requireAuth, requireRole(...ADMIN_ONLY), async (re
     });
     res.status(201).json(result);
   } catch (err) {
+    if (err instanceof EntitlementError) {
+      return res.status(403).json({ error: err.message, code: err.code });
+    }
     const status = typeof err === "object" && err && "status" in err ? Number((err as { status: number }).status) : 409;
     const message = err instanceof Error ? err.message : "Could not create branch.";
     if (status === 409) {

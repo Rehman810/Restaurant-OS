@@ -14,8 +14,7 @@ import type { StoreSettings } from "@prisma/client";
 import { clientIp } from "../client-ip";
 import type { Request } from "express";
 import type { AuthUser } from "../../middleware/auth";
-
-const RESTAURANT_ID = "11111111-1111-4111-8111-111111111111";
+import { getRestaurantId } from "../restaurant-context";
 
 export function areaAuditSnapshot(area: {
   name: string;
@@ -46,7 +45,7 @@ export function areaAuditSnapshot(area: {
 async function nameTaken(name: string, excludeId?: string) {
   const existing = await prisma.deliveryArea.findFirst({
     where: {
-      restaurantId: RESTAURANT_ID,
+      restaurantId: getRestaurantId(),
       archivedAt: null,
       name: { equals: name.trim(), mode: "insensitive" },
       ...(excludeId ? { id: { not: excludeId } } : {}),

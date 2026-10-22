@@ -7,6 +7,9 @@ dotenv.config({ path: path.resolve(__dirname, "../.env") });
 import { createApp } from "./app";
 import { startDineInJobScheduler, stopDineInJobScheduler } from "./lib/dine-in/jobs";
 import { startAnalyticsEmailScheduler, stopAnalyticsEmailScheduler } from "./lib/analytics/scheduled-email";
+import { startPlatformBillingScheduler, stopPlatformBillingScheduler } from "./lib/platform/billing-scheduler";
+import { startTenantLifecycleScheduler, stopTenantLifecycleScheduler } from "./lib/platform/lifecycle-scheduler";
+import { startUsageRollupScheduler, stopUsageRollupScheduler } from "./lib/platform/usage-rollup-scheduler";
 import { databaseHelpText, verifyDatabaseConnection } from "./lib/db-health";
 import { initRealtime, shutdownRealtime } from "./lib/realtime";
 import { prisma } from "./lib/prisma";
@@ -44,6 +47,9 @@ async function gracefulShutdown(signal: string) {
   console.log(`[shutdown] ${signal} received — closing server`);
   stopDineInJobScheduler();
   stopAnalyticsEmailScheduler();
+  stopPlatformBillingScheduler();
+  stopTenantLifecycleScheduler();
+  stopUsageRollupScheduler();
 
   const forceTimer = setTimeout(() => {
     console.error("[shutdown] timeout — forcing exit");
@@ -83,5 +89,8 @@ server.listen(PORT, () => {
     }
     startDineInJobScheduler();
     startAnalyticsEmailScheduler();
+    startPlatformBillingScheduler();
+    startTenantLifecycleScheduler();
+    startUsageRollupScheduler();
   })();
 });

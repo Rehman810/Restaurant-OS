@@ -169,7 +169,7 @@ ordersRouter.post("/", optionalAuth, async (req, res) => {
   };
   const checkoutKey = idempotencyKey ? cleanText(String(idempotencyKey), 120) : "";
   if (checkoutKey) {
-    const existing = await prisma.order.findUnique({
+    const existing = await prisma.order.findFirst({
       where: { checkoutIdempotencyKey: checkoutKey },
       include,
     });
@@ -495,7 +495,7 @@ ordersRouter.post("/", optionalAuth, async (req, res) => {
       }
       return tx.order.create({
         data: {
-          orderNumber: await nextOrderNumber(),
+          orderNumber: await nextOrderNumber(tx),
           branchId: resolvedBranchId,
           customerId: isRegisteredCustomer && user ? user.id : null,
           guestAccessToken,

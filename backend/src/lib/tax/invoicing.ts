@@ -63,7 +63,7 @@ export async function issueTaxInvoiceForOrder(orderId: string) {
     if (existing && !existing.isCreditNote) return existing;
 
     const invoiceNumber = await nextTaxInvoiceNumber(
-      tx as unknown as Parameters<typeof nextTaxInvoiceNumber>[0],
+      tx,
       order.branchId!,
       settings.taxFiscalYearEnabled
     );
@@ -123,7 +123,7 @@ export async function issueCreditNoteForOrder(orderId: string) {
     if (existingCn) return existingCn;
 
     const invoiceNumber = await nextTaxInvoiceNumber(
-      tx as unknown as Parameters<typeof nextTaxInvoiceNumber>[0],
+      tx,
       order.branchId!,
       settings.taxFiscalYearEnabled
     );

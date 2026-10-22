@@ -1,11 +1,17 @@
 import type { MetadataRoute } from "next";
+import { headers } from "next/headers";
+import { serverApiBase, tenantCacheTag, tenantProxyHeaders } from "@/lib/server-api";
 
 export default async function manifest(): Promise<MetadataRoute.Manifest> {
-  const base = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000").replace(/\/$/, "");
+  const base = serverApiBase();
+  const host = headers().get("host");
   let name = "Restaurant";
   let theme = "#ea580c";
   try {
-    const res = await fetch(`${base}/settings/public`, { next: { revalidate: 60 } });
+    const res = await fetch(`${base}/settings/public`, {
+      headers: tenantProxyHeaders(host),
+      next: { revalidate: 60, tags: [tenantCacheTag("settings-public", host)] },
+    });
     if (res.ok) {
       const data = await res.json();
       name = String(data?.settings?.storeName || "").trim() || name;

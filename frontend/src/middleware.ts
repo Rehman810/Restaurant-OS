@@ -10,7 +10,8 @@ export function middleware(request: NextRequest) {
   const needsSession = pathname.startsWith("/admin") || pathname.startsWith("/rider");
   if (!needsSession) return NextResponse.next();
 
-  const token = request.cookies.get("ros_session")?.value;
+  const token =
+    request.cookies.get("__Host-ros_session")?.value || request.cookies.get("ros_session")?.value;
   if (!token) {
     const login = new URL("/login", request.url);
     login.searchParams.set("next", pathname);

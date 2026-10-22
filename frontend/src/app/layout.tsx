@@ -1,16 +1,22 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
+import { serverApiBase, tenantCacheTag, tenantProxyHeaders } from "@/lib/server-api";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const base = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000").replace(/\/$/, "");
+  const base = serverApiBase();
+  const host = headers().get("host");
   const fallback: Metadata = {
     title: "Your Restaurant — Order in minutes",
     description: "Order online for delivery or takeaway.",
     manifest: "/manifest.json",
   };
   try {
-    const res = await fetch(`${base}/settings/public`, { next: { revalidate: 30 } });
+    const res = await fetch(`${base}/settings/public`, {
+      headers: tenantProxyHeaders(host),
+      next: { revalidate: 30, tags: [tenantCacheTag("settings-public", host)] },
+    });
     if (!res.ok) return fallback;
     const data = await res.json();
     const name = String(data?.settings?.storeName || "").trim() || "Your Restaurant";

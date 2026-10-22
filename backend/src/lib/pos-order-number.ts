@@ -1,23 +1,13 @@
 import { branchDayKey } from "./dine-in/branch-time";
+import { allocateCounter, type CounterTx } from "./counters";
 
-type Tx = {
-  branch: {
-    findUnique: (args: {
-      where: { id: string };
-      select: { code: true; timezone: true };
-    }) => Promise<{ code: string; timezone: string } | null>;
-  };
-  branchPosOrderDayCounter: {
-    upsert: (args: {
-      where: { branchId_dayKey: { branchId: string; dayKey: string } };
-      create: { branchId: string; dayKey: string; lastSeq: number };
-      update: { lastSeq: { increment: number } };
-    }) => Promise<{ lastSeq: number }>;
-  };
+type PosTx = CounterTx & {
+  branch: { findUnique: Function };
+  branchPosOrderDayCounter: { upsert: Function };
 };
 
 /** Gap-free POS order numbers per branch per calendar day (branch timezone). */
-export async function nextPosOrderNumber(tx: Tx, branchId: string, at: Date = new Date()) {
+export async function nextPosOrderNumber(tx: PosTx, branchId: string, at: Date = new Date()) {
   const branch = await tx.branch.findUnique({
     where: { id: branchId },
     select: { code: true, timezone: true },
@@ -25,13 +15,11 @@ export async function nextPosOrderNumber(tx: Tx, branchId: string, at: Date = ne
   const tz = branch?.timezone || "Asia/Karachi";
   const code = (branch?.code || "BR").replace(/[^A-Z0-9]/gi, "").slice(0, 8).toUpperCase() || "BR";
   const dayKey = branchDayKey(tz, at);
-
-  const row = await tx.branchPosOrderDayCounter.upsert({
+  const seq = await allocateCounter(tx, { name: "pos_order", branchId, periodKey: dayKey, floor: 1000 });
+  await tx.branchPosOrderDayCounter.upsert({
     where: { branchId_dayKey: { branchId, dayKey } },
-    create: { branchId, dayKey, lastSeq: 1001 },
-    update: { lastSeq: { increment: 1 } },
+    create: { branchId, dayKey, lastSeq: seq },
+    update: { lastSeq: seq },
   });
-
-  const seq = row.lastSeq;
   return `ORD-${code}-${dayKey}-${seq}`;
 }

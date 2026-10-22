@@ -33,8 +33,8 @@ import { kitchenRouter } from "./routes/kitchen";
 import { couponsAdminRouter, couponsPublicRouter } from "./routes/coupons";
 import { reportsRouter } from "./routes/reports";
 import { dailySummaryRouter } from "./routes/daily-summary";
-import { UPLOAD_DIR } from "./lib/uploads";
-import { resolveRestaurantId, runWithRestaurant } from "./lib/prisma";
+import { resolveRestaurantIdFromRequest, runWithRestaurant } from "./lib/prisma";
+import { serveUpload } from "./lib/uploads";
 import {
   allowedOrigins,
   errorHandler,
@@ -43,15 +43,36 @@ import {
   securityHeaders,
 } from "./middleware/security";
 import { csrfProtection } from "./middleware/csrf";
+import { adminBillingRouter } from "./routes/admin-billing";
+import { adminOnboardingRouter } from "./routes/admin-onboarding";
+import { platformRouter } from "./routes/platform";
+import { platformCsrfProtection } from "./middleware/platform-csrf";
+import { loadTenantAccess, tenantLifecycleMiddleware } from "./middleware/tenant-lifecycle";
+import { maintenanceMiddleware } from "./middleware/maintenance";
+import { adminAnnouncementsRouter } from "./routes/admin-announcements";
+import { adminSupportAccessRouter } from "./routes/admin-support-access";
 
 export function createApp() {
   const app = express();
   app.set("trust proxy", 1);
   app.disable("x-powered-by");
-  app.use(async (req, _res, next) => {
+  app.use(async (req, res, next) => {
+    if (req.path === "/health" || req.path.startsWith("/platform")) return next();
     try {
-      const id = await resolveRestaurantId(req.hostname);
-      runWithRestaurant(id, () => next());
+      const id = await resolveRestaurantIdFromRequest(req);
+      if (!id) {
+        res.status(404).json({ error: "Not found." });
+        return;
+      }
+      const access = await loadTenantAccess(id);
+      if (!access?.resolvable) {
+        res.status(404).json({ error: "Not found." });
+        return;
+      }
+      runWithRestaurant(id, () => {
+        req.tenantAccess = access;
+        next();
+      });
     } catch (err) {
       next(err);
     }
@@ -59,17 +80,12 @@ export function createApp() {
   app.use(securityHeaders());
   app.use(cors({ origin: allowedOrigins(), credentials: true }));
   app.use(express.json({ limit: "1mb" }));
+  app.use(platformCsrfProtection);
   app.use(csrfProtection);
   app.use(globalLimiter);
-  app.use(
-    "/uploads",
-    express.static(UPLOAD_DIR, {
-      setHeaders(res) {
-        res.setHeader("X-Content-Type-Options", "nosniff");
-        res.setHeader("Content-Security-Policy", "default-src 'none'");
-      },
-    })
-  );
+  app.use(maintenanceMiddleware);
+  app.use(tenantLifecycleMiddleware);
+  app.use("/uploads", serveUpload);
 
   app.get("/health", (_req, res) =>
     res.json({
@@ -83,6 +99,7 @@ export function createApp() {
     })
   );
   app.use("/upload", uploadRouter);
+  app.use("/platform", platformRouter);
   app.use("/auth", authRouter);
   app.use("/menu", menuRouter);
   app.use("/categories", categoriesRouter);
@@ -115,6 +132,10 @@ export function createApp() {
   app.use("/admin/tracking", adminTrackingRouter);
   app.use("/admin/menu", adminMenuRouter);
   app.use("/admin/branches", adminBranchesRouter);
+  app.use("/admin/billing", adminBillingRouter);
+  app.use("/admin/announcements", adminAnnouncementsRouter);
+  app.use("/admin/support-access", adminSupportAccessRouter);
+  app.use("/admin/onboarding", adminOnboardingRouter);
   app.use("/admin", adminRouter);
   app.use("/invoices", invoicesRouter);
 

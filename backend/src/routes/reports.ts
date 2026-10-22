@@ -17,7 +17,10 @@ import {
 } from "../lib/reports/tax-register";
 import { prisma } from "../lib/prisma";
 
+import { requireEntitlement } from "../lib/platform/entitlement-middleware";
+
 export const reportsRouter = Router();
+reportsRouter.use(requireEntitlement("analytics"));
 
 async function resolveBranch(req: import("express").Request) {
   const scope = await resolveBranchScope(req);

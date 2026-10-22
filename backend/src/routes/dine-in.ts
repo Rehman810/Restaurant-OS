@@ -30,7 +30,13 @@ import {
   seatTypeLabel,
 } from "../lib/dine-in/waitlist";
 
+import { requireEntitlement } from "../lib/platform/entitlement-middleware";
+
 export const dineInRouter = Router();
+dineInRouter.use((req, res, next) => {
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
+  return requireEntitlement("dineIn")(req, res, next);
+});
 export const dineInPublicRouter = Router();
 
 const FLOOR_ROLES = [...ADMIN_LIKE, Role.CASHIER, Role.WAITER];
@@ -207,7 +213,7 @@ dineInPublicRouter.post("/reservations", publicBookingLimiter, async (req, res) 
   }
 
   if (body.idempotencyKey) {
-    const existing = await prisma.reservation.findUnique({ where: { idempotencyKey: body.idempotencyKey } });
+    const existing = await prisma.reservation.findFirst({ where: { idempotencyKey: body.idempotencyKey } });
     if (existing) {
       return res.status(200).json({ reservation: await serializeReservation({ ...existing, table: null }) });
     }

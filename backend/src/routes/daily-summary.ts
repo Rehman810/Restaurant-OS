@@ -6,7 +6,10 @@ import { handleDailySummaryGet } from "./daily-summary-handler";
 import { sendDailyCloseoutTestEmail } from "../lib/reports/daily-closeout-email";
 import { handleDailySummaryBlockers } from "./daily-summary-blockers";
 
+import { requireEntitlement } from "../lib/platform/entitlement-middleware";
+
 export const dailySummaryRouter = Router();
+dailySummaryRouter.use(requireEntitlement("analytics"));
 
 dailySummaryRouter.get(
   "/blockers",
