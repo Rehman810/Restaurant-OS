@@ -73,13 +73,23 @@ export function canEditStaffMember(actor: User | null, target: StaffListRow): bo
 
 export function canShowStaffAction(
   actor: User | null,
-  action: "edit" | "role" | "branches" | "resetPassword" | "reset2fa" | "pin" | "sessions" | "deactivate",
+  action:
+    | "edit"
+    | "role"
+    | "branches"
+    | "resetPassword"
+    | "reset2fa"
+    | "pin"
+    | "sessions"
+    | "deactivate"
+    | "reactivate",
   target: StaffListRow
 ): boolean {
   if (!canEditStaffMember(actor, target)) return false;
   if (action === "sessions" || action === "reset2fa") return actor?.role === "ADMIN";
   if (action === "role" && target.isOwner) return false;
   if (action === "deactivate" && target.isOwner) return false;
+  if (action === "reactivate" && target.isActive) return false;
   if (action === "pin") return target.role === "ADMIN" || target.role === "MANAGER";
   return true;
 }

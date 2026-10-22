@@ -307,9 +307,9 @@ staffRouter.post("/", requireAuth, requireStaffDirectory, async (req, res) => {
         ? [await getDefaultBranchId()]
         : [scope.branchId!];
 
-  if (role === Role.ADMIN || role === Role.MANAGER && actor.role === Role.ADMIN) {
-    /* branch optional for admin */
-  } else if (role !== Role.ADMIN && !ids.length) {
+  const branchOptionalForRole =
+    role === Role.ADMIN || (role === Role.MANAGER && actor.role === Role.ADMIN);
+  if (!branchOptionalForRole && !ids.length) {
     await prisma.user.delete({ where: { id: user.id } });
     return res.status(400).json({ error: "Select at least one branch." });
   }

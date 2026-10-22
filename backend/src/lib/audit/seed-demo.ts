@@ -1,4 +1,4 @@
-import { OrderStatus, PrismaClient, Role } from "@prisma/client";
+import { OrderStatus, Prisma, PrismaClient, Role } from "@prisma/client";
 import { AuditAction } from "../audit-actions";
 
 const IDS = {
@@ -116,7 +116,7 @@ export async function seedAuditLogDemo(prisma: PrismaClient, branchId: string) {
       branchId,
       action: AuditAction.ORDER_CANCELLED,
       entityType: "order",
-      entityId: order?.id ?? MARKER,
+      entityId: order?.id ?? IDS.cancel,
       entityLabel: order?.orderNumber ?? "ORD-DEMO",
       before: { from: OrderStatus.PREPARING, status: OrderStatus.PREPARING },
       after: { to: OrderStatus.CANCELLED, status: OrderStatus.CANCELLED },
@@ -130,7 +130,7 @@ export async function seedAuditLogDemo(prisma: PrismaClient, branchId: string) {
       branchId,
       action: AuditAction.REFUND_ISSUED,
       entityType: "order",
-      entityId: order?.id ?? MARKER,
+      entityId: order?.id ?? IDS.cancel,
       entityLabel: order?.orderNumber ?? "ORD-DEMO",
       after: { refundAmount: 850 },
       reason: "WRONG_ORDER",
@@ -143,7 +143,7 @@ export async function seedAuditLogDemo(prisma: PrismaClient, branchId: string) {
       branchId,
       action: AuditAction.ORDER_KOT_REPRINTED,
       entityType: "order",
-      entityId: order?.id ?? MARKER,
+      entityId: order?.id ?? IDS.cancel,
       entityLabel: order?.orderNumber ?? "ORD-DEMO",
       after: { kotPrint: true, isReprint: true },
     },
@@ -206,7 +206,7 @@ export async function seedAuditLogDemo(prisma: PrismaClient, branchId: string) {
       branchId,
       action: "ORDER_STATUS_CHANGED",
       entityType: "order",
-      entityId: order?.id ?? MARKER,
+      entityId: order?.id ?? IDS.cancel,
       entityLabel: order?.orderNumber ?? "ORD-DEMO",
       before: { status: OrderStatus.CONFIRMED },
       after: { status: OrderStatus.PREPARING },

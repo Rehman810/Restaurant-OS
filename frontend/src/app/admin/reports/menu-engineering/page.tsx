@@ -440,11 +440,13 @@ export default function MenuEngineeringPage() {
       </details>
 
       {payload && !thresholds?.hasEnoughData && (
-        <AdminAlert variant="warning" className="mb-4">
+        <div className="mb-4">
+        <AdminAlert variant="warning">
           Not enough data yet for reliable classes — need at least 8 dishes with recipes and 30 units
           sold in range (currently {thresholds?.classifiedItemCount ?? 0} dishes,{" "}
           {thresholds?.totalUnitsSold ?? 0} units). The table still lists all items.
         </AdminAlert>
+        </div>
       )}
 
       {summary && thresholds?.hasEnoughData && (

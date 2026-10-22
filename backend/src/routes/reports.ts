@@ -49,8 +49,13 @@ reportsRouter.get(
         timezone,
         30
       );
+      const categoryQ = req.query.categories ?? req.query.category;
       const categoryRaw =
-        req.query.categories ?? req.query.category ?? undefined;
+        typeof categoryQ === "string"
+          ? categoryQ
+          : Array.isArray(categoryQ)
+            ? categoryQ.map(String).join(",")
+            : undefined;
       const report = await buildMenuEngineeringReport(branchId, startUtc, endUtc, categoryRaw);
       const { rows, noRecipeRows, thresholds, summary, categories } = report;
 

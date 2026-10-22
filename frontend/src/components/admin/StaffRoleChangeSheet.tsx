@@ -59,7 +59,7 @@ export function StaffRoleChangeSheet({
         </div>
       }
       confirmLabel="Change role"
-      saving={saving}
+      saving={saving ?? false}
       onClose={onClose}
       onConfirm={() => onConfirm(next)}
     />

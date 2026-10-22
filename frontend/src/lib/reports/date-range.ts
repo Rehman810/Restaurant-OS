@@ -48,10 +48,10 @@ export function resolveReportDateRange(
   return { from: addDaysYmd(today, -29, timezone), to: today };
 }
 
-export const REPORT_DATE_PRESETS: { value: ReportDatePreset; label: string }[] = [
-  { value: "today", label: "Today" },
-  { value: "7d", label: "7 days" },
-  { value: "30d", label: "30 days" },
-  { value: "month", label: "This month" },
-  { value: "custom", label: "Custom" },
+export const REPORT_DATE_PRESETS: { id: ReportDatePreset; label: string }[] = [
+  { id: "today", label: "Today" },
+  { id: "7d", label: "7 days" },
+  { id: "30d", label: "30 days" },
+  { id: "month", label: "This month" },
+  { id: "custom", label: "Custom" },
 ];

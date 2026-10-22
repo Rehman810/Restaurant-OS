@@ -33,10 +33,14 @@ async function inventorySettings() {
   };
 }
 
-type DbClient = Prisma.TransactionClient | typeof prisma;
+type DbClient = Prisma.TransactionClient;
+
+function asTx(db: DbClient | typeof prisma): DbClient {
+  return db as DbClient;
+}
 
 export async function getOrCreateBranchStock(branchId: string, itemId: string, tx?: DbClient) {
-  const db = tx ?? prisma;
+  const db = asTx(tx ?? prisma);
   const existing = await db.branchStock.findUnique({
     where: { branchId_itemId: { branchId, itemId } },
   });

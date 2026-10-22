@@ -110,8 +110,8 @@ auditLogsRouter.get("/export.csv", requireAuth, requireRole(...ADMIN_LIKE), asyn
     orderBy: { createdAt: "desc" },
     take: 5000,
     include: {
-      actor: { select: { name: true, email: true, role: true } },
-      branch: { select: { name: true } },
+      actor: { select: { id: true, name: true, email: true, role: true } },
+      branch: { select: { id: true, name: true, code: true } },
     },
   });
 

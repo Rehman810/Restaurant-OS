@@ -130,7 +130,7 @@ export function MenuEngineeringQuadrantChart({
           <Tooltip content={<QuadrantTooltip />} cursor={{ strokeDasharray: "3 3" }} />
           <Scatter
             data={points}
-            shape={(props) => {
+            shape={(props: { cx?: number; cy?: number; payload?: QuadrantPoint }) => {
               const { cx, cy, payload } = props as {
                 cx: number;
                 cy: number;

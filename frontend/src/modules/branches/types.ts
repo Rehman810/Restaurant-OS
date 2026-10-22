@@ -115,6 +115,7 @@ export type Branch = {
   sortOrder: number;
   createdAt?: string;
   acceptsOnlineOrders?: boolean;
+  timezone?: string;
   _count?: { orders: number; members: number };
 };
 

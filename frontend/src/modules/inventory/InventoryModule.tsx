@@ -470,7 +470,10 @@ export function InventoryModule() {
     try {
       const data = await fetchInventorySummary();
       setItems(data.items);
-      setMetrics(data.metrics);
+      setMetrics({
+        ...data.metrics,
+        expiringCount: data.metrics.expiringCount ?? 0,
+      });
       setMovements(data.movements);
       const [cats, sup] = await Promise.all([fetchCategories(), fetchSuppliers()]);
       setCategories(cats.categories);
