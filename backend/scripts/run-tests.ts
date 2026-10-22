@@ -4,8 +4,13 @@ import dotenv from "dotenv";
 import { isTestDatabaseUrl } from "../src/lib/test-users";
 
 const backendRoot = path.resolve(__dirname, "..");
+/** CI/workflow sets DATABASE_URL — must not be replaced by committed backend/.env.test (local port 5433). */
+const databaseUrlFromEnv = process.env.DATABASE_URL;
 dotenv.config({ path: path.join(backendRoot, ".env") });
 dotenv.config({ path: path.join(backendRoot, ".env.test"), override: true });
+if (databaseUrlFromEnv) {
+  process.env.DATABASE_URL = databaseUrlFromEnv;
+}
 
 process.env.NODE_ENV = process.env.NODE_ENV || "test";
 
