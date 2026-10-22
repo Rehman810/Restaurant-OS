@@ -11,7 +11,7 @@ export function PanelRouteGuard({ children }: { children: React.ReactNode }) {
 
   if (loading || !user) return null;
 
-  const section = ["/overview", "/tenants", "/announcements", "/audit", "/health", "/settings"].find(
+  const section = ["/overview", "/tenants", "/plans", "/announcements", "/audit", "/health", "/settings"].find(
     (base) => path === base || path.startsWith(`${base}/`)
   );
 

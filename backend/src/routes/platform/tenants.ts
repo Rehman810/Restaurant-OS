@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { SubscriptionStatus, TenantStatus } from "@prisma/client";
+import { loadSubscriptionTimelineForRestaurant } from "../../lib/platform/subscription-context";
 import { basePrisma } from "../../lib/prisma-base";
 import { requirePlatformAuth, requirePlatformPermission } from "../../middleware/platform-auth";
 import { writePlatformAudit } from "../../lib/platform/platform-audit";
@@ -120,7 +121,14 @@ platformTenantsRouter.get("/:id", requirePlatformAuth, requirePlatformPermission
     },
   });
   if (!row) return res.status(404).json({ error: "Not found." });
-  res.json({ tenant: row });
+  const subCtx = await loadSubscriptionTimelineForRestaurant(row.id, true);
+  res.json({
+    tenant: {
+      ...row,
+      subscriptionTimeline: subCtx?.timeline ?? null,
+      tenantAccess: subCtx?.tenant ?? null,
+    },
+  });
 });
 
 platformTenantsRouter.patch(

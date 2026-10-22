@@ -3,11 +3,14 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { ScrollText } from "lucide-react";
 import { api } from "@/lib/api";
 import { formatPktDate } from "@/lib/format";
 import type { TenantRow } from "@/lib/types";
 import { PageHeader } from "@/components/PageHeader";
 import { PanelCard } from "@/components/PanelCard";
+import { DataTable, TableEmpty } from "@/components/DataTable";
+import { EmptyState } from "@/components/EmptyState";
 
 type AuditRow = {
   id: string;
@@ -55,12 +58,12 @@ function AuditPageContent() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Audit log" description="Platform actions with optional tenant filter" />
+      <PageHeader eyebrow="Security" title="Audit log" description="Platform actions with optional tenant filter" />
 
       <PanelCard>
         <div className="flex flex-wrap gap-3">
           <label className="text-sm">
-            <span className="mb-1 block text-xs font-medium text-slate-500">Tenant</span>
+            <span className="field-label">Tenant</span>
             <select className="input min-w-[14rem]" value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
               <option value="">All tenants</option>
               {tenants.map((t) => (
@@ -69,7 +72,7 @@ function AuditPageContent() {
             </select>
           </label>
           <label className="text-sm">
-            <span className="mb-1 block text-xs font-medium text-slate-500">Action contains</span>
+            <span className="field-label">Action contains</span>
             <input
               className="input min-w-[12rem]"
               placeholder="e.g. tenant.updated"
@@ -78,63 +81,63 @@ function AuditPageContent() {
             />
           </label>
           {tenantId ? (
-            <Link href={`/tenants/${tenantId}`} className="self-end text-sm font-medium text-accent-600 hover:underline">
+            <Link href={`/tenants/${tenantId}`} className="self-end pb-2 text-sm font-semibold text-accent-500 hover:underline">
               Open tenant →
             </Link>
           ) : null}
         </div>
       </PanelCard>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-100 bg-slate-50/80 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-800/30">
-              <th className="px-4 py-3 font-medium">When</th>
-              <th className="px-4 py-3 font-medium">Actor</th>
-              <th className="px-4 py-3 font-medium">Action</th>
-              <th className="px-4 py-3 font-medium">Tenant</th>
-              <th className="px-4 py-3 font-medium">Entity</th>
+      <DataTable
+        footer={
+          loading ? (
+            <TableEmpty>Loading…</TableEmpty>
+          ) : logs.length === 0 ? (
+            <EmptyState icon={ScrollText} title="No entries match your filters" />
+          ) : null
+        }
+      >
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>Actor</th>
+            <th>Action</th>
+            <th>Tenant</th>
+            <th>Entity</th>
+          </tr>
+        </thead>
+        <tbody>
+          {!loading && logs.map((row) => (
+            <tr key={row.id}>
+              <td className="whitespace-nowrap text-slate-500">{formatPktDate(row.createdAt)}</td>
+              <td>{row.actorEmail || "—"}</td>
+              <td>
+                <code className="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-white/10">{row.action}</code>
+              </td>
+              <td>
+                {row.tenant ? (
+                  <Link href={`/tenants/${row.tenant.id}`} className="font-semibold text-accent-600 hover:underline dark:text-accent-300">
+                    {row.tenant.displayName || row.tenant.slug}
+                  </Link>
+                ) : (
+                  <span className="text-slate-400">—</span>
+                )}
+              </td>
+              <td className="text-xs text-slate-500">
+                {row.entityType}
+                <span className="block font-mono text-[10px] text-slate-400">{row.entityId.slice(0, 8)}…</span>
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">Loading…</td></tr>
-            ) : logs.length === 0 ? (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">No entries match your filters.</td></tr>
-            ) : (
-              logs.map((row) => (
-                <tr key={row.id} className="table-row-hover border-b border-slate-50 dark:border-slate-800/80">
-                  <td className="px-4 py-3 whitespace-nowrap text-slate-600 dark:text-slate-400">{formatPktDate(row.createdAt)}</td>
-                  <td className="px-4 py-3">{row.actorEmail || "—"}</td>
-                  <td className="px-4 py-3">
-                    <code className="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-800">{row.action}</code>
-                  </td>
-                  <td className="px-4 py-3">
-                    {row.tenant ? (
-                      <Link href={`/tenants/${row.tenant.id}`} className="font-medium text-accent-600 hover:underline">
-                        {row.tenant.displayName || row.tenant.slug}
-                      </Link>
-                    ) : (
-                      <span className="text-slate-400">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-slate-500">
-                    {row.entityType}
-                    <span className="block font-mono text-[10px] text-slate-400">{row.entityId.slice(0, 8)}…</span>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+          ))}
+        </tbody>
+      </DataTable>
     </div>
   );
 }
 
 export default function AuditPage() {
   return (
-    <Suspense fallback={<p className="text-sm text-slate-500">Loading audit log…</p>}>
+    <Suspense fallback={<div className="h-48 animate-pulse rounded-2xl bg-white/5" />}>
       <AuditPageContent />
     </Suspense>
   );

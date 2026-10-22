@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Activity, Database, UserX } from "lucide-react";
 import { api } from "@/lib/api";
 import { formatRelativePkt } from "@/lib/format";
 import { PageHeader } from "@/components/PageHeader";
 import { PanelCard } from "@/components/PanelCard";
+import { DataTable } from "@/components/DataTable";
 
 type HealthPayload = {
   database: { ok: boolean; message?: string };
@@ -27,48 +29,70 @@ export default function HealthPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="System health" description="Database, background jobs, and risk signals" />
+      <PageHeader eyebrow="Reliability" title="System health" description="Database, background jobs, and risk signals" />
       {data ? (
         <>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <PanelCard title="Database">
-              <p className={`text-lg font-semibold ${data.database.ok ? "text-emerald-600" : "text-rose-600"}`}>
-                {data.database.ok ? "Connected" : data.database.message || "Error"}
-              </p>
-              <p className="mt-1 text-sm text-slate-500">~{(data.databaseBytes / 1_000_000).toFixed(1)} MB</p>
+          <div className="stagger-in grid gap-4 sm:grid-cols-3">
+            <PanelCard>
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Database</p>
+                  <p className={`mt-2 text-lg font-semibold ${data.database.ok ? "text-emerald-400" : "text-rose-400"}`}>
+                    {data.database.ok ? "Connected" : data.database.message || "Error"}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">~{(data.databaseBytes / 1_000_000).toFixed(1)} MB</p>
+                </div>
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400">
+                  <Database className="h-4 w-4" aria-hidden />
+                </span>
+              </div>
             </PanelCard>
-            <PanelCard title="Onboarding">
-              <p className="text-2xl font-semibold">{data.stuckOnboarding}</p>
-              <p className="text-sm text-slate-500">Stuck tenants</p>
+            <PanelCard>
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Onboarding</p>
+                  <p className="mt-2 text-2xl font-semibold tabular-nums">{data.stuckOnboarding}</p>
+                  <p className="mt-1 text-sm text-slate-500">Stuck tenants</p>
+                </div>
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500/15 text-amber-400">
+                  <Activity className="h-4 w-4" aria-hidden />
+                </span>
+              </div>
             </PanelCard>
-            <PanelCard title="At risk">
-              <p className="text-2xl font-semibold">{data.atRiskCount}</p>
-              <p className="text-sm text-slate-500">Needs operator review</p>
+            <PanelCard>
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">At risk</p>
+                  <p className="mt-2 text-2xl font-semibold tabular-nums">{data.atRiskCount}</p>
+                  <p className="mt-1 text-sm text-slate-500">Needs operator review</p>
+                </div>
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-rose-500/15 text-rose-400">
+                  <UserX className="h-4 w-4" aria-hidden />
+                </span>
+              </div>
             </PanelCard>
           </div>
-          <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50/80 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-800/30">
-                  <th className="px-4 py-3 font-medium">Job</th>
-                  <th className="px-4 py-3 font-medium">Last success</th>
-                  <th className="px-4 py-3 font-medium">Last error</th>
+          <DataTable>
+            <thead>
+              <tr>
+                <th>Job</th>
+                <th>Last success</th>
+                <th>Last error</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.schedulers.map((job) => (
+                <tr key={job.jobKey}>
+                  <td className="font-mono text-xs">{job.jobKey}</td>
+                  <td>{job.lastSuccessAt ? formatRelativePkt(job.lastSuccessAt) : "—"}</td>
+                  <td className={job.lastError ? "text-rose-400" : "text-slate-500"}>{job.lastError || "—"}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {data.schedulers.map((job) => (
-                  <tr key={job.jobKey} className="table-row-hover border-b border-slate-50 dark:border-slate-800/80">
-                    <td className="px-4 py-3 font-mono text-xs">{job.jobKey}</td>
-                    <td className="px-4 py-3">{job.lastSuccessAt ? formatRelativePkt(job.lastSuccessAt) : "—"}</td>
-                    <td className="px-4 py-3 text-rose-500">{job.lastError || "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </DataTable>
         </>
       ) : (
-        <div className="h-32 animate-pulse rounded-2xl bg-slate-200 dark:bg-slate-800" />
+        <div className="h-32 animate-pulse rounded-2xl bg-white/5" />
       )}
     </div>
   );

@@ -1,39 +1,128 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800&display=swap");
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --font-dm-sans: "DM Sans", system-ui, sans-serif;
-  --panel-bg: #f1f5f9;
+  --font-sans: "Plus Jakarta Sans", system-ui, sans-serif;
+  --panel-bg: #f4f7fb;
+  --panel-glow: radial-gradient(1200px 500px at 12% -10%, rgba(14, 165, 233, 0.14), transparent 55%),
+    radial-gradient(900px 420px at 100% 0%, rgba(99, 102, 241, 0.08), transparent 50%);
 }
 
 .dark {
-  --panel-bg: #020617;
+  --panel-bg: #070b14;
+  --panel-glow: radial-gradient(1100px 520px at 8% -8%, rgba(14, 165, 233, 0.18), transparent 52%),
+    radial-gradient(800px 380px at 100% 0%, rgba(56, 189, 248, 0.08), transparent 48%);
+}
+
+html {
+  @apply antialiased;
 }
 
 body {
-  @apply antialiased;
-  font-family: var(--font-dm-sans), system-ui, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
+  background: var(--panel-bg);
+  color: theme("colors.slate.900");
 }
 
-.input {
-  @apply w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100;
-}
-
-.btn-primary {
-  @apply inline-flex items-center justify-center rounded-xl bg-accent-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-accent-600/20 transition hover:bg-accent-700 disabled:opacity-60;
-}
-
-.btn-secondary {
-  @apply inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800;
+.dark body {
+  color: theme("colors.slate.100");
 }
 
 .panel-surface {
   background: var(--panel-bg);
+  background-image: var(--panel-glow);
+  background-attachment: fixed;
+}
+
+.input {
+  @apply w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition duration-200 placeholder:text-slate-400 focus-visible:border-accent-500 focus-visible:ring-2 focus-visible:ring-accent-500/25 dark:border-white/10 dark:bg-slate-950/70 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus-visible:border-accent-400;
+}
+
+.btn-primary {
+  @apply inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-accent-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-accent-600/25 transition duration-200 hover:bg-accent-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-400 disabled:cursor-not-allowed disabled:opacity-60;
+}
+
+.btn-secondary {
+  @apply inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition duration-200 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-400 dark:border-white/10 dark:bg-slate-900/80 dark:text-slate-200 dark:hover:bg-slate-800;
+}
+
+.btn-ghost {
+  @apply inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-slate-600 transition duration-200 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-400 dark:text-slate-300 dark:hover:bg-white/5;
 }
 
 .table-row-hover {
-  @apply transition hover:bg-slate-50/80 dark:hover:bg-slate-800/40;
+  @apply transition duration-150 hover:bg-slate-50/90 dark:hover:bg-white/[0.03];
+}
+
+.data-table {
+  @apply min-w-full text-sm;
+}
+
+.data-table thead tr {
+  @apply border-b border-slate-100 bg-slate-50/90 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:border-white/5 dark:bg-white/[0.03];
+}
+
+.data-table th {
+  @apply px-4 py-3 font-semibold;
+}
+
+.data-table td {
+  @apply px-4 py-3.5 align-middle;
+}
+
+.data-table tbody tr {
+  @apply table-row-hover border-b border-slate-100/80 last:border-0 dark:border-white/5;
+}
+
+.field-label {
+  @apply mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400;
+}
+
+.flash {
+  @apply rounded-xl border px-4 py-2.5 text-sm;
+}
+
+.flash-ok {
+  @apply flash border-accent-200 bg-accent-50 text-accent-900 dark:border-accent-500/20 dark:bg-accent-500/10 dark:text-accent-100;
+}
+
+.flash-error {
+  @apply flash border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-200;
+}
+
+.surface-card {
+  @apply rounded-2xl border border-slate-200/80 bg-white/90 shadow-sm shadow-slate-200/40 backdrop-blur-sm dark:border-white/[0.07] dark:bg-slate-900/70 dark:shadow-none;
+}
+
+@keyframes panel-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.stagger-in > * {
+  animation: panel-fade-up 0.4s ease both;
+}
+
+.stagger-in > *:nth-child(1) { animation-delay: 0.02s; }
+.stagger-in > *:nth-child(2) { animation-delay: 0.05s; }
+.stagger-in > *:nth-child(3) { animation-delay: 0.08s; }
+.stagger-in > *:nth-child(4) { animation-delay: 0.11s; }
+.stagger-in > *:nth-child(5) { animation-delay: 0.14s; }
+.stagger-in > *:nth-child(6) { animation-delay: 0.17s; }
+.stagger-in > *:nth-child(7) { animation-delay: 0.2s; }
+.stagger-in > *:nth-child(8) { animation-delay: 0.23s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .stagger-in > * {
+    animation: none;
+  }
 }

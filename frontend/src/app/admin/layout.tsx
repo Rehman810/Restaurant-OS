@@ -8,7 +8,8 @@ import { PoweredBy } from "@/components/PoweredBy";
 import { StoreLogo } from "@/components/StoreLogo";
 import { AdminThemeToggle } from "@/components/admin/AdminThemeToggle";
 import { BranchSwitcher } from "@/components/admin/BranchSwitcher";
-import { MOBILE_NAV_FOR_ROLE, navSectionsForRole } from "@/modules/admin/navigation";
+import { MOBILE_NAV_FOR_ROLE, filterMobileNavByEntitlements, navSectionsForRole } from "@/modules/admin/navigation";
+import { adminPathAllowedByPlan, normalizeEntitlements, type TenantEntitlements } from "@/lib/plan-entitlements";
 import { settingsPath } from "@/modules/settings/ia";
 import { isAdminNavActive } from "@/modules/admin/nav-active";
 import { fetchPendingBookingsCount } from "@/modules/dine-in/api";
@@ -22,7 +23,9 @@ import { PublicStore } from "@/lib/types";
 import { OpsKitchenAlertBanner } from "@/components/admin/OpsKitchenAlertBanner";
 import { StaffNotificationCenter } from "@/components/admin/StaffNotificationCenter";
 import { ApiUpgradeBanner } from "@/components/admin/ApiUpgradeBanner";
-import { TenantAnnouncementBanner } from "@/components/admin/TenantAnnouncementBanner";
+import { PlatformCommsLayer } from "@/components/admin/PlatformCommsLayer";
+import { TenantSubscriptionBanner } from "@/components/admin/TenantSubscriptionBanner";
+import type { SubscriptionTimeline, TenantAccessSnapshot } from "@/lib/subscription-timeline";
 import { chefAdminPathAllowed } from "@/lib/kitchen/chef-access";
 import { readKitchenKiosk } from "@/lib/kitchen/display";
 import { readPosFullscreen } from "@/lib/pos/display";
@@ -52,10 +55,42 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [posFullscreen, setPosFullscreen] = useState(false);
   const [trackingTv, setTrackingTv] = useState(false);
   const [trackingBadge, setTrackingBadge] = useState(0);
+  const [entitlements, setEntitlements] = useState<TenantEntitlements | null>(null);
+  const [subscriptionTimeline, setSubscriptionTimeline] = useState<SubscriptionTimeline | null>(null);
+  const [tenantAccess, setTenantAccess] = useState<TenantAccessSnapshot | null>(null);
   const { theme, toggle: toggleTheme } = useAdminTheme();
   useEffect(() => {
     setCollapsed(localStorage.getItem(SIDEBAR_KEY) === "1");
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setEntitlements(null);
+      return;
+    }
+    void api<{
+      entitlements: Record<string, unknown>;
+      subscription: SubscriptionTimeline | null;
+      tenant: TenantAccessSnapshot | null;
+    }>("/admin/billing/entitlements")
+      .then((r) => {
+        setEntitlements(normalizeEntitlements(r.entitlements));
+        setSubscriptionTimeline(r.subscription ?? null);
+        setTenantAccess(r.tenant ?? null);
+      })
+      .catch(() => {
+        setEntitlements(normalizeEntitlements(null));
+        setSubscriptionTimeline(null);
+        setTenantAccess(null);
+      });
+  }, [user]);
+
+  useEffect(() => {
+    if (!entitlements || !path?.startsWith("/admin")) return;
+    if (!adminPathAllowedByPlan(path, entitlements)) {
+      router.replace("/admin/billing");
+    }
+  }, [path, entitlements, router]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
@@ -281,7 +316,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     user?.role === "CHEF" ||
     user?.role === "CASHIER";
 
-  if (loading || !user || !allowed) {
+  if (loading || !user || !allowed || entitlements === null) {
     return (
       <div
         data-admin-theme={theme}
@@ -297,9 +332,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const sidebarSections = navSectionsForRole(user.role, {
     offlinePosEnabled: store?.settings.offlinePosEnabled === true,
+    entitlements,
   });
   const allSidebarHrefs = sidebarSections.flatMap((section) => section.items.map((item) => item.href));
-  const mobileNav = MOBILE_NAV_FOR_ROLE[user.role];
+  const mobileNav = filterMobileNavByEntitlements(MOBILE_NAV_FOR_ROLE[user.role], entitlements);
   const isPos = path.startsWith("/admin/pos");
   const isKitchen = path.startsWith("/admin/kitchen");
   const isDashboard = path === "/admin";
@@ -550,7 +586,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         >
           {!hideChrome ? <OpsKitchenAlertBanner /> : null}
           {!hideChrome ? <ApiUpgradeBanner /> : null}
-          {!hideChrome ? <TenantAnnouncementBanner /> : null}
+          {!hideChrome ? <PlatformCommsLayer /> : null}
+          {!hideChrome ? (
+            <TenantSubscriptionBanner
+              timeline={subscriptionTimeline}
+              tenant={tenantAccess}
+              isOwnerAdmin={user?.role === "ADMIN"}
+            />
+          ) : null}
           {children}
         </main>
 

@@ -1,12 +1,14 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { usePlatformAuth } from "@/lib/auth";
 import { ForbiddenPage } from "@/components/RequirePermission";
 import { tenantStorefrontUrl } from "@/lib/tenant-url";
+import { BackLink } from "@/components/BackLink";
+import { PageHeader } from "@/components/PageHeader";
+import { PanelCard } from "@/components/PanelCard";
 
 type Plan = { id: string; name: string; slug: string };
 
@@ -69,22 +71,24 @@ export default function CreateTenantPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
-      <div>
-        <Link href="/tenants" className="text-sm text-accent-600 hover:underline">← Tenants</Link>
-        <h1 className="mt-2 text-2xl font-semibold">Create tenant</h1>
-        <p className="text-sm text-slate-500">Store, branch, trial subscription, local hostname, and optional owner login.</p>
-      </div>
-      <form onSubmit={onSubmit} className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+      <BackLink href="/tenants" label="Tenants" />
+      <PageHeader
+        eyebrow="Provision"
+        title="Create tenant"
+        description="Store, branch, trial subscription, local hostname, and optional owner login."
+      />
+      <PanelCard>
+      <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="text-sm sm:col-span-2">
-            Display name
-            <input name="displayName" className="input mt-1" required />
+            <span className="field-label">Display name</span>
+            <input name="displayName" className="input" required />
           </label>
           <label className="text-sm">
-            URL slug
+            <span className="field-label">URL slug</span>
             <input
               name="slug"
-              className="input mt-1"
+              className="input"
               required
               pattern="[a-z0-9-]{2,}"
               value={slug}
@@ -95,12 +99,12 @@ export default function CreateTenantPage() {
             ) : null}
           </label>
           <label className="text-sm">
-            Trial days
-            <input name="trialDays" type="number" className="input mt-1" defaultValue={14} min={0} max={90} />
+            <span className="field-label">Trial days</span>
+            <input name="trialDays" type="number" className="input" defaultValue={14} min={0} max={90} />
           </label>
           <label className="text-sm sm:col-span-2">
-            Plan
-            <select name="planSlug" className="input mt-1" defaultValue={defaultPlan}>
+            <span className="field-label">Plan</span>
+            <select name="planSlug" className="input" defaultValue={defaultPlan}>
               {plans.length === 0 ? <option value="growth">growth</option> : null}
               {plans.map((p) => (
                 <option key={p.id} value={p.slug}>{p.name}</option>
@@ -108,36 +112,37 @@ export default function CreateTenantPage() {
             </select>
           </label>
           <label className="text-sm">
-            City
-            <input name="city" className="input mt-1" />
+            <span className="field-label">City</span>
+            <input name="city" className="input" />
           </label>
         </div>
-        <hr className="border-slate-200 dark:border-slate-800" />
-        <p className="text-sm font-medium">Owner (recommended)</p>
+        <hr className="border-slate-200 dark:border-white/10" />
+        <p className="text-sm font-semibold">Owner (recommended)</p>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="text-sm">
-            Name
-            <input name="ownerName" className="input mt-1" />
+            <span className="field-label">Name</span>
+            <input name="ownerName" className="input" />
           </label>
           <label className="text-sm">
-            Email
-            <input name="ownerEmail" type="email" className="input mt-1" />
+            <span className="field-label">Email</span>
+            <input name="ownerEmail" type="email" className="input" />
           </label>
           <label className="text-sm sm:col-span-2">
-            Temporary password
-            <input name="ownerPassword" type="password" className="input mt-1" minLength={12} />
+            <span className="field-label">Temporary password</span>
+            <input name="ownerPassword" type="password" className="input" minLength={12} />
             <span className="mt-1 block text-xs text-slate-500">Min 12 characters. Share securely.</span>
           </label>
           <label className="text-sm">
-            Phone
-            <input name="ownerPhone" className="input mt-1" />
+            <span className="field-label">Phone</span>
+            <input name="ownerPhone" className="input" />
           </label>
         </div>
-        {error ? <p className="text-sm text-rose-500">{error}</p> : null}
+        {error ? <p className="flash-error">{error}</p> : null}
         <button type="submit" className="btn-primary" disabled={submitting}>
           {submitting ? "Creating…" : "Create tenant"}
         </button>
       </form>
+      </PanelCard>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import helmet from "helmet";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { getRestaurantId } from "../lib/restaurant-context";
 import { safeErrorForLog } from "../lib/safe-log";
 
@@ -11,7 +11,7 @@ function rateLimitKey(req: Request) {
   } catch {
     tenant = "none";
   }
-  const ip = req.ip || req.socket.remoteAddress || "unknown";
+  const ip = ipKeyGenerator(req.ip ?? req.socket.remoteAddress ?? "");
   return `${tenant}:${ip}`;
 }
 

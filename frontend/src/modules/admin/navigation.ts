@@ -26,6 +26,7 @@ import {
   Printer,
 } from "lucide-react";
 import { Role } from "@/lib/types";
+import { filterNavHref, type TenantEntitlements } from "@/lib/plan-entitlements";
 import {
   SETTINGS_SECTIONS,
   SettingsSectionId,
@@ -118,45 +119,67 @@ const WAITER_NAV_SECTIONS: NavSection[] = [
   },
 ];
 
-export type NavOptions = { offlinePosEnabled?: boolean };
+export type NavOptions = { offlinePosEnabled?: boolean; entitlements?: TenantEntitlements };
+
+function applyEntitlements(sections: NavSection[], ent?: TenantEntitlements): NavSection[] {
+  if (!ent) return sections;
+  return sections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => filterNavHref(item.href, ent)),
+    }))
+    .filter((section) => section.items.length > 0);
+}
 
 export function applyNavOptions(sections: NavSection[], opts?: NavOptions): NavSection[] {
+  let next = sections;
   if (opts?.offlinePosEnabled !== true) {
-    return sections.map((section) => ({
+    next = next.map((section) => ({
       ...section,
       items: section.items.filter((item) => item.href !== "/admin/sync-conflicts"),
     }));
   }
-  return sections;
+  return applyEntitlements(next, opts?.entitlements);
+}
+
+export function filterMobileNavByEntitlements(items: NavItem[], ent?: TenantEntitlements): NavItem[] {
+  if (!ent) return items;
+  return items.filter((item) => filterNavHref(item.href, ent));
 }
 
 export function navSectionsForRole(role: Role, opts?: NavOptions): NavSection[] {
   if (role === "MANAGER") return applyNavOptions(MANAGER_NAV_SECTIONS, opts);
-  if (role === "WAITER") return WAITER_NAV_SECTIONS;
+  if (role === "WAITER") return applyEntitlements(WAITER_NAV_SECTIONS, opts?.entitlements);
   if (role === "CHEF") {
-    return [
-      {
-        title: "Kitchen",
-        items: [{ href: "/admin/kitchen", label: "Kitchen board", icon: Flame }],
-      },
-    ];
+    return applyEntitlements(
+      [
+        {
+          title: "Kitchen",
+          items: [{ href: "/admin/kitchen", label: "Kitchen board", icon: Flame }],
+        },
+      ],
+      opts?.entitlements
+    );
   }
   if (role === "CASHIER") {
-    return [
-      {
-        title: "Operations",
-        items: [
-          { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
-          { href: "/admin/kitchen", label: "Kitchen", icon: Flame },
-          { href: "/admin/pos", label: "POS", icon: Receipt },
-          { href: "/admin/orders", label: "Orders", icon: ClipboardList },
-        ],
-      },
-      {
-        title: "People",
-        items: [{ href: "/admin/customers", label: "Customers", icon: Users }],
-      },
-    ];
+    return applyEntitlements(
+      [
+        {
+          title: "Operations",
+          items: [
+            { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
+            { href: "/admin/kitchen", label: "Kitchen", icon: Flame },
+            { href: "/admin/pos", label: "POS", icon: Receipt },
+            { href: "/admin/orders", label: "Orders", icon: ClipboardList },
+          ],
+        },
+        {
+          title: "People",
+          items: [{ href: "/admin/customers", label: "Customers", icon: Users }],
+        },
+      ],
+      opts?.entitlements
+    );
   }
   return applyNavOptions(ADMIN_NAV_SECTIONS, opts);
 }

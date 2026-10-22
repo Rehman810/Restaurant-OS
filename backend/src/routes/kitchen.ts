@@ -13,8 +13,10 @@ import { writeAudit } from "../lib/audit";
 import { AuditAction } from "../lib/audit-actions";
 import { clientIp } from "../lib/client-ip";
 import { chefNextStatus } from "../lib/order-status";
+import { requireEntitlement } from "../lib/platform/entitlement-middleware";
 
 export const kitchenRouter = Router();
+kitchenRouter.use(requireEntitlement("kitchen"));
 
 const KITCHEN_OPS: Role[] = [Role.ADMIN, Role.MANAGER, Role.CHEF, Role.CASHIER];
 const KITCHEN_MANAGERS: Role[] = [Role.ADMIN, Role.MANAGER];

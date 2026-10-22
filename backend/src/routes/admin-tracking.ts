@@ -7,8 +7,10 @@ import { orderAlertThresholds } from "../lib/order-alert-thresholds";
 import { getStoreSettings } from "../lib/settings-data";
 import { buildTrackingBoard, buildTrackingSummary } from "../lib/admin-orders/board";
 import { buildTrackingRidersPanel } from "../lib/admin-orders/riders-panel";
+import { requireEntitlement } from "../lib/platform/entitlement-middleware";
 
 export const adminTrackingRouter = Router();
+adminTrackingRouter.use(requireEntitlement("delivery"));
 
 const BOARD_ROLES = [...ORDER_OPS, Role.RIDER] as Role[];
 

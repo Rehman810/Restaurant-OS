@@ -332,3 +332,32 @@ export async function sendStaffWelcomeEmail(
     transactional: true,
   });
 }
+
+export async function sendPlatformBroadcastEmail(input: {
+  to: string;
+  tenantName: string;
+  title: string;
+  body: string;
+  severity: string;
+}) {
+  const title = input.title.trim();
+  const body = input.body.trim();
+  const tenant = input.tenantName.trim() || "your restaurant";
+  const subject = `Restaurant OS — ${title}`;
+  const html = `
+    <div style="font-family:system-ui,sans-serif;line-height:1.5;color:#0f172a;max-width:520px">
+      <p style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#64748b">Restaurant OS operator broadcast</p>
+      <h1 style="font-size:20px;margin:12px 0 8px">${title}</h1>
+      <p style="margin:0 0 16px;color:#334155">${body || title}</p>
+      <p style="font-size:13px;color:#64748b;margin:0">Sent to <strong>${tenant}</strong>. Open your admin dashboard to read this in notifications.</p>
+    </div>`;
+  const text = `Restaurant OS broadcast for ${tenant}\n\n${title}\n\n${body || title}`;
+  await sendMail({
+    to: input.to,
+    subject,
+    html,
+    text,
+    storeName: PRODUCT_NAME,
+    transactional: true,
+  });
+}

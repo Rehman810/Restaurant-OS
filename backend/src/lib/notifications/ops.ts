@@ -10,7 +10,9 @@ export type OpsNotificationKind =
   | "menu_sold_out"
   | "menu_back_in_stock"
   | "kitchen_alert"
-  | "reservation_pending";
+  | "reservation_pending"
+  | "platform_announcement"
+  | "platform_maintenance";
 
 export type OpsNotificationSeverity = "info" | "warning" | "urgent";
 

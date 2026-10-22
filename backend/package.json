@@ -22,6 +22,7 @@
     "test:whatsapp": "tsx scripts/test-whatsapp.ts",
     "tenancy:check": "tsx scripts/tenancy-check.ts",
     "tenancy:local-dev": "tsx scripts/tenancy-local-dev.ts",
+    "plans:sync-modules": "tsx scripts/sync-plan-modules.ts",
     "tenancy:backfill-verify": "tsx scripts/tenancy-backfill-verify.ts",
     "platform:create-admin": "tsx scripts/platform-create-admin.ts",
     "platform:reset-access": "tsx scripts/platform-reset-access.ts",

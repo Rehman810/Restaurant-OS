@@ -6,8 +6,10 @@ import { getStoreSettings } from "../lib/settings-data";
 import { storeNameFrom } from "../lib/branding";
 import { buildKotTickets } from "../lib/kot";
 import { branchScopeError, getDefaultBranchId, resolveBranchScope } from "../lib/branch-scope";
+import { requireEntitlement } from "../lib/platform/entitlement-middleware";
 
 export const kotRouter = Router();
+kotRouter.use(requireEntitlement("kitchen"));
 
 kotRouter.get("/orders/:orderId", requireAuth, requireRole(...ORDER_OPS), async (req, res) => {
   let scope;

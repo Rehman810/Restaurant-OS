@@ -6,6 +6,7 @@ export type PlatformPermission =
   | "billing:read"
   | "billing:write"
   | "plans:read"
+  | "plans:write"
   | "audit:read"
   | "notes:write"
   | "support:write";
@@ -17,6 +18,7 @@ export const NAV_PERMISSIONS: Record<string, PlatformPermission> = {
   "/audit": "audit:read",
   "/health": "tenants:read",
   "/settings": "tenants:read",
+  "/plans": "plans:read",
 };
 
 export function canAccess(permissions: PlatformPermission[] | undefined, permission: PlatformPermission) {

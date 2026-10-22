@@ -1,10 +1,13 @@
 import { NextFunction, Request, Response } from "express";
-import { assertEntitlement, EntitlementError, type PlanEntitlements } from "./entitlements";
+import { accessLevelForHttpMethod } from "./module-access";
+import { assertModuleAccess, EntitlementError, type PlanEntitlements } from "./entitlements";
+import type { PlanModuleId } from "./plan-modules";
 
-export function requireEntitlement(feature: keyof PlanEntitlements) {
-  return async (_req: Request, res: Response, next: NextFunction) => {
+export function requireModulePlan(module: PlanModuleId) {
+  return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      await assertEntitlement(feature);
+      const level = accessLevelForHttpMethod(req.method);
+      await assertModuleAccess(module, level);
       next();
     } catch (err) {
       if (err instanceof EntitlementError) {
@@ -13,4 +16,9 @@ export function requireEntitlement(feature: keyof PlanEntitlements) {
       next(err);
     }
   };
+}
+
+/** @deprecated Use requireModulePlan — kept for existing imports; enforces read/edit/delete by HTTP method. */
+export function requireEntitlement(feature: keyof PlanEntitlements) {
+  return requireModulePlan(feature as PlanModuleId);
 }

@@ -53,6 +53,56 @@ describe.skipIf(!hasDb)("platform API", () => {
     expect((res.body as { plans?: unknown[] }).plans?.length).toBeGreaterThan(0);
   });
 
+  it("forbids billing role from creating plans", async () => {
+    const res = await appRequest(app, "POST", "/platform/plans", {
+      headers: { Authorization: `Bearer ${billingToken}` },
+      body: {
+        slug: `probe-${Date.now()}`,
+        name: "Probe",
+        entitlements: { pos: true },
+      },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("allows super admin to create and update a plan", async () => {
+    const hash = await bcrypt.hash(password, 10);
+    const superUser = await basePrisma.platformUser.create({
+      data: {
+        email: `super-plans-${Date.now()}@test.local`,
+        name: "Super",
+        passwordHash: hash,
+        role: PlatformRole.SUPER_ADMIN,
+      },
+    });
+    const token = signPlatformToken({
+      id: superUser.id,
+      email: superUser.email,
+      name: superUser.name,
+      role: superUser.role,
+      tv: 0,
+    });
+    const slug = `test-plan-${Date.now()}`;
+    const create = await appRequest(app, "POST", "/platform/plans", {
+      headers: { Authorization: `Bearer ${token}` },
+      body: {
+        slug,
+        name: "Test Plan",
+        pricePkr: 9900,
+        entitlements: { pos: true, inventory: false, maxBranches: 2, maxStaff: 5 },
+      },
+    });
+    expect(create.status).toBe(201);
+    const planId = (create.body as { plan: { id: string } }).plan.id;
+    const patch = await appRequest(app, "PATCH", `/platform/plans/${planId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      body: { entitlements: { pos: true, inventory: true, maxBranches: 2, maxStaff: 5 } },
+    });
+    expect(patch.status).toBe(200);
+    await basePrisma.plan.delete({ where: { id: planId } }).catch(() => null);
+    await basePrisma.platformUser.delete({ where: { id: superUser.id } }).catch(() => null);
+  });
+
   it("lists tenants", async () => {
     const res = await appRequest(app, "GET", "/platform/tenants", {
       headers: { Authorization: `Bearer ${billingToken}` },

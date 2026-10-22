@@ -48,6 +48,7 @@ import { adminOnboardingRouter } from "./routes/admin-onboarding";
 import { platformRouter } from "./routes/platform";
 import { platformCsrfProtection } from "./middleware/platform-csrf";
 import { loadTenantAccess, tenantLifecycleMiddleware } from "./middleware/tenant-lifecycle";
+import { ensureSubscriptionSynced } from "./lib/platform/subscription-lifecycle";
 import { maintenanceMiddleware } from "./middleware/maintenance";
 import { adminAnnouncementsRouter } from "./routes/admin-announcements";
 import { adminSupportAccessRouter } from "./routes/admin-support-access";
@@ -64,6 +65,7 @@ export function createApp() {
         res.status(404).json({ error: "Not found." });
         return;
       }
+      await ensureSubscriptionSynced(id);
       const access = await loadTenantAccess(id);
       if (!access?.resolvable) {
         res.status(404).json({ error: "Not found." });

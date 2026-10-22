@@ -29,7 +29,7 @@ export function RequirePermission({
 
 export function ForbiddenPage() {
   return (
-    <div className="mx-auto max-w-md space-y-3 py-16 text-center">
+    <div className="mx-auto max-w-md space-y-4 py-16 text-center">
       <h1 className="text-xl font-semibold">Access restricted</h1>
       <p className="text-sm text-slate-500">Your platform role cannot open this section.</p>
       <Link href="/overview" className="btn-primary inline-flex">Back to overview</Link>

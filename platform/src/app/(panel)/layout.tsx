@@ -14,14 +14,17 @@ function permissionForPath(path: string) {
 }
 
 export default function PanelLayout({ children }: { children: React.ReactNode }) {
-  const { loading, user, can } = usePlatformAuth();
+  const { loading, user } = usePlatformAuth();
   const path = usePathname();
   const required = permissionForPath(path);
 
   if (loading) {
     return (
-      <div className="grid min-h-screen place-items-center bg-slate-950 text-slate-300">
-        Loading…
+      <div className="panel-surface grid min-h-screen place-items-center text-slate-300">
+        <div className="text-center">
+          <div className="mx-auto h-9 w-9 animate-spin rounded-full border-2 border-accent-400/30 border-t-accent-400" />
+          <p className="mt-3 text-sm text-slate-400">Loading console…</p>
+        </div>
       </div>
     );
   }

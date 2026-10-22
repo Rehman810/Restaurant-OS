@@ -1,22 +1,32 @@
 import { prisma } from "../prisma";
 import { STAFF_DIRECTORY_ROLES } from "../roles";
+import {
+  defaultOnForModule,
+  moduleAccessForLevel,
+  parseModuleAccess,
+  parseModuleAccessInput,
+  type ModuleAccess,
+  type ModuleAccessLevel,
+} from "./module-access";
+import { PLAN_MODULE_DEFAULT_ON, PLAN_MODULE_IDS, type PlanModuleEntitlements, type PlanModuleId } from "./plan-modules";
 
 export type PlanEntitlements = {
   maxBranches?: number | null;
   maxStaff?: number | null;
-  inventory?: boolean;
-  dineIn?: boolean;
-  pos?: boolean;
-  analytics?: boolean;
-};
+} & PlanModuleEntitlements;
+
+function defaultModuleEntitlements(): PlanModuleEntitlements {
+  const ent: PlanModuleEntitlements = {};
+  for (const id of PLAN_MODULE_IDS) {
+    ent[id] = PLAN_MODULE_DEFAULT_ON.includes(id);
+  }
+  return ent;
+}
 
 const FALLBACK: PlanEntitlements = {
   maxBranches: 1,
   maxStaff: 5,
-  inventory: false,
-  dineIn: false,
-  pos: true,
-  analytics: false,
+  ...defaultModuleEntitlements(),
 };
 
 export class EntitlementError extends Error {
@@ -32,14 +42,19 @@ export class EntitlementError extends Error {
 function parseEntitlements(raw: unknown): PlanEntitlements {
   if (!raw || typeof raw !== "object") return {};
   const o = raw as Record<string, unknown>;
-  return {
+  const ent: PlanEntitlements = {
     maxBranches: typeof o.maxBranches === "number" ? o.maxBranches : o.maxBranches === null ? null : undefined,
     maxStaff: typeof o.maxStaff === "number" ? o.maxStaff : o.maxStaff === null ? null : undefined,
-    inventory: typeof o.inventory === "boolean" ? o.inventory : undefined,
-    dineIn: typeof o.dineIn === "boolean" ? o.dineIn : undefined,
-    pos: typeof o.pos === "boolean" ? o.pos : undefined,
-    analytics: typeof o.analytics === "boolean" ? o.analytics : undefined,
   };
+  for (const id of PLAN_MODULE_IDS) {
+    const parsed = parseModuleAccessInput(o[id]);
+    if (parsed !== undefined) ent[id] = parsed;
+  }
+  return ent;
+}
+
+export function resolveModuleAccess(ent: PlanEntitlements, id: PlanModuleId): ModuleAccess {
+  return parseModuleAccess(ent[id], defaultOnForModule(id));
 }
 
 export async function loadTenantEntitlements(): Promise<PlanEntitlements> {
@@ -66,19 +81,25 @@ export async function loadTenantBillingSummary() {
   return { subscription, openInvoice };
 }
 
-export async function assertEntitlement(feature: keyof PlanEntitlements) {
+export async function assertModuleAccess(id: PlanModuleId, level: ModuleAccessLevel) {
   const ent = await loadTenantEntitlements();
-  const value = ent[feature];
-  if (feature === "maxBranches" || feature === "maxStaff") return;
-  if (value === false) {
+  const access = resolveModuleAccess(ent, id);
+  if (!moduleAccessForLevel(access, level)) {
+    const verb = level === "read" ? "view" : level === "edit" ? "change" : "delete";
     throw new EntitlementError(
       "PLAN_FEATURE",
-      "This feature is not included in your current plan. Contact support to upgrade."
+      `Your plan does not allow ${verb} access for this feature. Contact support to upgrade.`
     );
   }
 }
 
+export async function assertEntitlement(feature: keyof PlanEntitlements) {
+  if (feature === "maxBranches" || feature === "maxStaff") return;
+  await assertModuleAccess(feature as PlanModuleId, "read");
+}
+
 export async function assertCanAddBranch() {
+  await assertModuleAccess("branches", "edit");
   const ent = await loadTenantEntitlements();
   const limit = ent.maxBranches;
   if (limit == null) return;

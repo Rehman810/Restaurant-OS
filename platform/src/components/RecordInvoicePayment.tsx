@@ -66,7 +66,7 @@ export function RecordInvoicePayment({
 
   if (!open) {
     return (
-      <button type="button" className="text-xs font-medium text-accent-600 hover:underline" onClick={() => setOpen(true)}>
+      <button type="button" className="cursor-pointer text-xs font-semibold text-accent-500 hover:underline" onClick={() => setOpen(true)}>
         Record payment
       </button>
     );

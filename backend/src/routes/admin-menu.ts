@@ -32,7 +32,10 @@ import {
 } from "../lib/admin-menu/mutations";
 import { runMenuBulk, type BulkAction } from "../lib/admin-menu/bulk";
 
+import { requireEntitlement } from "../lib/platform/entitlement-middleware";
+
 export const adminMenuRouter = Router();
+adminMenuRouter.use(requireEntitlement("catalog"));
 
 const MENU_READ = [...ADMIN_LIKE, Role.CHEF, Role.CASHIER] as Role[];
 const AVAILABILITY_ROLES = [...ADMIN_LIKE, Role.CHEF, Role.CASHIER] as Role[];

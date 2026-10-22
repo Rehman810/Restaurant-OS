@@ -2,6 +2,7 @@ import { Router } from "express";
 import { AnnouncementAudience, AnnouncementSeverity, TenantStatus } from "@prisma/client";
 import { requirePlatformAuth, requirePlatformPermission } from "../../middleware/platform-auth";
 import { createPlatformAnnouncement, listPlatformAnnouncements } from "../../lib/platform/announcements";
+import { deliverMaintenanceBroadcast, deliverPlatformAnnouncement } from "../../lib/platform/broadcast";
 import { writePlatformAudit } from "../../lib/platform/platform-audit";
 import { clientIp } from "../../lib/client-ip";
 import { invalidateMaintenanceCache } from "../../lib/platform/maintenance";
@@ -37,7 +38,11 @@ platformAnnouncementsRouter.post("/", requirePlatformAuth, requirePlatformPermis
     after: { title: row.title },
     ip: clientIp(req),
   });
-  res.status(201).json({ announcement: row });
+  const delivery = await deliverPlatformAnnouncement(row, {
+    email: body.notifyEmail !== false,
+    inApp: body.notifyInApp !== false,
+  });
+  res.status(201).json({ announcement: row, delivery });
 });
 
 platformAnnouncementsRouter.post(
@@ -55,6 +60,9 @@ platformAnnouncementsRouter.post(
     };
     const updated = await updatePlatformSettings(version, { maintenance });
     invalidateMaintenanceCache();
+    const delivery = maintenance.active
+      ? await deliverMaintenanceBroadcast(maintenance.message || "", true)
+      : { tenantCount: 0 };
     await writePlatformAudit({
       actorId: req.platformUser!.id,
       actorEmail: req.platformUser!.email,
@@ -64,6 +72,6 @@ platformAnnouncementsRouter.post(
       after: maintenance,
       ip: clientIp(req),
     });
-    res.json(updated);
+    res.json({ ...updated, delivery });
   }
 );

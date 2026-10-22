@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { Shield } from "lucide-react";
+import { UtensilsCrossed } from "lucide-react";
 import { usePlatformAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
 
@@ -28,24 +28,20 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 px-4">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-accent-900/40 via-slate-950 to-slate-950" />
+    <div className="panel-surface relative flex min-h-screen items-center justify-center overflow-hidden px-4">
       <div className="relative w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-600 text-white shadow-lg shadow-accent-600/30">
-            <Shield className="h-6 w-6" />
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-accent-500 to-accent-700 text-white shadow-lg shadow-accent-600/30">
+            <UtensilsCrossed className="h-6 w-6" aria-hidden />
           </div>
-          <h1 className="mt-4 text-2xl font-semibold text-white">Platform</h1>
-          <p className="mt-1 text-sm text-slate-400">Sign in to manage tenants and billing</p>
+          <h1 className="mt-4 text-2xl font-semibold text-white">Restaurant OS</h1>
+          <p className="mt-1 text-sm text-slate-400">Operator platform · sign in to manage tenants</p>
         </div>
-        <form
-          onSubmit={onSubmit}
-          className="rounded-2xl border border-slate-800 bg-slate-900/90 p-8 shadow-2xl backdrop-blur"
-        >
+        <form onSubmit={onSubmit} className="surface-card p-8">
           <label className="block text-sm">
-            <span className="text-slate-300">Email</span>
+            <span className="field-label">Email</span>
             <input
-              className="input mt-1.5 border-slate-700 bg-slate-950 text-white"
+              className="input"
               type="email"
               autoComplete="email"
               value={email}
@@ -54,9 +50,9 @@ export default function LoginPage() {
             />
           </label>
           <label className="mt-4 block text-sm">
-            <span className="text-slate-300">Password</span>
+            <span className="field-label">Password</span>
             <input
-              className="input mt-1.5 border-slate-700 bg-slate-950 text-white"
+              className="input"
               type="password"
               autoComplete="current-password"
               value={password}
@@ -64,7 +60,7 @@ export default function LoginPage() {
               required
             />
           </label>
-          {error ? <p className="mt-4 rounded-lg bg-rose-500/10 px-3 py-2 text-sm text-rose-300">{error}</p> : null}
+          {error ? <p className="flash-error mt-4">{error}</p> : null}
           <button type="submit" className="btn-primary mt-6 w-full" disabled={submitting}>
             {submitting ? "Signing in…" : "Sign in"}
           </button>

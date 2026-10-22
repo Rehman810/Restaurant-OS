@@ -9,8 +9,10 @@ import { settleRiderCashEntries } from "../lib/rider-cod";
 import { writeAudit } from "../lib/audit";
 import { AuditAction } from "../lib/audit-actions";
 import { clientIp } from "../lib/client-ip";
+import { requireEntitlement } from "../lib/platform/entitlement-middleware";
 
 export const riderCashRouter = Router();
+riderCashRouter.use(requireEntitlement("delivery"));
 
 const SETTLE_ROLES: Role[] = [Role.ADMIN, Role.MANAGER, Role.CASHIER];
 

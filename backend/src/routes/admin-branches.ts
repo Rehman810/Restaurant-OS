@@ -16,8 +16,10 @@ import { listAdminBranches, parseListRangeQuery } from "../lib/branches/list";
 import { branchDataFromParsed, parseBranchCreateBody, validateBranchFields } from "../lib/branches/validate";
 import { copyBranchSetup, type CopyFromOptions } from "../lib/branches/copy-from";
 import { assertCanAddBranch, EntitlementError } from "../lib/platform/entitlements";
+import { requireEntitlement } from "../lib/platform/entitlement-middleware";
 
 export const adminBranchesRouter = Router();
+adminBranchesRouter.use(requireEntitlement("branches"));
 
 const ADMIN_ONLY = [Role.ADMIN] as Role[];
 

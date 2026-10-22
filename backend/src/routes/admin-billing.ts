@@ -5,19 +5,37 @@ import { prisma } from "../lib/prisma";
 import { getRestaurantId } from "../lib/restaurant-context";
 import { loadTenantBillingSummary, loadTenantEntitlements } from "../lib/platform/entitlements";
 import { loadTenantPaymentInstructions } from "../lib/platform/platform-settings";
+import { loadSubscriptionTimelineForRestaurant } from "../lib/platform/subscription-context";
 
 export const adminBillingRouter = Router();
 
+/** Plan modules for sidebar gating (all staff roles). */
+adminBillingRouter.get("/entitlements", requireAuth, async (_req, res) => {
+  const restaurantId = getRestaurantId();
+  const entitlements = await loadTenantEntitlements();
+  const subCtx = await loadSubscriptionTimelineForRestaurant(restaurantId, true);
+  res.json({
+    entitlements,
+    subscription: subCtx?.timeline ?? null,
+    tenant: subCtx?.tenant ?? null,
+  });
+});
+
 adminBillingRouter.get("/summary", requireAuth, requireRole(Role.ADMIN), async (_req, res) => {
+  const restaurantId = getRestaurantId();
   const entitlements = await loadTenantEntitlements();
   const { subscription, openInvoice } = await loadTenantBillingSummary();
   const paymentInstructions = await loadTenantPaymentInstructions();
+  const subCtx = await loadSubscriptionTimelineForRestaurant(restaurantId, true);
   if (!subscription) {
     return res.json({
       plan: null,
       subscription: null,
       openInvoice: null,
       entitlements,
+      paymentInstructions,
+      subscriptionTimeline: subCtx?.timeline ?? null,
+      tenant: subCtx?.tenant ?? null,
     });
   }
   res.json({
@@ -42,6 +60,8 @@ adminBillingRouter.get("/summary", requireAuth, requireRole(Role.ADMIN), async (
       : null,
     entitlements,
     paymentInstructions,
+    subscriptionTimeline: subCtx?.timeline ?? null,
+    tenant: subCtx?.tenant ?? null,
   });
 });
 

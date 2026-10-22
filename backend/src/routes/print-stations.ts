@@ -3,8 +3,10 @@ import { prisma } from "../lib/prisma";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { ADMIN_LIKE, ORDER_OPS } from "../lib/roles";
 import { branchScopeError, getDefaultBranchId, resolveBranchScope } from "../lib/branch-scope";
+import { requireEntitlement } from "../lib/platform/entitlement-middleware";
 
 export const printStationsRouter = Router();
+printStationsRouter.use(requireEntitlement("kitchen"));
 
 function normalizeCode(raw: string) {
   return raw.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 12);

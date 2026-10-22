@@ -32,10 +32,10 @@ export function tenantAccessForStatus(status: TenantStatus, statusReason = ""): 
       return {
         status,
         resolvable: true,
-        allowStorefrontOrders: true,
+        allowStorefrontOrders: false,
         allowStaffLogin: true,
-        adminReadOnly: false,
-        publicMessage: reason || "Your subscription payment is due. Please contact support.",
+        adminReadOnly: true,
+        publicMessage: reason || "Your subscription payment is due. Pay the open invoice to restore full access.",
       };
     case TenantStatus.LEAD:
       return {
@@ -111,6 +111,19 @@ function pathMatches(path: string, prefix: string) {
   return path === prefix || path.startsWith(`${prefix}/`);
 }
 
+/** Routes that stay writable when the tenant is in billing-related read-only mode. */
+function isSubscriptionBillingExempt(path: string) {
+  return (
+    pathMatches(path, "/admin/billing") ||
+    pathMatches(path, "/admin/announcements") ||
+    path === "/auth/logout" ||
+    path === "/auth/logout-all" ||
+    path === "/auth/login" ||
+    path === "/auth/support-exchange" ||
+    path.startsWith("/auth/login/")
+  );
+}
+
 export function lifecycleGate(
   access: TenantAccess,
   method: string,
@@ -156,12 +169,7 @@ export function lifecycleGate(
   }
 
   if (access.adminReadOnly && !read) {
-    const exempt =
-      path === "/auth/logout" ||
-      path === "/auth/logout-all" ||
-      path === "/auth/login" ||
-      path === "/auth/support-exchange" ||
-      path.startsWith("/auth/login/");
+    const exempt = isSubscriptionBillingExempt(path);
     if (!exempt) {
       return {
         blocked: true,

@@ -49,8 +49,10 @@ import {
 import { validatePasswordPolicy } from "../lib/staff/password-policy";
 import { staffPermissionsSummary } from "../lib/staff/permissions-summary";
 import { assertCanAddStaff, EntitlementError } from "../lib/platform/entitlements";
+import { requireEntitlement } from "../lib/platform/entitlement-middleware";
 
 export const staffRouter = Router();
+staffRouter.use(requireEntitlement("staff"));
 
 const STAFF_ROLES = STAFF_DIRECTORY_ROLES;
 

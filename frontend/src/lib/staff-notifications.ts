@@ -12,7 +12,9 @@ export type StaffNotificationKind =
   | "menu_back_in_stock"
   | "kitchen_alert"
   | "reservation_pending"
-  | "day_closeout_blocker";
+  | "day_closeout_blocker"
+  | "platform_announcement"
+  | "platform_maintenance";
 
 export type StaffNotification = {
   id: string;

@@ -11,5 +11,8 @@ export async function maintenanceMiddleware(req: Request, res: Response, next: N
   if (!m.active) return next();
   const read = req.method === "GET" || req.method === "HEAD";
   if (read) return next();
+  if (req.method === "POST" && /\/admin\/announcements\/[^/]+\/dismiss$/.test(req.path)) {
+    return next();
+  }
   return res.status(503).json({ error: m.message, code: "MAINTENANCE" });
 }

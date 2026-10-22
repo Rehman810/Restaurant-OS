@@ -2,6 +2,7 @@
 // Set API_PROXY_TARGET=http://YOUR_ORACLE_IP:4000 on Vercel (server env).
 // Optional: NEXT_PUBLIC_API_URL=https://your-https-api.com for direct API + websockets.
 import { readCsrfFromDocument } from "./csrf";
+import { dispatchPlatformMaintenance } from "./platform-maintenance-event";
 
 function isLocalApiUrl(url: string) {
   return /localhost|127\.0\.0\.1/i.test(url);
@@ -109,6 +110,9 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
       payload = data;
     } catch {
       /* ignore */
+    }
+    if (code === "MAINTENANCE" && typeof window !== "undefined") {
+      dispatchPlatformMaintenance(message);
     }
     throw new ApiError(message, res.status, code, { fields, payload });
   }

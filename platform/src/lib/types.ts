@@ -6,6 +6,7 @@ export type PlatformPermission =
   | "billing:read"
   | "billing:write"
   | "plans:read"
+  | "plans:write"
   | "audit:read"
   | "notes:write"
   | "support:write";

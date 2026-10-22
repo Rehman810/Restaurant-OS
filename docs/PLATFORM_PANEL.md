@@ -32,8 +32,8 @@ flowchart LR
 
 | Role | Tenants | Billing | Plans | Audit | Notes | Support sessions |
 | --- | --- | --- | --- | --- | --- | --- |
-| SUPER_ADMIN | read/write | read/write | read | read | write | write |
-| ADMIN | read/write | read | read | read | write | write |
+| SUPER_ADMIN | read/write | read/write | read/write | read | write | write |
+| ADMIN | read/write | read | read/write | read | write | write |
 | BILLING | read | read/write | read | read | — | — |
 | SUPPORT | read | — | read | read | write | write |
 | READONLY | read | read | read | read | — | — |

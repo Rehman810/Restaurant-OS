@@ -8,8 +8,10 @@ import { enrichAuditLogs } from "../lib/audit-enrich";
 import { auditActionsByCategory, AUDIT_ENTITY_TYPES } from "../lib/audit-actions";
 import { getStoreSettings } from "../lib/settings-data";
 import { maskPiiInText } from "../lib/audit-pii";
+import { requireEntitlement } from "../lib/platform/entitlement-middleware";
 
 export const auditLogsRouter = Router();
+auditLogsRouter.use(requireEntitlement("auditLog"));
 
 function formatLocalTime(iso: Date, timezone: string) {
   return iso.toLocaleString("en-GB", {

@@ -15,6 +15,15 @@ const hasDb = Boolean(process.env.DATABASE_URL?.includes("test"));
 const app = createApp();
 
 describe("tenant lifecycle rules", () => {
+  it("past due tenants block mutations except billing", () => {
+    const access = tenantAccessForStatus(TenantStatus.PAST_DUE, "Trial ended");
+    expect(access.adminReadOnly).toBe(true);
+    const blocked = lifecycleGate(access, "POST", "/admin/orders");
+    expect(blocked.blocked).toBe(true);
+    const billing = lifecycleGate(access, "POST", "/admin/billing/invoices");
+    expect(billing.blocked).toBe(false);
+  });
+
   it("suspended tenants allow staff login but block checkout", () => {
     const access = tenantAccessForStatus(TenantStatus.SUSPENDED, "Maintenance");
     expect(access.allowStaffLogin).toBe(true);

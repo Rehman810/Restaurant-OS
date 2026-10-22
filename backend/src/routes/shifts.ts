@@ -8,8 +8,10 @@ import { buildShiftReport, recordCashMovement } from "../lib/cash-shift";
 import { writeAudit } from "../lib/audit";
 import { AuditAction } from "../lib/audit-actions";
 import { clientIp } from "../lib/client-ip";
+import { requireEntitlement } from "../lib/platform/entitlement-middleware";
 
 export const shiftsRouter = Router();
+shiftsRouter.use(requireEntitlement("shifts"));
 
 function parseDate(v: unknown) {
   if (!v || typeof v !== "string") return undefined;

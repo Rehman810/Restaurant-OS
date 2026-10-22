@@ -6,12 +6,14 @@ import { createPortal } from "react-dom";
 import {
   Bell,
   CheckCheck,
+  Megaphone,
   Package,
   ShoppingBag,
   UtensilsCrossed,
   Volume2,
   VolumeX,
   Warehouse,
+  Wrench,
   X,
 } from "lucide-react";
 import { useStaffNotificationsFeed } from "@/hooks/useStaffNotifications";
@@ -42,6 +44,10 @@ function kindIcon(kind: StaffNotificationKind) {
       return UtensilsCrossed;
     case "reservation_pending":
       return Package;
+    case "platform_announcement":
+      return Megaphone;
+    case "platform_maintenance":
+      return Wrench;
     default:
       return Bell;
   }

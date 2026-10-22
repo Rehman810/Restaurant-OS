@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ExternalLink, Plus } from "lucide-react";
+import { Building2, ExternalLink, Plus, Search } from "lucide-react";
 import { api } from "@/lib/api";
 import { usePlatformAuth } from "@/lib/auth";
 import type { TenantRow } from "@/lib/types";
@@ -10,6 +10,8 @@ import { formatPktDate } from "@/lib/format";
 import { tenantStorefrontUrl } from "@/lib/tenant-url";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
+import { DataTable, TableEmpty } from "@/components/DataTable";
+import { EmptyState } from "@/components/EmptyState";
 
 export default function TenantsPage() {
   const { can } = usePlatformAuth();
@@ -42,23 +44,27 @@ export default function TenantsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Tenants" description="Restaurant accounts on the platform">
+      <PageHeader eyebrow="Accounts" title="Tenants" description="Restaurant accounts on the platform">
         {can("tenants:write") ? (
-          <Link href="/tenants/new" className="btn-primary gap-2">
-            <Plus className="h-4 w-4" />
+          <Link href="/tenants/new" className="btn-primary">
+            <Plus className="h-4 w-4" aria-hidden />
             Create tenant
           </Link>
         ) : null}
       </PageHeader>
 
-      <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <input
-          className="input max-w-xs"
-          placeholder="Search name, slug, email"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
-        <select className="input max-w-[10rem]" value={status} onChange={(e) => setStatus(e.target.value)}>
+      <div className="surface-card flex flex-wrap items-center gap-3 p-4">
+        <label className="relative min-w-[14rem] flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden />
+          <input
+            className="input pl-9"
+            placeholder="Search name, slug, email"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            aria-label="Search tenants"
+          />
+        </label>
+        <select className="input max-w-[12rem]" value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Filter by status">
           <option value="">All statuses</option>
           {["TRIAL", "ACTIVE", "PAST_DUE", "SUSPENDED", "CANCELLED", "ARCHIVED", "LEAD"].map((s) => (
             <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
@@ -66,65 +72,66 @@ export default function TenantsPage() {
         </select>
       </div>
 
-      {error ? <p className="text-sm text-rose-500">{error}</p> : null}
+      {error ? <p className="flash-error">{error}</p> : null}
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-100 bg-slate-50/80 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-800/30">
-              <th className="px-4 py-3 font-medium">Tenant</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium">Plan</th>
-              <th className="px-4 py-3 font-medium">Owner</th>
-              <th className="px-4 py-3 font-medium">Store</th>
-              <th className="px-4 py-3 font-medium">Created</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tenants.map((t) => {
-              const storeUrl = tenantStorefrontUrl(t.slug, t.hostname);
-              return (
-                <tr key={t.id} className="table-row-hover border-b border-slate-50 dark:border-slate-800/80">
-                  <td className="px-4 py-3">
-                    <Link href={`/tenants/${t.id}`} className="font-medium text-accent-600 hover:underline">
-                      {t.displayName || t.slug}
-                    </Link>
-                    <p className="text-xs text-slate-500">{t.slug}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={t.status} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <span>{t.subscription?.plan?.name ?? "—"}</span>
-                    {t.subscription?.status ? <p className="text-xs text-slate-500">{t.subscription.status}</p> : null}
-                  </td>
-                  <td className="px-4 py-3">
-                    <p>{t.ownerName || "—"}</p>
-                    <p className="text-xs text-slate-500">{t.ownerEmail || ""}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <a
-                      href={storeUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs font-medium text-accent-600 hover:underline"
-                    >
-                      Open
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-slate-600">{formatPktDate(t.createdAt)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        {loading ? (
-          <p className="p-8 text-center text-sm text-slate-500">Loading…</p>
-        ) : tenants.length === 0 && !error ? (
-          <p className="p-8 text-center text-sm text-slate-500">No tenants match your filters.</p>
-        ) : null}
-      </div>
+      <DataTable
+        footer={
+          loading ? (
+            <TableEmpty>Loading tenants…</TableEmpty>
+          ) : tenants.length === 0 && !error ? (
+            <EmptyState icon={Building2} title="No tenants match your filters" description="Try a different search or status." />
+          ) : null
+        }
+      >
+        <thead>
+          <tr>
+            <th>Tenant</th>
+            <th>Status</th>
+            <th>Plan</th>
+            <th>Owner</th>
+            <th>Store</th>
+            <th>Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          {tenants.map((t) => {
+            const storeUrl = tenantStorefrontUrl(t.slug, t.hostname);
+            return (
+              <tr key={t.id}>
+                <td>
+                  <Link href={`/tenants/${t.id}`} className="font-semibold text-accent-600 hover:underline dark:text-accent-300">
+                    {t.displayName || t.slug}
+                  </Link>
+                  <p className="text-xs text-slate-500">{t.slug}</p>
+                </td>
+                <td>
+                  <StatusBadge status={t.status} />
+                </td>
+                <td>
+                  <span>{t.subscription?.plan?.name ?? "—"}</span>
+                  {t.subscription?.status ? <p className="text-xs text-slate-500">{t.subscription.status}</p> : null}
+                </td>
+                <td>
+                  <p>{t.ownerName || "—"}</p>
+                  <p className="text-xs text-slate-500">{t.ownerEmail || ""}</p>
+                </td>
+                <td>
+                  <a
+                    href={storeUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-accent-600 hover:underline dark:text-accent-300"
+                  >
+                    Open
+                    <ExternalLink className="h-3 w-3" aria-hidden />
+                  </a>
+                </td>
+                <td className="whitespace-nowrap text-slate-500">{formatPktDate(t.createdAt)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </DataTable>
     </div>
   );
 }

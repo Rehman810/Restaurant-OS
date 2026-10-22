@@ -223,6 +223,15 @@ export function emitOpsNotification(notification: OpsNotificationPayload) {
   void import("./web-push").then(({ notifyStaffOpsPush }) => notifyStaffOpsPush(notification));
 }
 
+/** Platform broadcast to a specific tenant ops room (no tenant request context). */
+export function emitOpsNotificationForRestaurant(restaurantId: string, notification: OpsNotificationPayload) {
+  if (!io) return;
+  io.to(tenantOpsRoom(restaurantId)).emit("ops:notification", notification);
+  void import("./web-push").then(({ notifyStaffOpsPush }) =>
+    runWithRestaurant(restaurantId, () => notifyStaffOpsPush(notification))
+  );
+}
+
 /** Broadcast menu/catalog changes (storefront, POS, kitchen refetch). */
 export function emitMenuCatalogChanged(branchIds?: string[]) {
   if (!io) return;

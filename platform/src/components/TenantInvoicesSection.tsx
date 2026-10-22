@@ -21,9 +21,9 @@ export function TenantInvoicesSection({
         <p className="text-sm text-slate-500">No platform invoices yet. The billing job creates these each period.</p>
       ) : (
         <div className="overflow-x-auto -mx-1">
-          <table className="min-w-full text-sm">
+          <table className="data-table">
             <thead>
-              <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-slate-800">
+              <tr>
                 <th className="pb-3 pr-4 font-medium">Invoice</th>
                 <th className="pb-3 pr-4 font-medium">Status</th>
                 <th className="pb-3 pr-4 font-medium">Amount</th>

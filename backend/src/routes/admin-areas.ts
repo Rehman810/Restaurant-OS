@@ -19,8 +19,10 @@ import { loadActivePauses, resolvePauseUntil } from "../lib/delivery/pause";
 import { invalidateDeliveryAreas } from "../lib/delivery/mutations";
 import { serializeAdminAreaRow } from "../lib/delivery/serialize";
 import { getRestaurantId } from "../lib/restaurant-context";
+import { requireEntitlement } from "../lib/platform/entitlement-middleware";
 
 export const adminAreasRouter = Router();
+adminAreasRouter.use(requireEntitlement("delivery"));
 
 const EDIT_ROLES = ADMIN_LIKE;
 
