@@ -16,7 +16,15 @@ import {
 } from "recharts";
 import { compactRs } from "@/lib/analytics/helpers";
 import { ChartEmpty } from "./AnalyticsUi";
-import { CHART_COLORS, formatChartValue, useChartGradId, useChartTheme, type ValueFormat } from "./chart-theme";
+import {
+  CHART_COLORS_FALLBACK,
+  formatChartValue,
+  useBrandChartPalette,
+  useChartGradId,
+  useChartSeriesColors,
+  useChartTheme,
+  type ValueFormat,
+} from "./chart-theme";
 
 type Slice = { name: string; value: number };
 
@@ -49,7 +57,7 @@ function RichTooltip({
               <span className="flex items-center gap-2 text-stone-700 dark:text-stone-200">
                 <span
                   className="h-2.5 w-2.5 shrink-0 rounded-full"
-                  style={{ background: p.color ?? CHART_COLORS[0] }}
+                  style={{ background: p.color ?? CHART_COLORS_FALLBACK[0] }}
                 />
                 {p.name}
               </span>
@@ -65,7 +73,7 @@ function RichTooltip({
   );
 }
 
-function DonutLegend({ data, total }: { data: Slice[]; total: number }) {
+function DonutLegend({ data, total, colors }: { data: Slice[]; total: number; colors: string[] }) {
   return (
     <ul className="mt-3 grid gap-2 sm:grid-cols-2">
       {data.map((d, i) => {
@@ -78,7 +86,7 @@ function DonutLegend({ data, total }: { data: Slice[]; total: number }) {
             <span className="flex min-w-0 items-center gap-2 text-sm text-stone-700 dark:text-stone-300">
               <span
                 className="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-white dark:ring-stone-900"
-                style={{ background: CHART_COLORS[i % CHART_COLORS.length] }}
+                style={{ background: colors[i % colors.length] }}
               />
               <span className="truncate">{d.name}</span>
             </span>
@@ -105,6 +113,7 @@ export function AnalyticsDonut({
   height?: number;
   centerLabel?: string;
 }) {
+  const series = useChartSeriesColors();
   const filtered = data.filter((d) => d.value > 0);
   const total = filtered.reduce((s, d) => s + d.value, 0);
 
@@ -134,7 +143,7 @@ export function AnalyticsDonut({
               stroke="none"
             >
               {filtered.map((_, i) => (
-                <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} className="drop-shadow-sm" />
+                <Cell key={i} fill={series[i % series.length]} className="drop-shadow-sm" />
               ))}
               <Label
                 content={({ viewBox }) => {
@@ -171,7 +180,7 @@ export function AnalyticsDonut({
           </PieChart>
         </ResponsiveContainer>
       </div>
-      <DonutLegend data={filtered} total={total} />
+      <DonutLegend data={filtered} total={total} colors={series} />
     </div>
   );
 }
@@ -196,6 +205,7 @@ export function AnalyticsHBar({
   className?: string;
 }) {
   const theme = useChartTheme();
+  const palette = useBrandChartPalette();
   const gradId = useChartGradId("hbar");
   const rows = data.filter((d) => d.value > 0).slice(0, compact ? 6 : 12);
   const rowH = compact ? 32 : 40;
@@ -222,8 +232,8 @@ export function AnalyticsHBar({
           >
             <defs>
               <linearGradient id={gradId} x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor="#fb923c" />
-                <stop offset="100%" stopColor="#c2410c" />
+                <stop offset="0%" stopColor={palette.light} />
+                <stop offset="100%" stopColor={palette.accent} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="4 4" horizontal={false} stroke={theme.grid} />
@@ -287,6 +297,7 @@ export function AnalyticsVBar({
   compact?: boolean;
 }) {
   const theme = useChartTheme();
+  const series = useChartSeriesColors();
   const rows = data.filter((d) => d.value > 0);
 
   if (!rows.length) return <ChartEmpty />;
@@ -338,7 +349,7 @@ export function AnalyticsVBar({
             />
             <Bar dataKey="value" radius={[10, 10, 4, 4]} maxBarSize={48}>
               {rows.map((_, i) => (
-                <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                <Cell key={i} fill={series[i % series.length]} />
               ))}
             </Bar>
           </BarChart>
@@ -354,6 +365,7 @@ export function AnalyticsKpiBars({
   items: { label: string; value: number; format?: "money" | "number" }[];
 }) {
   const theme = useChartTheme();
+  const palette = useBrandChartPalette();
   const gradId = useChartGradId("kpi");
   const data = useMemo(
     () => items.map((i) => ({ name: i.label, value: i.value, format: i.format })),
@@ -367,8 +379,8 @@ export function AnalyticsKpiBars({
         <BarChart data={data} margin={{ top: 12, right: 12, left: 4, bottom: 8 }}>
           <defs>
             <linearGradient id={gradId} x1="0" y1="1" x2="0" y2="0">
-              <stop offset="0%" stopColor="#c2410c" />
-              <stop offset="100%" stopColor="#fb923c" />
+              <stop offset="0%" stopColor={palette.accent} />
+              <stop offset="100%" stopColor={palette.light} />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="4 4" vertical={false} stroke={theme.grid} />

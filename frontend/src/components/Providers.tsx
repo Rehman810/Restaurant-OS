@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { StoreProvider } from "@/lib/store";
+import type { PublicStore } from "@/lib/types";
 import { CartDrawer } from "./CartDrawer";
 import { FulfillmentModal } from "./FulfillmentModal";
 import { DealDetailModal } from "./DealDetailModal";
@@ -36,10 +37,16 @@ function CustomerOverlays() {
   );
 }
 
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({
+  children,
+  initialStore = null,
+}: {
+  children: React.ReactNode;
+  initialStore?: PublicStore | null;
+}) {
   return (
     <AuthProvider>
-      <StoreProvider>
+      <StoreProvider initialStore={initialStore}>
         <KeepAlive />
         {children}
         <CustomerOverlays />

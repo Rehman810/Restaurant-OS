@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { Palette, Store } from "lucide-react";
 import { SettingsField, SettingsSection } from "@/components/admin/SettingsSection";
 import { SettingsSelect } from "@/components/admin/settings/SettingsSelect";
@@ -11,7 +10,7 @@ import {
   brandContrastReport,
   darkenUntilContrast,
 } from "@/lib/color-contrast";
-import { resolveMediaUrl } from "@/lib/media-url";
+import { SettingsMediaField } from "@/components/admin/settings/SettingsMediaField";
 import type { StoreSettings } from "@/lib/types";
 
 type CurrencyChoice = { code: string; symbol: string; name: string };
@@ -133,55 +132,36 @@ export function BrandingThemeSettings({
             label="Logo"
             className="col-span-full"
             hint="Navbar, admin sidebar, and footer."
-            error={logoError || undefined}
+            error={fieldErrors.logoUrl || logoError || undefined}
           >
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <input
-                className="input flex-1"
-                value={settings.logoUrl ?? ""}
-                onChange={(e) => onChange({ logoUrl: e.target.value })}
-                placeholder="Paste image URL or upload"
-              />
-              <label className="btn-ghost shrink-0 cursor-pointer justify-center">
-                {logoUploading ? "Uploading…" : "Upload logo"}
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => e.target.files?.[0] && onLogoUpload(e.target.files[0])}
-                />
-              </label>
-            </div>
-            {settings.logoUrl && (
-              <div className="relative mt-3 h-14 w-40 overflow-hidden rounded-xl border border-stone-200 bg-stone-50">
-                <Image
-                  src={resolveMediaUrl(settings.logoUrl)}
-                  alt="Logo preview"
-                  fill
-                  className="object-contain p-2"
-                  sizes="160px"
-                />
-              </div>
-            )}
+            <SettingsMediaField
+              value={settings.logoUrl ?? ""}
+              onChange={(url) => onChange({ logoUrl: url })}
+              uploading={logoUploading}
+              uploadError={fieldErrors.logoUrl || logoError || undefined}
+              onUpload={onLogoUpload}
+              uploadLabel="Upload logo"
+              replaceLabel="Update logo"
+              previewSize="logo"
+            />
           </SettingsField>
-          <SettingsField label="Favicon" hint="Browser tab icon. Square PNG works best." error={faviconError || undefined}>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <input
-                className="input flex-1"
-                value={settings.faviconUrl ?? ""}
-                onChange={(e) => onChange({ faviconUrl: e.target.value })}
-                placeholder="https://… or upload"
-              />
-              <label className="btn-ghost shrink-0 cursor-pointer justify-center">
-                {faviconUploading ? "Uploading…" : "Upload icon"}
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => e.target.files?.[0] && onFaviconUpload(e.target.files[0])}
-                />
-              </label>
-            </div>
+          <SettingsField
+            label="Favicon"
+            className="col-span-full"
+            hint="Browser tab icon. Square PNG or WebP works best. Save after upload or remove."
+            error={fieldErrors.faviconUrl || faviconError || undefined}
+          >
+            <SettingsMediaField
+              value={settings.faviconUrl ?? ""}
+              onChange={(url) => onChange({ faviconUrl: url })}
+              uploading={faviconUploading}
+              uploadError={fieldErrors.faviconUrl || faviconError || undefined}
+              onUpload={onFaviconUpload}
+              uploadLabel="Upload icon"
+              replaceLabel="Update icon"
+              previewSize="favicon"
+              emptyHint="Square image · tab icon preview on the left"
+            />
           </SettingsField>
           <SettingsField label="Footer text" className="col-span-full">
             <input

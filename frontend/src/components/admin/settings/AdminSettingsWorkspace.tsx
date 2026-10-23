@@ -15,6 +15,7 @@ import { SpecialHoursEditor } from "@/components/admin/SpecialHoursEditor";
 import { MyAccountSettings } from "@/components/admin/settings/MyAccountSettings";
 import { SettingsField, SettingsSection } from "@/components/admin/SettingsSection";
 import { api, apiUpload, ApiError } from "@/lib/api";
+import { normalizeStoredMediaUrl } from "@/lib/media-url";
 import { SettingsSaveBar } from "@/components/admin/settings/SettingsSaveBar";
 import {
   SettingsConflictDiff,
@@ -221,7 +222,7 @@ export function AdminSettingsWorkspace({ section }: { section: SettingsSectionId
     setBannerError("");
     try {
       const { url } = await apiUpload("/upload/image", file);
-      setBannerForm((f) => ({ ...f, imageUrl: url }));
+      setBannerForm((f) => ({ ...f, imageUrl: normalizeStoredMediaUrl(url) }));
     } catch (err) {
       setBannerError(err instanceof ApiError ? err.message : "Could not upload image");
     } finally {
@@ -234,7 +235,9 @@ export function AdminSettingsWorkspace({ section }: { section: SettingsSectionId
     setLogoError("");
     try {
       const { url } = await apiUpload("/upload/image", file);
-      setSettings((current) => (current ? { ...current, logoUrl: url } : current));
+      setSettings((current) =>
+        current ? { ...current, logoUrl: normalizeStoredMediaUrl(url) } : current
+      );
     } catch (err) {
       setLogoError(err instanceof ApiError ? err.message : "Could not upload logo");
     } finally {
@@ -247,7 +250,9 @@ export function AdminSettingsWorkspace({ section }: { section: SettingsSectionId
     setFaviconError("");
     try {
       const { url } = await apiUpload("/upload/image", file);
-      setSettings((current) => (current ? { ...current, faviconUrl: url } : current));
+      setSettings((current) =>
+        current ? { ...current, faviconUrl: normalizeStoredMediaUrl(url) } : current
+      );
     } catch (err) {
       setFaviconError(err instanceof ApiError ? err.message : "Could not upload favicon");
     } finally {

@@ -2,7 +2,7 @@
 
 import { Fragment } from "react";
 import { compactRs, formatHeatmapHour, formatHeatmapHourAxis } from "@/lib/analytics/helpers";
-import { useAdminTheme } from "@/hooks/useAdminTheme";
+import { brandHeatColor, useBrandChartPalette } from "./chart-theme";
 
 type Props = {
   orders: number[][];
@@ -11,35 +11,12 @@ type Props = {
   revenue?: number[][] | null;
 };
 
-function heatColor(t: number, isDark: boolean) {
-  if (t <= 0) return isDark ? "rgb(41 37 36)" : "rgb(245 245 244)";
-  const stops: [number, string][] = isDark
-    ? [
-        [0, "rgba(234, 88, 12, 0.08)"],
-        [0.25, "rgba(234, 88, 12, 0.22)"],
-        [0.5, "rgba(249, 115, 22, 0.45)"],
-        [0.75, "rgba(251, 146, 60, 0.72)"],
-        [1, "rgba(253, 186, 116, 0.95)"],
-      ]
-    : [
-        [0, "rgba(255, 237, 213, 0.9)"],
-        [0.25, "rgba(254, 215, 170, 1)"],
-        [0.5, "rgba(251, 146, 60, 0.85)"],
-        [0.75, "rgba(234, 88, 12, 0.9)"],
-        [1, "rgba(194, 65, 12, 1)"],
-      ];
-  for (let i = stops.length - 1; i >= 0; i--) {
-    if (t >= stops[i][0]) return stops[i][1];
-  }
-  return stops[0][1];
-}
-
 export function AnalyticsHeatmap({ orders, weekdayLabels, showRevenue, revenue }: Props) {
   const grid = showRevenue && revenue ? revenue : orders;
   const max = Math.max(0, ...grid.flat());
   const hours = grid[0]?.length ?? 24;
-  const { theme } = useAdminTheme();
-  const isDark = theme === "dark";
+  const palette = useBrandChartPalette();
+  const { isDark, rgb, accentRgb, paleRgb, accent, pale } = palette;
 
   return (
     <div>
@@ -67,7 +44,7 @@ export function AnalyticsHeatmap({ orders, weekdayLabels, showRevenue, revenue }
                           : `${label} ${formatHeatmapHour(h)} — ${v} orders`
                       }
                       className="aspect-square rounded-md shadow-sm ring-1 ring-black/5 transition-transform hover:scale-110 hover:z-10 dark:ring-white/5"
-                      style={{ background: heatColor(t, isDark) }}
+                      style={{ background: brandHeatColor(t, isDark, rgb, accentRgb, paleRgb) }}
                       aria-label={`${label} ${formatHeatmapHour(h)}, ${v} ${showRevenue ? "revenue" : "orders"}`}
                     />
                   );
@@ -87,8 +64,8 @@ export function AnalyticsHeatmap({ orders, weekdayLabels, showRevenue, revenue }
             className="h-2 w-28 rounded-full"
             style={{
               background: isDark
-                ? "linear-gradient(90deg, rgb(41 37 36), rgba(253, 186, 116, 0.95))"
-                : "linear-gradient(90deg, rgb(245 245 244), rgb(194 65 12))",
+                ? `linear-gradient(90deg, rgb(41 37 36), ${accent})`
+                : `linear-gradient(90deg, ${pale}, ${accent})`,
             }}
           />
           <span className="text-[10px] font-medium text-stone-400">High</span>

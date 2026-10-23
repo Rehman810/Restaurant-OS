@@ -19,7 +19,7 @@ export default function PosLayout({ children }: { children: React.ReactNode }) {
     document.head.appendChild(link);
     return () => {
       navigator.serviceWorker.removeEventListener("message", onMessage);
-      document.head.removeChild(link);
+      link.remove();
     };
   }, []);
 

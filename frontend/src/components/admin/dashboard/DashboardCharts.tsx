@@ -130,13 +130,13 @@ export function Last7DaysChart({ data, showMoney }: { data: DayRow[]; showMoney:
                   name === "revenue" && showMoney ? pkr(value) : `${value} orders`
                 }
               />
-              <Bar yAxisId="orders" dataKey="orders" fill="var(--color-brand-600, #c2410c)" radius={[6, 6, 0, 0]} maxBarSize={40} />
+              <Bar yAxisId="orders" dataKey="orders" fill="var(--brand-600, #ea580c)" radius={[6, 6, 0, 0]} maxBarSize={40} />
               {showMoney && (
                 <Line
                   yAxisId="rev"
                   type="linear"
                   dataKey="revenue"
-                  stroke="#fb923c"
+                  stroke="var(--brand-400, #fb923c)"
                   strokeWidth={2}
                   dot={{ r: 3 }}
                   connectNulls
@@ -190,7 +190,7 @@ export function TodayHourlyChart({
             tickLine={false}
           />
           <Tooltip content={<HourTooltip showMoney={showMoney} />} />
-          <Bar dataKey="orders" fill="var(--color-brand-600, #c2410c)" radius={[4, 4, 0, 0]} maxBarSize={28} />
+          <Bar dataKey="orders" fill="var(--brand-600, #ea580c)" radius={[4, 4, 0, 0]} maxBarSize={28} />
           <Line
             type="linear"
             dataKey="prevOrders"

@@ -5,7 +5,7 @@ export type SettingsErrors = Record<string, SettingsFieldError>;
 
 const PHONE = /^\+[0-9]{10,15}$/;
 const HTTPS_URL = /^https:\/\/[^\s]+$/i;
-const MEDIA_URL = /^(https:\/\/[^\s]+|\/[^\s]*)$/i;
+const MEDIA_URL = /^(https?:\/\/[^\s]+|\/[^\s]*)$/i;
 
 const SOCIAL_URL_KEYS = ["facebookUrl", "instagramUrl", "tiktokUrl", "youtubeUrl"] as const;
 const MEDIA_KEYS = ["logoUrl", "faviconUrl"] as const;
@@ -30,10 +30,37 @@ export function normalizePkPhone(input: string): string {
   return `+92${digits}`;
 }
 
+/** Store logo/favicon as `/uploads/…` or `https://…` (never bare `http://` API URLs). */
+export function normalizeStoredMediaUrl(value: string): string {
+  let v = value.trim();
+  if (!v) return v;
+  if (v.startsWith("/api/proxy")) {
+    v = v.slice("/api/proxy".length) || "/";
+  }
+  if (!v.startsWith("/") && !/^https?:\/\//i.test(v)) {
+    if (v.startsWith("uploads/")) v = `/${v}`;
+  }
+  if (v.startsWith("/")) return v.split(/\s/)[0]!;
+  try {
+    const u = new URL(v);
+    if (u.pathname.startsWith("/uploads/")) return u.pathname;
+    if (u.protocol === "http:") {
+      u.protocol = "https:";
+      return u.href;
+    }
+    return u.href;
+  } catch {
+    return v;
+  }
+}
+
 export function normalizeSettingsPatch(body: Record<string, unknown>): Record<string, unknown> {
   const next = { ...body };
   if (next.phone !== undefined) next.phone = normalizePkPhone(String(next.phone));
   if (next.whatsapp !== undefined) next.whatsapp = normalizePkPhone(String(next.whatsapp));
+  for (const key of MEDIA_KEYS) {
+    if (next[key] !== undefined) next[key] = normalizeStoredMediaUrl(String(next[key]));
+  }
   return next;
 }
 
@@ -65,7 +92,7 @@ export function validateSettingsInput(body: Record<string, unknown>): SettingsEr
 
   for (const key of MEDIA_KEYS) {
     if (body[key] === undefined) continue;
-    const value = optionalText(body[key]);
+    const value = normalizeStoredMediaUrl(optionalText(body[key]));
     if (value && !MEDIA_URL.test(value)) {
       errors[key] = err("URL_INVALID", "Use an https link or an uploaded path starting with /.");
     }

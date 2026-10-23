@@ -1,7 +1,7 @@
 import type { Prisma, StoreSettings } from "@prisma/client";
 import { prisma } from "./prisma";
 import { getStoreSettings } from "./settings-data";
-import { normalizeSettingsPatch } from "./settings-validate";
+import { normalizeSettingsPatch, normalizeStoredMediaUrl } from "./settings-validate";
 import type { SettingsSectionId } from "./settings-sections";
 import { legacySlaMirrorFromAlertThresholds } from "./order-alert-thresholds";
 import { pickSectionPatch, sectionFieldValues } from "./settings-section-fields";
@@ -26,8 +26,8 @@ const minute = (v: unknown) => {
 export function buildStoreSettingsUpdateData(body: Record<string, unknown>): Prisma.StoreSettingsUpdateInput {
   return {
     ...(body.storeName !== undefined ? { storeName: String(body.storeName).trim() } : {}),
-    ...(body.logoUrl !== undefined ? { logoUrl: String(body.logoUrl).trim() } : {}),
-    ...(body.faviconUrl !== undefined ? { faviconUrl: String(body.faviconUrl).trim() } : {}),
+    ...(body.logoUrl !== undefined ? { logoUrl: normalizeStoredMediaUrl(String(body.logoUrl)) } : {}),
+    ...(body.faviconUrl !== undefined ? { faviconUrl: normalizeStoredMediaUrl(String(body.faviconUrl)) } : {}),
     ...(body.primaryColor !== undefined ? { primaryColor: String(body.primaryColor).trim() || "#ea580c" } : {}),
     ...(body.accentColor !== undefined ? { accentColor: String(body.accentColor).trim() || "#c2410c" } : {}),
     ...(body.city !== undefined ? { city: String(body.city).trim() } : {}),

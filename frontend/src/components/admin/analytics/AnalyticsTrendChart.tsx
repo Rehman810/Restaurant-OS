@@ -12,7 +12,7 @@ import {
   YAxis,
 } from "recharts";
 import { compactRs, niceTicks } from "@/lib/analytics/helpers";
-import { useChartGradId, useChartTheme } from "./chart-theme";
+import { useBrandChartPalette, useChartGradId, useChartTheme } from "./chart-theme";
 import { useAdminTheme } from "@/hooks/useAdminTheme";
 
 type Bucket = {
@@ -81,6 +81,7 @@ export function AnalyticsTrendChart({
   compare: boolean;
 }) {
   const theme = useChartTheme();
+  const palette = useBrandChartPalette();
   const { theme: adminTheme } = useAdminTheme();
   const barGrad = useChartGradId("trend-bar");
   const areaGrad = useChartGradId("trend-area");
@@ -105,12 +106,12 @@ export function AnalyticsTrendChart({
         <ComposedChart data={data} margin={{ top: 16, right: 12, left: 0, bottom: 8 }}>
           <defs>
             <linearGradient id={barGrad} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#fb923c" stopOpacity={0.95} />
-              <stop offset="100%" stopColor="#c2410c" stopOpacity={0.85} />
+              <stop offset="0%" stopColor={palette.light} stopOpacity={0.95} />
+              <stop offset="100%" stopColor={palette.accent} stopOpacity={0.85} />
             </linearGradient>
             <linearGradient id={areaGrad} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#f97316" stopOpacity={0.25} />
-              <stop offset="100%" stopColor="#f97316" stopOpacity={0} />
+              <stop offset="0%" stopColor={palette.mid} stopOpacity={0.25} />
+              <stop offset="100%" stopColor={palette.mid} stopOpacity={0} />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="4 4" vertical={false} stroke={theme.grid} />
@@ -156,7 +157,7 @@ export function AnalyticsTrendChart({
       {compare && (
         <div className="mt-3 flex flex-wrap items-center justify-center gap-4 text-xs text-stone-500">
           <span className="flex items-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-sm bg-gradient-to-t from-orange-700 to-orange-400" />
+            <span className="h-2.5 w-2.5 rounded-sm bg-gradient-to-t from-brand-700 to-brand-400" />
             Selected period
           </span>
           <span className="flex items-center gap-2">

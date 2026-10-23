@@ -1,9 +1,11 @@
 import { coerceSchedule, parseMinutes, WEEKDAYS, type WeeklySchedule } from "./hours";
+import { normalizeStoredMediaUrl } from "./media-url";
 
 export type SettingsErrors = Record<string, string>;
 
 const PHONE = /^[+0-9][0-9\s().-]{6,19}$/;
-const URL = /^https?:\/\/[^\s]+$/i;
+const MEDIA_URL = /^(https?:\/\/[^\s]+|\/[^\s]*)$/i;
+const SOCIAL_URL = /^https?:\/\/[^\s]+$/i;
 const HEX_COLOR = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
 function optionalText(value: unknown) {
@@ -24,10 +26,18 @@ export function validateSettingsInput(body: Record<string, unknown>): SettingsEr
     if (value && !PHONE.test(value)) errors[key] = "Enter a phone number, or leave it blank.";
   }
 
-  for (const key of ["logoUrl", "faviconUrl", "facebookUrl", "instagramUrl", "tiktokUrl", "youtubeUrl"] as const) {
+  for (const key of ["logoUrl", "faviconUrl"] as const) {
+    if (body[key] === undefined) continue;
+    const value = normalizeStoredMediaUrl(optionalText(body[key]));
+    if (value && !MEDIA_URL.test(value)) {
+      errors[key] = "Use an https link or an uploaded path starting with /.";
+    }
+  }
+
+  for (const key of ["facebookUrl", "instagramUrl", "tiktokUrl", "youtubeUrl"] as const) {
     if (body[key] === undefined) continue;
     const value = optionalText(body[key]);
-    if (value && !URL.test(value)) errors[key] = "Enter a full http or https URL, or leave it blank.";
+    if (value && !SOCIAL_URL.test(value)) errors[key] = "Enter a full http or https URL, or leave it blank.";
   }
 
   for (const key of ["primaryColor", "accentColor"] as const) {
