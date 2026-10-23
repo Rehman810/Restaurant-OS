@@ -1,11 +1,6 @@
+import type { StoreSettings } from "@prisma/client";
 import { getVapidPublicKey } from "./web-push";
-
-function smtpConfigured() {
-  const user = (process.env.SMTP_USER || "").trim();
-  const pass = (process.env.SMTP_PASS || "").replace(/\s+/g, "");
-  const host = (process.env.SMTP_HOST || process.env.SMTP_SERVICE || "").trim();
-  return Boolean(host && user && pass);
-}
+import { envSmtpConfigured, smtpStatusForSettings } from "./smtp-config";
 
 function whatsappConfigured() {
   const flag = (process.env.WHATSAPP_ENABLED || "true").toLowerCase();
@@ -22,20 +17,21 @@ export type IntegrationStatusItem = {
   envVars: string[];
 };
 
-export function getIntegrationsStatus() {
+export function getIntegrationsStatus(settings?: StoreSettings) {
   const wa = whatsappConfigured();
   const vapidPublic = getVapidPublicKey();
   const vapidPrivate = Boolean(process.env.VAPID_PRIVATE_KEY?.trim());
+  const smtp = settings ? smtpStatusForSettings(settings) : { configured: envSmtpConfigured(), detail: "", source: "env" as const };
 
   const items: IntegrationStatusItem[] = [
     {
       id: "smtp",
       label: "Email (SMTP)",
-      configured: smtpConfigured(),
-      detail: smtpConfigured()
-        ? `Sending as ${(process.env.SMTP_USER || "").trim()}`
-        : "Order and staff emails log to the server console until SMTP is set.",
-      envVars: ["SMTP_HOST or SMTP_SERVICE", "SMTP_USER", "SMTP_PASS", "SMTP_FROM (optional)"],
+      configured: smtp.configured,
+      detail: smtp.detail,
+      envVars: settings?.smtpUseCustom
+        ? ["Restaurant SMTP below (host, user, password)"]
+        : ["SMTP_HOST or SMTP_SERVICE", "SMTP_USER", "SMTP_PASS", "or enable restaurant SMTP below"],
     },
     {
       id: "vapid",

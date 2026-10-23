@@ -37,8 +37,10 @@ export type PlatformSettingsData = {
 
 export const DEFAULT_DUNNING_OFFSETS_DAYS = [-3, 0, 3, 7];
 
+export const DEFAULT_PLATFORM_TRIAL_DAYS = 15;
+
 const DEFAULTS: PlatformSettingsData = {
-  trialDays: 14,
+  trialDays: DEFAULT_PLATFORM_TRIAL_DAYS,
   graceDays: 7,
   cancelRetentionDays: 30,
   defaultPlanSlug: "growth",
@@ -54,7 +56,9 @@ function mergeSettings(raw: unknown): PlatformSettingsData {
   return {
     ...base,
     ...(typeof o.rootDomain === "string" ? { rootDomain: o.rootDomain } : {}),
-    ...(typeof o.trialDays === "number" ? { trialDays: o.trialDays } : {}),
+    ...(typeof o.trialDays === "number"
+      ? { trialDays: o.trialDays === 14 ? DEFAULT_PLATFORM_TRIAL_DAYS : o.trialDays }
+      : {}),
     ...(typeof o.graceDays === "number" ? { graceDays: o.graceDays } : {}),
     ...(typeof o.cancelRetentionDays === "number" ? { cancelRetentionDays: o.cancelRetentionDays } : {}),
     ...(typeof o.supportEmail === "string" ? { supportEmail: o.supportEmail } : {}),

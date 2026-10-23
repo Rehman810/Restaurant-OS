@@ -93,6 +93,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, [path, entitlements, router]);
 
   useEffect(() => {
+    if (!subscriptionTimeline?.adminReadOnly || !user || !path?.startsWith("/admin")) return;
+    const billingOnly =
+      path === "/admin/billing" ||
+      path.startsWith("/admin/billing/") ||
+      path === "/admin/login" ||
+      path.startsWith("/admin/settings/my-account");
+    if (!billingOnly) {
+      router.replace("/admin/billing");
+    }
+  }, [subscriptionTimeline, path, user, router]);
+
+  useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
     void navigator.serviceWorker.register("/store-sw.js", { scope: "/" }).catch(() => null);
     const unlock = () => void unlockKitchenAudio();

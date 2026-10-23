@@ -10,6 +10,7 @@ import {
   lifecycleScheduleForStatus,
 } from "../../lib/platform/tenant-lifecycle";
 import { invalidateTenantHostCache } from "../../lib/tenant-resolve";
+import { parseProvisionTenantBody } from "../../lib/platform/provision-parse";
 import { provisionTenant } from "../../lib/platform/provision";
 import { createTenantSupportSession } from "../../lib/platform/support-access";
 import { computeTenantHealthScore } from "../../lib/platform/tenant-health";
@@ -22,20 +23,7 @@ export const platformTenantsRouter = Router();
 platformTenantsRouter.post("/", requirePlatformAuth, requirePlatformPermission("tenants:write"), async (req, res) => {
   const body = req.body as Record<string, unknown>;
   try {
-    const result = await provisionTenant({
-      slug: String(body.slug || ""),
-      displayName: String(body.displayName || ""),
-      legalName: body.legalName ? String(body.legalName) : undefined,
-      ownerName: body.ownerName ? String(body.ownerName) : undefined,
-      ownerEmail: body.ownerEmail ? String(body.ownerEmail) : undefined,
-      ownerPhone: body.ownerPhone ? String(body.ownerPhone) : undefined,
-      city: body.city ? String(body.city) : undefined,
-      hostname: body.hostname ? String(body.hostname) : null,
-      planSlug: body.planSlug ? String(body.planSlug) : undefined,
-      trialDays: body.trialDays != null ? Number(body.trialDays) : undefined,
-      ownerPassword: body.ownerPassword ? String(body.ownerPassword) : undefined,
-      isTest: body.isTest === true || body.isTest === "true",
-    });
+    const result = await provisionTenant(parseProvisionTenantBody(body));
     await writePlatformAudit({
       actorId: req.platformUser!.id,
       actorEmail: req.platformUser!.email,
@@ -43,13 +31,20 @@ platformTenantsRouter.post("/", requirePlatformAuth, requirePlatformPermission("
       entityType: "restaurant",
       entityId: result.restaurant.id,
       subjectTenantId: result.restaurant.id,
-      after: { slug: result.restaurant.slug, planSlug: result.planSlug },
+      after: {
+        slug: result.restaurant.slug,
+        planSlug: result.planSlug,
+        deliveryAreasSeeded: result.deliveryAreasSeeded,
+        starterMenu: result.starterMenu,
+      },
       ip: clientIp(req),
     });
     res.status(201).json({
       tenant: result.restaurant,
       branchId: result.branchId,
       ownerUserId: result.ownerUserId,
+      deliveryAreasSeeded: result.deliveryAreasSeeded,
+      starterMenu: result.starterMenu,
     });
   } catch (err) {
     const status = typeof err === "object" && err && "status" in err ? Number((err as { status: number }).status) : 400;

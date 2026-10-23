@@ -16,7 +16,10 @@ type Props = {
 };
 
 export function TenantSubscriptionBanner({ timeline, tenant, isOwnerAdmin }: Props) {
-  if (!timeline || timeline.phase === "none" || (timeline.phase === "active" && timeline.urgency === "ok")) {
+  if (!timeline || timeline.phase === "none") {
+    return null;
+  }
+  if (timeline.phase === "active" && timeline.urgency === "ok") {
     return null;
   }
 
@@ -28,7 +31,9 @@ export function TenantSubscriptionBanner({ timeline, tenant, isOwnerAdmin }: Pro
 
   let subline = timeline.detail;
   if (timeline.phase === "trialing" && trialEndLabel) {
-    subline = `${timeline.trialTotalDays ?? "—"}-day trial · ${timeline.intervalLabel} plan · ends ${trialEndLabel}`;
+    const left = timeline.trialDaysRemaining ?? 0;
+    const leftLabel = left === 0 ? "ends today" : `${left} day${left === 1 ? "" : "s"} left`;
+    subline = `Full access during trial · expires ${trialEndLabel} (${leftLabel})`;
   } else if (timeline.phase === "active") {
     subline = `${timeline.intervalLabel} billing · current period ends ${periodEndLabel}`;
   } else if (tenant?.statusReason) {

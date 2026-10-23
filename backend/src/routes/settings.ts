@@ -49,8 +49,33 @@ settingsRouter.get("/contact/usage", requireAuth, requireRole(Role.ADMIN), (_req
   res.json({ fields: CONTACT_FIELD_USAGE, editedElsewhere: CONTACT_NOT_IN_THIS_SECTION });
 });
 
-settingsRouter.get("/integrations/status", requireAuth, requireRole(Role.ADMIN), (_req, res) => {
-  res.json(getIntegrationsStatus());
+settingsRouter.get("/integrations/status", requireAuth, requireRole(Role.ADMIN), async (_req, res) => {
+  const settings = await getStoreSettings();
+  res.json(getIntegrationsStatus(settings));
+});
+
+settingsRouter.post("/integrations/smtp-test", requireAuth, requireRole(Role.ADMIN), async (req, res) => {
+  const settings = await getStoreSettings();
+  const to = String((req.body as { to?: string }).to || req.user!.email || "").trim();
+  if (!to.includes("@")) {
+    return res.status(400).json({ error: "Enter a valid email address for the test." });
+  }
+  const { resolveSmtpFromSettings } = await import("../lib/smtp-config");
+  const { sendEmailWithConfig } = await import("../lib/email");
+  const config = resolveSmtpFromSettings(settings);
+  if (!config) {
+    return res.status(400).json({ error: "SMTP is not configured. Save restaurant SMTP or set server .env SMTP." });
+  }
+  const ok = await sendEmailWithConfig(
+    config,
+    to,
+    `SMTP test — ${settings.storeName || "Restaurant"}`,
+    `<p>If you received this, outbound email is working for <strong>${settings.storeName || "your restaurant"}</strong>.</p>`,
+    `SMTP test for ${settings.storeName || "your restaurant"}.`,
+    settings.storeName
+  );
+  if (!ok) return res.status(502).json({ error: "SMTP login or send failed. Check host, port, and password." });
+  res.json({ ok: true, to });
 });
 
 settingsRouter.get("/public", async (_req, res) => {

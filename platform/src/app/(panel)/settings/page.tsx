@@ -33,7 +33,7 @@ export default function SettingsPage() {
   const { can } = usePlatformAuth();
   const [settings, setSettings] = useState<SettingsPayload | null>(null);
   const [supportEmail, setSupportEmail] = useState("");
-  const [trialDays, setTrialDays] = useState(14);
+  const [trialDays, setTrialDays] = useState(15);
   const [invoiceLegalName, setInvoiceLegalName] = useState("");
   const [invoiceNtn, setInvoiceNtn] = useState("");
   const [bankAccounts, setBankAccounts] = useState<BankRow[]>([{ label: "Bank transfer", account: "" }]);
@@ -51,7 +51,7 @@ export default function SettingsPage() {
       .then((res) => {
         setSettings(res);
         setSupportEmail(String(res.data.supportEmail || ""));
-        setTrialDays(Number(res.data.trialDays || 14));
+        setTrialDays(Number(res.data.trialDays ?? 15));
         setInvoiceLegalName(String(res.data.invoiceLegalName || ""));
         setInvoiceNtn(String(res.data.invoiceNtn || ""));
         const banks = parseBanks(res.data.bankAccounts);

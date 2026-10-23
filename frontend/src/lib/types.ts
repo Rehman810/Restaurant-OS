@@ -168,6 +168,17 @@ export type StoreSettings = {
   tiktokUrl: string;
   youtubeUrl: string;
   googlePlaceId?: string;
+  smtpUseCustom?: boolean;
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpSecure?: boolean;
+  smtpService?: string;
+  smtpUser?: string;
+  smtpFrom?: string;
+  smtpReplyTo?: string;
+  smtpPassConfigured?: boolean;
+  /** Form-only; never returned from API */
+  smtpPass?: string;
   weeklySchedule?: unknown;
   taxPercent?: string | number;
   taxLabel?: string;

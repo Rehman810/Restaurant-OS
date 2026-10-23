@@ -1,5 +1,4 @@
 import crypto from "crypto";
-import nodemailer from "nodemailer";
 import type { Order, OrderItem } from "@prisma/client";
 import { getEmailBranding, PRODUCT_NAME } from "./branding";
 import {
@@ -15,43 +14,14 @@ import {
   staffWelcomeEmail,
   staffInviteEmail,
 } from "./email-templates";
+import { createTransportFromConfig, resolveSmtpConfig, type ResolvedSmtpConfig } from "./smtp-config";
 
 type OrderWithItems = Order & { items: OrderItem[] };
 
-function smtpUser() {
-  return (process.env.SMTP_USER || "").trim();
-}
-
-function smtpPass() {
-  return (process.env.SMTP_PASS || "").replace(/\s+/g, "");
-}
-
-function isConfigured() {
-  return Boolean((process.env.SMTP_HOST || process.env.SMTP_SERVICE) && smtpUser() && smtpPass());
-}
-
-function transporter() {
-  const port = Number(process.env.SMTP_PORT || 587);
-  const secure =
-    process.env.SMTP_SECURE === "true" || process.env.SMTP_SECURE === "1"
-      ? true
-      : process.env.SMTP_SECURE === "false" || process.env.SMTP_SECURE === "0"
-        ? false
-        : port === 465;
-  const service = (process.env.SMTP_SERVICE || "").trim().toLowerCase();
-  return nodemailer.createTransport({
-    ...(service === "gmail" ? { service: "gmail" } : { host: process.env.SMTP_HOST, port, secure }),
-    auth: {
-      user: smtpUser(),
-      pass: smtpPass(),
-    },
-  });
-}
-
-async function fromAddress(storeName?: string) {
-  const user = smtpUser();
+async function fromAddress(config: ResolvedSmtpConfig, storeName?: string) {
+  const user = config.user;
   const name = storeName?.trim() || "Restaurant";
-  const configured = (process.env.SMTP_FROM || process.env.SMTP_FROM_EMAIL || "").trim();
+  const configured = (config.from || "").trim();
 
   if (!configured) {
     return user ? `${name} <${user}>` : `${name} <orders@restaurant.local>`;
@@ -67,8 +37,8 @@ async function fromAddress(storeName?: string) {
   return configured.includes("<") ? configured.replace(/^[^<]+/, `${name} `) : `${name} <${configured}>`;
 }
 
-function replyToAddress() {
-  const replyTo = (process.env.SMTP_REPLY_TO || smtpUser() || "").trim();
+function replyToAddress(config: ResolvedSmtpConfig) {
+  const replyTo = (config.replyTo || config.user || "").trim();
   return replyTo.includes("@") ? replyTo : undefined;
 }
 
@@ -91,12 +61,13 @@ async function sendMail(opts: SendOptions) {
   const email = opts.to.trim().toLowerCase();
   if (!email || !email.includes("@")) return false;
 
-  if (!isConfigured()) {
+  const config = await resolveSmtpConfig();
+  if (!config) {
     console.log(`[email] (SMTP not configured) To: ${email} | ${opts.subject}`);
     return false;
   }
 
-  const from = await fromAddress(opts.storeName);
+  const from = await fromAddress(config, opts.storeName);
   const domain = messageDomain(from);
   const headers: Record<string, string> = {
     "X-Mailer": PRODUCT_NAME.replace(/\s+/g, "-"),
@@ -106,14 +77,14 @@ async function sendMail(opts: SendOptions) {
   };
 
   if (!opts.transactional) {
-    headers["List-Unsubscribe"] = `<mailto:${replyToAddress() || `noreply@${domain}`}?subject=unsubscribe>`;
+    headers["List-Unsubscribe"] = `<mailto:${replyToAddress(config) || `noreply@${domain}`}?subject=unsubscribe>`;
   }
 
   try {
-    await transporter().sendMail({
+    await createTransportFromConfig(config).sendMail({
       from,
       to: email,
-      replyTo: replyToAddress(),
+      replyTo: replyToAddress(config),
       subject: opts.subject,
       html: opts.html,
       text: opts.text,
@@ -126,7 +97,7 @@ async function sendMail(opts: SendOptions) {
     const code = err && typeof err === "object" && "code" in err ? String((err as { code?: string }).code) : "";
     if (code === "EAUTH") {
       console.error(
-        "[email] Gmail rejected the login. Use the Gmail address in SMTP_USER and a 16-character App Password in SMTP_PASS."
+        "[email] SMTP rejected the login. Check username and app password for this restaurant or server SMTP."
       );
     } else {
       console.error("[email] send failed:", err);
@@ -145,6 +116,32 @@ export async function sendEmail(to: string, subject: string, html: string, text?
     storeName: brand.storeName,
     transactional: true,
   });
+}
+
+export async function sendEmailWithConfig(
+  config: ResolvedSmtpConfig,
+  to: string,
+  subject: string,
+  html: string,
+  text: string,
+  storeName?: string
+) {
+  const email = to.trim().toLowerCase();
+  if (!email || !email.includes("@")) return false;
+  const from = await fromAddress(config, storeName);
+  try {
+    await createTransportFromConfig(config).sendMail({
+      from,
+      to: email,
+      replyTo: replyToAddress(config),
+      subject,
+      html,
+      text,
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function customerOrderEmailsEnabled() {

@@ -1,4 +1,6 @@
+import { SubscriptionStatus, TenantStatus } from "@prisma/client";
 import { prisma } from "../prisma";
+import { fullModuleAccess } from "./module-access";
 import { STAFF_DIRECTORY_ROLES } from "../roles";
 import {
   defaultOnForModule,
@@ -65,13 +67,33 @@ export function resolveModuleAccess(ent: PlanEntitlements, id: PlanModuleId): Mo
   return parseModuleAccess(ent[id], defaultOnForModule(id));
 }
 
+/** Full product access during an active platform trial (independent of Starter/Growth plan). */
+export function entitlementsForActiveTrial(): PlanEntitlements {
+  const modules = {} as PlanModuleEntitlements;
+  for (const id of PLAN_MODULE_IDS) {
+    modules[id] = fullModuleAccess();
+  }
+  return { maxBranches: null, maxStaff: null, ...modules };
+}
+
 export async function loadTenantEntitlements(): Promise<PlanEntitlements> {
-  const subscription = await prisma.subscription.findFirst({
-    include: {
-      plan: { select: { entitlements: true, isActive: true } },
-      pinnedPlanVersion: { select: { entitlements: true } },
-    },
-  });
+  const [subscription, restaurant] = await Promise.all([
+    prisma.subscription.findFirst({
+      include: {
+        plan: { select: { entitlements: true, isActive: true } },
+        pinnedPlanVersion: { select: { entitlements: true } },
+      },
+    }),
+    prisma.restaurant.findFirst({ select: { status: true } }),
+  ]);
+
+  if (
+    restaurant?.status === TenantStatus.TRIAL ||
+    subscription?.status === SubscriptionStatus.TRIALING
+  ) {
+    return entitlementsForActiveTrial();
+  }
+
   if (!subscription?.plan?.isActive) return { ...FALLBACK };
   const fromPlan = parsePlanEntitlements(
     subscription.pinnedPlanVersion?.entitlements ?? subscription.plan.entitlements

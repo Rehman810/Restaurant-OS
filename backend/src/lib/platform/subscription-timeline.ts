@@ -88,6 +88,11 @@ export function buildSubscriptionTimeline(input: SubscriptionTimelineInput): Sub
     phase = "active";
   }
 
+  const trialExpiredPastDue =
+    input.tenantStatus === TenantStatus.PAST_DUE &&
+    input.subscriptionStatus !== SubscriptionStatus.TRIALING &&
+    Boolean(input.trialEndsAt && input.trialEndsAt <= now);
+
   const adminReadOnly =
     input.tenantStatus === TenantStatus.SUSPENDED ||
     input.tenantStatus === TenantStatus.CANCELLED ||
@@ -119,9 +124,13 @@ export function buildSubscriptionTimeline(input: SubscriptionTimelineInput): Sub
     detail = `Current period ends ${input.currentPeriodEnd.toISOString()}`;
     urgency = periodDaysRemaining <= 7 ? "warning" : "ok";
   } else if (phase === "past_due") {
-    headline = "Payment required";
+    headline = trialExpiredPastDue ? "Free trial ended" : "Payment required";
     const due = input.openInvoiceDueAt;
-    if (due) {
+    if (trialExpiredPastDue) {
+      detail =
+        "Your trial has ended. Pay the subscription invoice on Plan and billing to restore POS, kitchen, and online orders.";
+      urgency = "critical";
+    } else if (due) {
       const overdueDays = daysBetween(due, now);
       if (overdueDays > 0) {
         detail = `Invoice overdue by ${formatDayCount(overdueDays)}. Pay to restore full access.`;

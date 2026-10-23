@@ -21,6 +21,9 @@ describe.skipIf(!hasDb)("provisionTenant", () => {
       ownerEmail: `${slug}@test.local`,
       ownerPassword: "provision-test-pass-12",
       ownerName: "Owner",
+      city: "Lahore",
+      seedDeliveryAreas: false,
+      seedStarterMenu: false,
     });
 
     expect(result.restaurant.slug).toBe(slug);

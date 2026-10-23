@@ -27,7 +27,17 @@ export const SETTINGS_SECTION_FIELDS: Record<SettingsSectionId, readonly string[
     "youtubeUrl",
   ],
   "reviews-testimonials": ["showReviewsSection", "showLiveStats"],
-  integrations: ["googlePlaceId"],
+  integrations: [
+    "googlePlaceId",
+    "smtpUseCustom",
+    "smtpHost",
+    "smtpPort",
+    "smtpSecure",
+    "smtpService",
+    "smtpUser",
+    "smtpFrom",
+    "smtpReplyTo",
+  ],
   "banners": [],
   "hours-availability": [
     "openHour",

@@ -181,11 +181,11 @@ export const SETTINGS_SECTIONS: SettingsSectionDef[] = [
     groupId: "orders",
     label: "Integrations",
     title: "Integrations",
-    description: "SMTP, push, Google reviews, and WhatsApp server status plus Place ID.",
+    description: "Restaurant SMTP, push, Google reviews, and WhatsApp server status plus Place ID.",
     icon: Plug,
     roles: ["ADMIN"],
     usesSettingsForm: true,
-    searchTerms: ["smtp", "vapid", "google", "places", "whatsapp", "api", "env"],
+    searchTerms: ["smtp", "email", "gmail", "mail", "vapid", "google", "places", "whatsapp", "api", "env"],
   },
   {
     id: "pos-controls-approvals",

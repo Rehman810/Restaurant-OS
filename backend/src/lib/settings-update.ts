@@ -5,6 +5,7 @@ import { normalizeSettingsPatch, normalizeStoredMediaUrl } from "./settings-vali
 import type { SettingsSectionId } from "./settings-sections";
 import { legacySlaMirrorFromAlertThresholds } from "./order-alert-thresholds";
 import { pickSectionPatch, sectionFieldValues } from "./settings-section-fields";
+import { encryptSecretAtRest } from "./secret-at-rest";
 
 const num = (v: unknown) => (v === undefined || v === "" ? undefined : Number(v));
 
@@ -273,6 +274,17 @@ export function buildStoreSettingsUpdateData(body: Record<string, unknown>): Pri
     ...(body.tiktokUrl !== undefined ? { tiktokUrl: String(body.tiktokUrl) } : {}),
     ...(body.youtubeUrl !== undefined ? { youtubeUrl: String(body.youtubeUrl) } : {}),
     ...(body.googlePlaceId !== undefined ? { googlePlaceId: String(body.googlePlaceId).trim() } : {}),
+    ...(body.smtpUseCustom !== undefined ? { smtpUseCustom: Boolean(body.smtpUseCustom) } : {}),
+    ...(body.smtpHost !== undefined ? { smtpHost: String(body.smtpHost).trim() } : {}),
+    ...(body.smtpPort !== undefined ? { smtpPort: Math.min(65535, Math.max(1, Number(body.smtpPort) || 587)) } : {}),
+    ...(body.smtpSecure !== undefined ? { smtpSecure: Boolean(body.smtpSecure) } : {}),
+    ...(body.smtpService !== undefined ? { smtpService: String(body.smtpService).trim().toLowerCase() } : {}),
+    ...(body.smtpUser !== undefined ? { smtpUser: String(body.smtpUser).trim() } : {}),
+    ...(body.smtpFrom !== undefined ? { smtpFrom: String(body.smtpFrom).trim() } : {}),
+    ...(body.smtpReplyTo !== undefined ? { smtpReplyTo: String(body.smtpReplyTo).trim() } : {}),
+    ...(body.smtpPass !== undefined && String(body.smtpPass).trim()
+      ? { smtpPassEnc: encryptSecretAtRest(String(body.smtpPass)) }
+      : {}),
     ...(body.foodCostTargetPercent !== undefined
       ? { foodCostTargetPercent: num(body.foodCostTargetPercent) ?? 32 }
       : {}),
@@ -300,7 +312,11 @@ export async function adminSettingsWithVersion(
   row: StoreSettings,
   lookupUserName?: (userId: string) => Promise<string | null>
 ) {
-  const base = settingsWithVersion(row);
+  const { smtpPassEnc, ...rest } = settingsWithVersion(row);
+  const base = {
+    ...rest,
+    smtpPassConfigured: Boolean(smtpPassEnc?.trim()),
+  };
   if (!row.onlineClosedByUserId) return { ...base, onlineClosedByName: null };
   const name = lookupUserName
     ? await lookupUserName(row.onlineClosedByUserId)

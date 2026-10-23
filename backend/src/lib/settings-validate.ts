@@ -290,6 +290,31 @@ export function validateSettingsInput(body: Record<string, unknown>): SettingsEr
     }
   }
 
+  if (body.smtpUseCustom === true || body.smtpUseCustom === "true") {
+    const host = optionalText(body.smtpHost);
+    const service = optionalText(body.smtpService);
+    const user = optionalText(body.smtpUser);
+    if (!host && service !== "gmail") {
+      errors.smtpHost = err("SMTP_HOST", "Enter SMTP host or choose Gmail as provider.");
+    }
+    if (body.smtpUser !== undefined && !user) {
+      errors.smtpUser = err("SMTP_USER", "SMTP username is required.");
+    }
+    if (body.smtpPort !== undefined && body.smtpPort !== "") {
+      const port = Number(body.smtpPort);
+      if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        errors.smtpPort = err("SMTP_PORT", "Port must be between 1 and 65535.");
+      }
+    }
+    for (const key of ["smtpFrom", "smtpReplyTo"] as const) {
+      if (body[key] === undefined) continue;
+      const value = optionalText(body[key]);
+      if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) && !value.includes("<")) {
+        errors[key] = err("SMTP_EMAIL", "Use an email address or Name <email@domain> format.");
+      }
+    }
+  }
+
   return errors;
 }
 
