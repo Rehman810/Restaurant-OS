@@ -1,7 +1,9 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
 import { Plus, Trash2 } from "lucide-react";
+import { PlatformTwoFactorSettings } from "@/components/PlatformTwoFactorSettings";
 import { api, ApiError } from "@/lib/api";
 import { usePlatformAuth } from "@/lib/auth";
 import { ForbiddenPage } from "@/components/RequirePermission";
@@ -14,6 +16,8 @@ type SettingsPayload = {
 };
 
 type BankRow = { label: string; account: string };
+
+type StatusIncident = { id: string; title: string; status: string; updatedAt: string; body?: string };
 
 function parseBanks(raw: unknown): BankRow[] {
   if (!Array.isArray(raw)) return [];
@@ -35,6 +39,12 @@ export default function SettingsPage() {
   const [bankAccounts, setBankAccounts] = useState<BankRow[]>([{ label: "Bank transfer", account: "" }]);
   const [message, setMessage] = useState("");
   const [loadError, setLoadError] = useState("");
+  const [require2FA, setRequire2FA] = useState(false);
+  const [dunningEnabled, setDunningEnabled] = useState(false);
+  const [dunningOffsets, setDunningOffsets] = useState("-3,0,3,7");
+  const [overdueTemplate, setOverdueTemplate] = useState("");
+  const [statusHeadline, setStatusHeadline] = useState("All systems operational");
+  const [statusIncidents, setStatusIncidents] = useState<StatusIncident[]>([]);
 
   useEffect(() => {
     void api<SettingsPayload>("/settings")
@@ -46,6 +56,15 @@ export default function SettingsPage() {
         setInvoiceNtn(String(res.data.invoiceNtn || ""));
         const banks = parseBanks(res.data.bankAccounts);
         setBankAccounts(banks.length ? banks : [{ label: "Bank transfer", account: "" }]);
+        setRequire2FA(Boolean(res.data.require2FAForAllPlatformUsers));
+        const d = res.data.dunning as { enabled?: boolean; reminderOffsetsDays?: number[] } | undefined;
+        setDunningEnabled(Boolean(d?.enabled));
+        if (d?.reminderOffsetsDays?.length) setDunningOffsets(d.reminderOffsetsDays.join(","));
+        const tpl = res.data.dunningEmailTemplates as { paymentOverdue?: string } | undefined;
+        setOverdueTemplate(tpl?.paymentOverdue || "");
+        const sp = res.data.statusPage as { headline?: string; incidents?: StatusIncident[] } | undefined;
+        setStatusHeadline(sp?.headline || "All systems operational");
+        setStatusIncidents(Array.isArray(sp?.incidents) ? sp!.incidents! : []);
       })
       .catch(() => setLoadError("Could not load settings."));
   }, []);
@@ -72,6 +91,26 @@ export default function SettingsPage() {
             invoiceLegalName,
             invoiceNtn,
             bankAccounts: banks,
+            ...(can("security:write") ? { require2FAForAllPlatformUsers: require2FA } : {}),
+            ...(can("tenants:write")
+              ? {
+                  dunning: {
+                    enabled: dunningEnabled,
+                    reminderOffsetsDays: dunningOffsets
+                      .split(",")
+                      .map((s) => Number(s.trim()))
+                      .filter((n) => Number.isFinite(n)),
+                  },
+                  dunningEmailTemplates: { paymentOverdue: overdueTemplate || undefined },
+                  statusPage: {
+                    headline: statusHeadline.trim() || "All systems operational",
+                    incidents: statusIncidents.map((inc) => ({
+                      ...inc,
+                      updatedAt: inc.updatedAt || new Date().toISOString(),
+                    })),
+                  },
+                }
+              : {}),
           },
         }),
       });
@@ -84,7 +123,16 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Defaults" title="Platform settings" description="Tenant defaults, support contact, and payment details shown on billing" />
+      <PageHeader eyebrow="Defaults" title="Platform settings" description="Tenant defaults, support contact, and payment details shown on billing">
+        {can("platform_users:read") ? (
+          <Link href="/settings/team" className="btn-secondary">Team</Link>
+        ) : null}
+        {can("security:write") ? (
+          <Link href="/settings/alerts" className="btn-secondary">Alerts</Link>
+        ) : null}
+        <Link href="/status" className="btn-secondary" target="_blank" rel="noopener noreferrer">Status page</Link>
+      </PageHeader>
+      <PlatformTwoFactorSettings />
       {loadError ? <p className="flash-error">{loadError}</p> : null}
       <PanelCard>
         <form onSubmit={onSubmit} className="mx-auto max-w-lg space-y-6">
@@ -186,6 +234,116 @@ export default function SettingsPage() {
               ) : null}
             </div>
           </div>
+          {can("tenants:write") ? (
+            <div className="space-y-3 border-t border-slate-200 pt-4 dark:border-white/10">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Public status page</h3>
+              <label className="block text-sm">
+                <span className="field-label">Headline (when not in maintenance)</span>
+                <input className="input" value={statusHeadline} onChange={(e) => setStatusHeadline(e.target.value)} />
+              </label>
+              <div>
+                <p className="field-label">Incidents</p>
+                <ul className="mt-2 space-y-3">
+                  {statusIncidents.map((inc, i) => (
+                    <li key={inc.id} className="rounded-xl border border-slate-200 p-3 dark:border-white/10">
+                      <input
+                        className="input mb-2"
+                        placeholder="Title"
+                        value={inc.title}
+                        onChange={(e) => {
+                          const next = [...statusIncidents];
+                          next[i] = { ...inc, title: e.target.value };
+                          setStatusIncidents(next);
+                        }}
+                      />
+                      <input
+                        className="input mb-2"
+                        placeholder="Status (investigating, resolved, …)"
+                        value={inc.status}
+                        onChange={(e) => {
+                          const next = [...statusIncidents];
+                          next[i] = { ...inc, status: e.target.value, updatedAt: new Date().toISOString() };
+                          setStatusIncidents(next);
+                        }}
+                      />
+                      <textarea
+                        className="input min-h-16 text-xs"
+                        placeholder="Details (optional)"
+                        value={inc.body || ""}
+                        onChange={(e) => {
+                          const next = [...statusIncidents];
+                          next[i] = { ...inc, body: e.target.value };
+                          setStatusIncidents(next);
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="btn-ghost mt-2 text-xs text-rose-500"
+                        onClick={() => setStatusIncidents(statusIncidents.filter((_, j) => j !== i))}
+                      >
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  type="button"
+                  className="btn-secondary mt-2"
+                  onClick={() =>
+                    setStatusIncidents([
+                      ...statusIncidents,
+                      {
+                        id: crypto.randomUUID(),
+                        title: "",
+                        status: "investigating",
+                        updatedAt: new Date().toISOString(),
+                      },
+                    ])
+                  }
+                >
+                  <Plus className="h-4 w-4" aria-hidden />
+                  Add incident
+                </button>
+              </div>
+            </div>
+          ) : null}
+          {can("tenants:write") ? (
+            <div className="space-y-3 border-t border-slate-200 pt-4 dark:border-white/10">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Dunning (email)</h3>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" className="h-4 w-4 rounded" checked={dunningEnabled} onChange={(e) => setDunningEnabled(e.target.checked)} />
+                <span>Send automatic payment reminders</span>
+              </label>
+              <label className="block text-sm">
+                <span className="field-label">Reminder days (relative to due date, comma-separated)</span>
+                <input className="input font-mono text-xs" value={dunningOffsets} onChange={(e) => setDunningOffsets(e.target.value)} />
+                <span className="mt-1 block text-xs text-slate-500">Default: -3,0,3,7 (before due, due day, +3 and +7 overdue)</span>
+              </label>
+              <label className="block text-sm">
+                <span className="field-label">Overdue email template</span>
+                <textarea
+                  className="input min-h-[80px] font-mono text-xs"
+                  value={overdueTemplate}
+                  onChange={(e) => setOverdueTemplate(e.target.value)}
+                  placeholder="Variables: {{tenantName}}, {{invoiceNumber}}, {{amountPkr}}, {{dueAt}}, ..."
+                />
+              </label>
+            </div>
+          ) : null}
+          {can("security:write") ? (
+            <div className="space-y-3 border-t border-slate-200 pt-4 dark:border-white/10">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Security</h3>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-slate-400"
+                  checked={require2FA}
+                  onChange={(e) => setRequire2FA(e.target.checked)}
+                />
+                <span>Require two-factor authentication for all platform users</span>
+              </label>
+            </div>
+          ) : null}
           {!can("tenants:write") ? (
             <p className="text-xs text-slate-500">Read-only for your role.</p>
           ) : null}

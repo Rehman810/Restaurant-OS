@@ -12,7 +12,7 @@ import {
   AdminPanel,
 } from "@/components/admin/ui";
 import { RefreshButton } from "@/components/admin/RefreshButton";
-import { api } from "@/lib/api";
+import { api, getApiUrl } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatMoney } from "@/lib/format";
 import { normalizeEntitlements, resolveModuleAccess, type TenantEntitlements } from "@/lib/plan-entitlements";
@@ -88,6 +88,97 @@ function accessSummary(access: ModuleAccess) {
 function limitLabel(value: number | null | undefined) {
   if (value === null || value === undefined) return "Unlimited";
   return String(value);
+}
+
+const PAYMENT_METHODS = [
+  { value: "BANK_TRANSFER", label: "Bank transfer" },
+  { value: "JAZZCASH", label: "JazzCash" },
+  { value: "EASYPAISA", label: "Easypaisa" },
+  { value: "CASH", label: "Cash" },
+] as const;
+
+function SubmitPaymentProof({
+  invoice,
+  onSubmitted,
+}: {
+  invoice: NonNullable<BillingSummary["openInvoice"]>;
+  onSubmitted: () => void;
+}) {
+  const [method, setMethod] = useState("BANK_TRANSFER");
+  const [reference, setReference] = useState("");
+  const [paidAt, setPaidAt] = useState(() => new Date().toISOString().slice(0, 10));
+  const [receipt, setReceipt] = useState<File | null>(null);
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setMsg("");
+    const body = new FormData();
+    body.append("invoiceId", invoice.id);
+    body.append("method", method);
+    body.append("amountPkr", String(invoice.amountPkr));
+    body.append("reference", reference);
+    body.append("paidAt", paidAt);
+    if (receipt) body.append("receipt", receipt);
+    const csrf =
+      typeof document !== "undefined"
+        ? document.cookie.match(/(?:^|;\s*)ros_csrf=([^;]+)/)?.[1] || ""
+        : "";
+    try {
+      const res = await fetch(`${getApiUrl()}/admin/billing/payment-proofs`, {
+        method: "POST",
+        credentials: "include",
+        headers: csrf ? { "X-CSRF-Token": decodeURIComponent(csrf) } : {},
+        body,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as { error?: string }).error || "Submit failed");
+      setMsg("Payment proof submitted for review.");
+      onSubmitted();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Submit failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <AdminPanel title="Submit payment proof" description="Upload reference details for operator verification">
+      <form onSubmit={onSubmit} className="grid gap-3 sm:grid-cols-2">
+        <label className="text-sm sm:col-span-2">
+          <span className="text-xs font-semibold text-stone-500">Method</span>
+          <select className="input mt-1 w-full" value={method} onChange={(e) => setMethod(e.target.value)}>
+            {PAYMENT_METHODS.map((m) => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm">
+          <span className="text-xs font-semibold text-stone-500">Reference / txn ID</span>
+          <input className="input mt-1 w-full" value={reference} onChange={(e) => setReference(e.target.value)} required />
+        </label>
+        <label className="text-sm">
+          <span className="text-xs font-semibold text-stone-500">Payment date</span>
+          <input type="date" className="input mt-1 w-full" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} required />
+        </label>
+        <label className="text-sm sm:col-span-2">
+          <span className="text-xs font-semibold text-stone-500">Receipt (optional)</span>
+          <input
+            type="file"
+            className="mt-1 block w-full text-xs"
+            accept="image/*,application/pdf"
+            onChange={(e) => setReceipt(e.target.files?.[0] ?? null)}
+          />
+        </label>
+        <button type="submit" className="btn-primary sm:col-span-2" disabled={busy}>
+          {busy ? "Submitting…" : "Submit for verification"}
+        </button>
+        {msg ? <p className="text-xs text-stone-600 sm:col-span-2 dark:text-stone-300">{msg}</p> : null}
+      </form>
+    </AdminPanel>
+  );
 }
 
 function CopyButton({ text, label }: { text: string; label: string }) {
@@ -326,8 +417,12 @@ export default function AdminBillingPage() {
           {summary.openInvoice ? (
             <AdminAlert variant="warning">
               Invoice <strong>{summary.openInvoice.invoiceNumber}</strong> — {formatMoney(summary.openInvoice.amountPkr)} due{" "}
-              {formatDate(summary.openInvoice.dueAt)}. Pay using the details below and email proof to support.
+              {formatDate(summary.openInvoice.dueAt)}. Pay using the details below, then submit proof for verification.
             </AdminAlert>
+          ) : null}
+
+          {summary.openInvoice ? (
+            <SubmitPaymentProof invoice={summary.openInvoice} onSubmitted={() => void load()} />
           ) : null}
 
           <div className="grid gap-5 lg:grid-cols-2">

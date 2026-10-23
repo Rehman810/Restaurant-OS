@@ -19,6 +19,7 @@ type TenantDetail = {
   id: string;
   slug: string;
   displayName: string;
+  isTest?: boolean;
   hostname: string | null;
   status: string;
   statusReason: string;
@@ -51,11 +52,27 @@ type TenantDetail = {
     adminReadOnly: boolean;
   } | null;
   tenantAccess?: { status: string; statusReason: string } | null;
-  domains?: Array<{ id: string; hostname: string }>;
+  domains?: Array<{ id: string; hostname: string; verifiedAt?: string | null }>;
+  tags?: string[];
   notes?: Array<{ id: string; body: string; createdAt: string }>;
 };
 
 type Health = { score: number; factors: Array<{ id: string; label: string; impact: number }> };
+
+type UsageSummary = {
+  tags: string[];
+  lastActiveAt: string | null;
+  domains: Array<{ id: string; hostname: string; status: string }>;
+  limits: { maxBranches: number | null; maxStaff: number | null };
+  usage: { branches: number; staff: number; ordersLast30Days: number; collectedPkrLast30Days: number };
+  pinnedPlanVersion: { id: string; version: number } | null;
+  entitlementOverrides: Record<string, unknown>;
+  plan: { name: string; slug: string } | null;
+};
+
+type PlanVersion = { id: string; version: number; pricePkr: number; createdAt: string };
+
+type TenantFlag = { id: string; key: string; description: string; enabled: boolean; source: string };
 
 type Invoice = {
   id: string;
@@ -76,11 +93,25 @@ export default function TenantDetailPage() {
   const [health, setHealth] = useState<Health | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [profile, setProfile] = useState({ displayName: "", ownerName: "", ownerEmail: "", ownerPhone: "", city: "", hostname: "" });
+  const [profile, setProfile] = useState({
+    displayName: "",
+    ownerName: "",
+    ownerEmail: "",
+    ownerPhone: "",
+    city: "",
+    hostname: "",
+    isTest: false,
+  });
   const [statusReason, setStatusReason] = useState("");
   const [planId, setPlanId] = useState("");
   const [noteText, setNoteText] = useState("");
   const [supportToken, setSupportToken] = useState("");
+  const [usage, setUsage] = useState<UsageSummary | null>(null);
+  const [tagsInput, setTagsInput] = useState("");
+  const [planVersions, setPlanVersions] = useState<PlanVersion[]>([]);
+  const [pinnedVersionId, setPinnedVersionId] = useState("");
+  const [overridesJson, setOverridesJson] = useState("{}");
+  const [tenantFlags, setTenantFlags] = useState<TenantFlag[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -95,11 +126,25 @@ export default function TenantDetailPage() {
           ownerPhone: t.tenant.ownerPhone || "",
           city: t.tenant.city || "",
           hostname: t.tenant.hostname || "",
+          isTest: Boolean(t.tenant.isTest),
         });
         setPlanId(t.tenant.subscription?.planId || "");
+        setTagsInput((t.tenant.tags ?? []).join(", "));
       })
       .catch(() => setError("Could not load tenant."));
     void api<Health>(`/tenants/${id}/health`).then(setHealth).catch(() => undefined);
+    void api<{ summary: UsageSummary }>(`/tenants/${id}/usage-summary`)
+      .then((r) => {
+        setUsage(r.summary);
+        setPinnedVersionId(r.summary.pinnedPlanVersion?.id || "");
+        setOverridesJson(JSON.stringify(r.summary.entitlementOverrides ?? {}, null, 2));
+      })
+      .catch(() => undefined);
+    if (can("flags:read")) {
+      void api<{ flags: TenantFlag[] }>(`/tenants/${id}/feature-flags`)
+        .then((r) => setTenantFlags(r.flags))
+        .catch(() => undefined);
+    }
     if (can("plans:read")) {
       void api<{ plans: Plan[] }>("/plans").then((r) => setPlans(r.plans)).catch(() => undefined);
     }
@@ -118,6 +163,16 @@ export default function TenantDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- id + permission gates
   }, [id]);
 
+  useEffect(() => {
+    if (!can("plans:read") || !planId) {
+      setPlanVersions([]);
+      return;
+    }
+    void api<{ versions: PlanVersion[] }>(`/plans/${planId}/versions`)
+      .then((r) => setPlanVersions(r.versions))
+      .catch(() => setPlanVersions([]));
+  }, [planId, can]);
+
   async function saveProfile() {
     if (!can("tenants:write")) return;
     setMessage("");
@@ -131,6 +186,8 @@ export default function TenantDetailPage() {
           ownerPhone: profile.ownerPhone.trim(),
           city: profile.city.trim(),
           hostname: profile.hostname.trim() || null,
+          isTest: profile.isTest,
+          tags: tagsInput.split(",").map((t) => t.trim()).filter(Boolean),
         }),
       });
       setMessage("Profile saved.");
@@ -167,6 +224,40 @@ export default function TenantDetailPage() {
       reload();
     } catch (err) {
       setMessage(err instanceof ApiError ? err.message : "Plan update failed.");
+    }
+  }
+
+  async function setFlagOverride(flag: TenantFlag, enabled: boolean) {
+    if (!can("flags:write")) return;
+    setMessage("");
+    try {
+      await api(`/feature-flags/${flag.id}/tenants/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({ enabled }),
+      });
+      setMessage(`Flag ${flag.key} set to ${enabled ? "on" : "off"} for this tenant.`);
+      reload();
+    } catch (err) {
+      setMessage(err instanceof ApiError ? err.message : "Could not update flag.");
+    }
+  }
+
+  async function saveEntitlements() {
+    if (!can("tenants:write")) return;
+    setMessage("");
+    try {
+      const entitlementOverrides = JSON.parse(overridesJson) as Record<string, unknown>;
+      await api(`/tenants/${id}/subscription`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          pinnedPlanVersionId: pinnedVersionId || null,
+          entitlementOverrides,
+        }),
+      });
+      setMessage("Entitlements updated.");
+      reload();
+    } catch (err) {
+      setMessage(err instanceof ApiError ? err.message : "Could not save entitlements.");
     }
   }
 
@@ -265,6 +356,15 @@ export default function TenantDetailPage() {
                 <span className="field-label">Hostname</span>
                 <input className="input font-mono text-xs" placeholder={`${tenant.slug}.localhost`} value={profile.hostname} onChange={(e) => setProfile({ ...profile, hostname: e.target.value })} />
               </label>
+              <label className="flex items-center gap-2 text-sm sm:col-span-2">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-slate-400"
+                  checked={profile.isTest}
+                  onChange={(e) => setProfile({ ...profile, isTest: e.target.checked })}
+                />
+                <span>Test / demo tenant (excluded from platform KPIs)</span>
+              </label>
               <button type="button" className="btn-primary sm:col-span-2" onClick={() => void saveProfile()}>
                 Save profile
               </button>
@@ -281,6 +381,43 @@ export default function TenantDetailPage() {
             <p className="mt-3 text-sm text-amber-300">
               Delete scheduled: {formatPktDate(tenant.deleteScheduledAt)}
             </p>
+          ) : null}
+        </PanelCard>
+
+        <PanelCard title="Usage & tags">
+          {usage ? (
+            <dl className="grid gap-2 text-sm">
+              <div>
+                <dt className="field-label">Last active</dt>
+                <dd>{usage.lastActiveAt ? formatPktDate(usage.lastActiveAt) : "—"}</dd>
+              </div>
+              <div>
+                <dt className="field-label">Branches</dt>
+                <dd>
+                  {usage.usage.branches}
+                  {usage.limits.maxBranches != null ? ` / ${usage.limits.maxBranches}` : ""}
+                </dd>
+              </div>
+              <div>
+                <dt className="field-label">Staff</dt>
+                <dd>
+                  {usage.usage.staff}
+                  {usage.limits.maxStaff != null ? ` / ${usage.limits.maxStaff}` : ""}
+                </dd>
+              </div>
+              <div>
+                <dt className="field-label">30d orders</dt>
+                <dd>{usage.usage.ordersLast30Days}</dd>
+              </div>
+            </dl>
+          ) : (
+            <p className="text-sm text-slate-500">Loading usage…</p>
+          )}
+          {can("tenants:write") ? (
+            <label className="mt-3 block text-sm">
+              <span className="field-label">Tags (comma-separated)</span>
+              <input className="input text-xs" value={tagsInput} onChange={(e) => setTagsInput(e.target.value)} />
+            </label>
           ) : null}
         </PanelCard>
 
@@ -369,15 +506,61 @@ export default function TenantDetailPage() {
             <button type="button" className="btn-secondary" onClick={() => void savePlan()}>Update plan</button>
           </div>
         ) : null}
+        {can("tenants:write") && tenant.subscription ? (
+          <div className="mt-4 space-y-3 border-t border-white/10 pt-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Grandfathering & overrides</p>
+            <label className="block text-sm">
+              <span className="field-label">Pinned plan version</span>
+              <select className="input" value={pinnedVersionId} onChange={(e) => setPinnedVersionId(e.target.value)}>
+                <option value="">Latest plan entitlements</option>
+                {planVersions.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    v{v.version} · PKR {v.pricePkr.toLocaleString()} · {formatPktDate(v.createdAt)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm">
+              <span className="field-label">Entitlement overrides (JSON)</span>
+              <textarea className="input min-h-24 font-mono text-xs" value={overridesJson} onChange={(e) => setOverridesJson(e.target.value)} />
+            </label>
+            <button type="button" className="btn-secondary" onClick={() => void saveEntitlements()}>Save entitlements</button>
+          </div>
+        ) : null}
       </PanelCard>
 
       {can("billing:read") ? <TenantInvoicesSection invoices={invoices} onRefresh={reloadInvoices} /> : null}
 
-      {(tenant.domains?.length ?? 0) > 0 ? (
+      {can("flags:read") && tenantFlags.length > 0 ? (
+        <PanelCard title="Feature flags">
+          <ul className="divide-y divide-white/5 text-sm">
+            {tenantFlags.map((f) => (
+              <li key={f.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                <div>
+                  <p className="font-mono text-xs text-accent-300">{f.key}</p>
+                  <p className="text-xs text-slate-500">{f.description || f.source}</p>
+                </div>
+                {can("flags:write") ? (
+                  <button type="button" className="btn-secondary text-xs" onClick={() => void setFlagOverride(f, !f.enabled)}>
+                    {f.enabled ? "ON" : "OFF"} (toggle)
+                  </button>
+                ) : (
+                  <span className="text-xs text-slate-400">{f.enabled ? "ON" : "OFF"}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </PanelCard>
+      ) : null}
+
+      {(tenant.domains?.length ?? 0) > 0 || (usage?.domains.length ?? 0) > 0 ? (
         <PanelCard title="Custom domains">
-          <ul className="text-sm">
-            {tenant.domains?.map((d) => (
-              <li key={d.id} className="font-mono text-xs">{d.hostname}</li>
+          <ul className="space-y-2 text-sm">
+            {(usage?.domains ?? tenant.domains?.map((d) => ({ ...d, status: d.verifiedAt ? "verified" : "pending" })) ?? []).map((d) => (
+              <li key={d.id} className="flex items-center justify-between gap-2 font-mono text-xs">
+                <span>{d.hostname}</span>
+                <StatusBadge status={d.status === "verified" ? "ACTIVE" : "PENDING"} />
+              </li>
             ))}
           </ul>
         </PanelCard>

@@ -4,6 +4,7 @@ import { withoutTenant } from "../restaurant-context";
 import { getOnboardingStatus } from "../onboarding";
 import { runWithRestaurant } from "../restaurant-context";
 import { addKarachiDays, karachiDateOnly } from "./karachi-time";
+import { REAL_TENANT_FILTER } from "./real-tenants";
 
 export type HealthFactor = { id: string; impact: number; label: string };
 
@@ -57,7 +58,7 @@ export async function computeTenantHealthScore(restaurantId: string) {
 export async function countStuckOnboardingTenants() {
   const trials = await withoutTenant("stuck onboarding", () =>
     basePrisma.restaurant.findMany({
-      where: { status: { in: [TenantStatus.TRIAL, TenantStatus.LEAD] } },
+      where: { ...REAL_TENANT_FILTER, status: { in: [TenantStatus.TRIAL, TenantStatus.LEAD] } },
       select: { id: true },
       take: 500,
     })

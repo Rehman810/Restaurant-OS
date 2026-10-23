@@ -6,9 +6,12 @@ import { usePlatformAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
 
 export default function LoginPage() {
-  const { login, loading, user } = usePlatformAuth();
+  const { login, verifyTwoFactor, loading, user } = usePlatformAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [otp, setOtp] = useState("");
+  const [challengeToken, setChallengeToken] = useState("");
+  const [step, setStep] = useState<"password" | "2fa">("password");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -19,7 +22,17 @@ export default function LoginPage() {
     setError("");
     setSubmitting(true);
     try {
-      await login(email.trim(), password);
+      if (step === "2fa") {
+        await verifyTwoFactor(challengeToken, otp.trim());
+        return;
+      }
+      const result = await login(email.trim(), password);
+      if (!result.completed) {
+        setChallengeToken(result.challengeToken);
+        setStep("2fa");
+        setOtp("");
+        return;
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not sign in.");
     } finally {
@@ -38,32 +51,63 @@ export default function LoginPage() {
           <p className="mt-1 text-sm text-slate-400">Operator platform · sign in to manage tenants</p>
         </div>
         <form onSubmit={onSubmit} className="surface-card p-8">
-          <label className="block text-sm">
-            <span className="field-label">Email</span>
-            <input
-              className="input"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </label>
-          <label className="mt-4 block text-sm">
-            <span className="field-label">Password</span>
-            <input
-              className="input"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </label>
+          {step === "password" ? (
+            <>
+              <label className="block text-sm">
+                <span className="field-label">Email</span>
+                <input
+                  className="input"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+              </label>
+              <label className="mt-4 block text-sm">
+                <span className="field-label">Password</span>
+                <input
+                  className="input"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              </label>
+            </>
+          ) : (
+            <label className="block text-sm">
+              <span className="field-label">Authenticator code</span>
+              <input
+                className="input font-mono tracking-widest"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder="6-digit code or recovery code"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value)}
+                required
+              />
+              <p className="mt-2 text-xs text-slate-500">Use your authenticator app or a one-time recovery code.</p>
+            </label>
+          )}
           {error ? <p className="flash-error mt-4">{error}</p> : null}
           <button type="submit" className="btn-primary mt-6 w-full" disabled={submitting}>
-            {submitting ? "Signing in…" : "Sign in"}
+            {submitting ? "Signing in…" : step === "2fa" ? "Verify" : "Sign in"}
           </button>
+          {step === "2fa" ? (
+            <button
+              type="button"
+              className="btn-ghost mt-3 w-full text-xs"
+              onClick={() => {
+                setStep("password");
+                setChallengeToken("");
+                setOtp("");
+              }}
+            >
+              Back to password
+            </button>
+          ) : null}
         </form>
       </div>
     </div>

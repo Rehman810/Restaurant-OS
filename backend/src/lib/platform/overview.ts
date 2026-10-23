@@ -11,21 +11,33 @@ import { addKarachiDays, karachiDateOnly } from "./karachi-time";
 import { loadJobRuns } from "./job-runs";
 import { countStuckOnboardingTenants } from "./tenant-health";
 import { unscopedQueryRaw } from "../tenant-sql";
+import { REAL_TENANT_FILTER } from "./real-tenants";
+import {
+  loadConversionMetrics,
+  loadGmvTrend,
+  loadMrrMovement,
+  loadNeedsAttention,
+  loadSignupFunnel,
+  type OverviewRange,
+} from "./overview-analytics";
 
-export async function loadPlatformOverview() {
+export async function loadPlatformOverview(rangeDays: OverviewRange = 30) {
   return withoutTenant("platform overview", async () => {
     const now = new Date();
     const today = karachiDateOnly(now);
     const day7 = karachiDateOnly(addKarachiDays(now, -7));
     const day30 = karachiDateOnly(addKarachiDays(now, -30));
+    const rangeStart = karachiDateOnly(addKarachiDays(now, -rangeDays + 1));
     const trialsEnd = addKarachiDays(now, 7);
 
     const statusCounts = await basePrisma.restaurant.groupBy({
       by: ["status"],
+      where: REAL_TENANT_FILTER,
       _count: { _all: true },
     });
 
     const subscriptions = await basePrisma.subscription.findMany({
+      where: { restaurant: REAL_TENANT_FILTER },
       include: { plan: true },
     });
     let mrrPkr = 0;
@@ -39,31 +51,42 @@ export async function loadPlatformOverview() {
       where: {
         status: SubscriptionStatus.TRIALING,
         trialEndsAt: { lte: trialsEnd, gte: now },
+        restaurant: REAL_TENANT_FILTER,
       },
     });
 
     const overdueInvoices = await basePrisma.platformInvoice.findMany({
-      where: { status: PlatformInvoiceStatus.OPEN, dueAt: { lt: now } },
+      where: {
+        status: PlatformInvoiceStatus.OPEN,
+        dueAt: { lt: now },
+        restaurant: REAL_TENANT_FILTER,
+      },
       select: { amountPkr: true },
     });
     const overdueAmountPkr = overdueInvoices.reduce((s, i) => s + i.amountPkr, 0);
 
+    const usageRealTenant = { restaurant: REAL_TENANT_FILTER };
+
     const gmvToday = await basePrisma.tenantUsageDaily.aggregate({
-      where: { usageDate: today },
+      where: { usageDate: today, ...usageRealTenant },
       _sum: { collectedPkr: true, ordersCount: true },
     });
     const gmv7 = await basePrisma.tenantUsageDaily.aggregate({
-      where: { usageDate: { gte: day7 } },
+      where: { usageDate: { gte: day7 }, ...usageRealTenant },
       _sum: { collectedPkr: true },
     });
     const gmv30 = await basePrisma.tenantUsageDaily.aggregate({
-      where: { usageDate: { gte: day30 } },
+      where: { usageDate: { gte: day30 }, ...usageRealTenant },
       _sum: { collectedPkr: true },
+    });
+    const gmvRange = await basePrisma.tenantUsageDaily.aggregate({
+      where: { usageDate: { gte: rangeStart }, ...usageRealTenant },
+      _sum: { collectedPkr: true, ordersCount: true },
     });
 
     const activeTenantRows = await basePrisma.tenantUsageDaily.groupBy({
       by: ["restaurantId"],
-      where: { usageDate: { gte: day7 }, ordersCount: { gt: 0 } },
+      where: { usageDate: { gte: day7 }, ordersCount: { gt: 0 }, ...usageRealTenant },
       _sum: { ordersCount: true, collectedPkr: true },
     });
 
@@ -82,17 +105,18 @@ export async function loadPlatformOverview() {
 
     const cancelled30 = await basePrisma.restaurant.count({
       where: {
+        ...REAL_TENANT_FILTER,
         status: TenantStatus.CANCELLED,
         statusChangedAt: { gte: addKarachiDays(now, -30) },
       },
     });
     const activeCount = await basePrisma.restaurant.count({
-      where: { status: TenantStatus.ACTIVE },
+      where: { ...REAL_TENANT_FILTER, status: TenantStatus.ACTIVE },
     });
     const churnRate30 = activeCount > 0 ? cancelled30 / activeCount : 0;
 
     const atRisk = await basePrisma.restaurant.findMany({
-      where: { status: TenantStatus.ACTIVE },
+      where: { ...REAL_TENANT_FILTER, status: TenantStatus.ACTIVE },
       select: { id: true, displayName: true, slug: true },
       take: 500,
     });
@@ -116,9 +140,18 @@ export async function loadPlatformOverview() {
 
     const schedulers = await loadJobRuns();
 
+    const [gmvTrend, mrrMovement, conversion, funnel, needsAttention] = await Promise.all([
+      loadGmvTrend(rangeDays),
+      loadMrrMovement(rangeDays),
+      loadConversionMetrics(rangeDays),
+      loadSignupFunnel(rangeDays),
+      loadNeedsAttention(),
+    ]);
+
     return {
       generatedAt: now.toISOString(),
       timezone: "Asia/Karachi",
+      rangeDays,
       tenantsByStatus: statusCounts.map((row) => ({ status: row.status, count: row._count._all })),
       mrrPkr,
       arrPkr,
@@ -129,8 +162,14 @@ export async function loadPlatformOverview() {
         todayPkr: gmvToday._sum.collectedPkr ?? 0,
         last7DaysPkr: gmv7._sum.collectedPkr ?? 0,
         last30DaysPkr: gmv30._sum.collectedPkr ?? 0,
+        rangePkr: gmvRange._sum.collectedPkr ?? 0,
         ordersToday: gmvToday._sum.ordersCount ?? 0,
       },
+      gmvTrend,
+      mrrMovement,
+      conversion,
+      funnel,
+      needsAttention,
       activeTenants7d: activeTenantRows.length,
       topTenantsByOrders: topByOrders.map((row) => ({
         restaurantId: row.restaurantId,

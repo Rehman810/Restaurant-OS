@@ -17,6 +17,18 @@ services:
       timeout: 5s
       retries: 20
 
+  adminer:
+    image: adminer:4
+    container_name: restaurant-os-adminer
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+
   db_test:
     image: postgres:16-alpine
     container_name: restaurant-os-db-test

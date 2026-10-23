@@ -41,6 +41,14 @@ export const authLimiter = rateLimit({
   message: { error: "Too many sign-in attempts. Try again in a few minutes." },
 });
 
+export const platformTotpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many authenticator attempts. Try again in a few minutes." },
+});
+
 export const trackLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
   limit: 40,

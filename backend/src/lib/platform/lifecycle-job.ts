@@ -21,8 +21,8 @@ async function withLifecycleLock<T>(fn: () => Promise<T>): Promise<T | null> {
 }
 
 /** Moves cancelled tenants to archived after the retention window. Data purge is a later operations task. */
-export async function runTenantLifecycleJob(now = new Date()) {
-  await markJobStarted(JOB_KEY);
+export async function runTenantLifecycleJob(now = new Date(), triggeredBy = "scheduler") {
+  const historyId = await markJobStarted(JOB_KEY, triggeredBy);
   try {
     const out = await withoutTenant("tenant lifecycle job", async () => {
     const result = await withLifecycleLock(async () => {
@@ -51,11 +51,11 @@ export async function runTenantLifecycleJob(now = new Date()) {
     });
     return result ?? { skipped: true as const };
   });
-    await markJobFinished(JOB_KEY, null);
+    await markJobFinished(JOB_KEY, null, historyId);
     return out;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    await markJobFinished(JOB_KEY, message);
+    await markJobFinished(JOB_KEY, message, historyId);
     throw err;
   }
 }

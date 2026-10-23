@@ -9,15 +9,25 @@ export type PlatformPermission =
   | "plans:write"
   | "audit:read"
   | "notes:write"
-  | "support:write";
+  | "support:write"
+  | "platform_users:read"
+  | "platform_users:write"
+  | "security:write"
+  | "flags:read"
+  | "flags:write";
 
 export const NAV_PERMISSIONS: Record<string, PlatformPermission> = {
   "/overview": "tenants:read",
   "/tenants": "tenants:read",
+  "/billing": "billing:read",
+  "/support": "tenants:read",
   "/announcements": "tenants:read",
   "/audit": "audit:read",
   "/health": "tenants:read",
   "/settings": "tenants:read",
+  "/settings/team": "platform_users:read",
+  "/settings/alerts": "security:write",
+  "/feature-flags": "flags:read",
   "/plans": "plans:read",
 };
 

@@ -45,6 +45,12 @@ enum PlatformPaymentMethod {
   OTHER
 }
 
+enum PlatformPaymentProofStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum PlatformRole {
   SUPER_ADMIN
   ADMIN
@@ -66,6 +72,31 @@ enum AnnouncementAudience {
   TENANTS
 }
 
+enum AnnouncementPublishStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+}
+
+enum SupportTicketStatus {
+  OPEN
+  PENDING
+  RESOLVED
+  CLOSED
+}
+
+enum SupportTicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum PlatformAlertChannel {
+  EMAIL
+  SLACK
+}
+
 /// The tenant. Business rows point at this id.
 model Restaurant {
   id              String       @id
@@ -84,6 +115,7 @@ model Restaurant {
   city            String       @default("")
   salesOwner      String       @default("")
   tags            String[]     @default([])
+  isTest          Boolean      @default(false)
   createdAt       DateTime     @default(now())
 
   settings                   StoreSettings?
@@ -155,9 +187,13 @@ model Restaurant {
   subscription               Subscription?
   platformInvoices           PlatformInvoice[]
   platformPayments           PlatformPayment[]
+  platformPaymentProofs      PlatformPaymentProof[]
   supportSessions            TenantSupportSession[]
   usageDaily                 TenantUsageDaily[]
   announcementDismissals     AnnouncementDismissal[]
+  announcementImpressions    AnnouncementImpression[]
+  featureFlagOverrides       PlatformTenantFeatureFlag[]
+  supportTickets             SupportTicket[]
 }
 
 /// Time-limited support access token (platform operators only; not exposed on tenant APIs).
@@ -191,15 +227,33 @@ model Plan {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   subscriptions Subscription[]
+  versions      PlanVersion[]
+}
+
+model PlanVersion {
+  id           String   @id @default(uuid())
+  planId       String
+  plan         Plan     @relation(fields: [planId], references: [id], onDelete: Restrict)
+  version      Int
+  pricePkr     Int
+  entitlements Json     @default("{}")
+  createdAt    DateTime @default(now())
+  subscriptions Subscription[]
+
+  @@unique([planId, version])
+  @@index([planId])
 }
 
 model Subscription {
   id                 String             @id @default(uuid())
   restaurantId       String             @unique
   restaurant         Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
-  planId             String
-  plan               Plan               @relation(fields: [planId], references: [id], onDelete: Restrict)
-  status             SubscriptionStatus @default(TRIALING)
+  planId               String
+  plan                 Plan               @relation(fields: [planId], references: [id], onDelete: Restrict)
+  pinnedPlanVersionId  String?
+  pinnedPlanVersion    PlanVersion?       @relation(fields: [pinnedPlanVersionId], references: [id], onDelete: SetNull)
+  entitlementOverrides Json               @default("{}")
+  status               SubscriptionStatus @default(TRIALING)
   trialEndsAt        DateTime?
   currentPeriodStart DateTime
   currentPeriodEnd   DateTime
@@ -230,10 +284,36 @@ model PlatformInvoice {
   notes          String                @default("")
   createdAt      DateTime              @default(now())
   payments       PlatformPayment[]
+  paymentProofs  PlatformPaymentProof[]
+  reminderLogs   PlatformInvoiceReminderLog[]
 
   @@unique([restaurantId, invoiceNumber])
   @@index([restaurantId, status])
   @@index([subscriptionId])
+}
+
+model PlatformPaymentProof {
+  id           String                     @id @default(uuid())
+  restaurantId String
+  restaurant   Restaurant                 @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
+  invoiceId    String
+  invoice      PlatformInvoice            @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  method       PlatformPaymentMethod
+  reference    String                     @default("")
+  amountPkr    Int
+  paidAt       DateTime
+  receiptPath  String                     @default("")
+  status       PlatformPaymentProofStatus @default(PENDING)
+  submittedBy  String                     @default("")
+  reviewedBy   String                     @default("")
+  reviewedAt   DateTime?
+  rejectReason String                     @default("")
+  createdAt    DateTime                   @default(now())
+  updatedAt    DateTime                   @updatedAt
+
+  @@index([status, createdAt])
+  @@index([restaurantId])
+  @@index([invoiceId])
 }
 
 model PlatformPayment {
@@ -262,10 +342,15 @@ model PlatformUser {
   name         String
   role         PlatformRole     @default(READONLY)
   isActive     Boolean          @default(true)
-  tokenVersion Int              @default(0)
-  lastLoginAt  DateTime?
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
+  tokenVersion     Int              @default(0)
+  totpSecret       String?
+  totpEnabled      Boolean          @default(false)
+  recoveryCodes    String?
+  failedLoginCount Int              @default(0)
+  lockedUntil      DateTime?
+  lastLoginAt      DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
   auditLogs        PlatformAuditLog[]
   supportSessions  TenantSupportSession[]
 }
@@ -288,6 +373,8 @@ model PlatformAuditLog {
 
   @@index([createdAt])
   @@index([subjectTenantId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
 }
 
 /// Daily usage rollup per tenant (Karachi calendar day).
@@ -325,11 +412,33 @@ model PlatformAnnouncement {
   startsAt           DateTime
   endsAt             DateTime?
   dismissible        Boolean              @default(true)
+  publishStatus      AnnouncementPublishStatus @default(PUBLISHED)
+  scheduledAt        DateTime?
+  publishedAt        DateTime?
+  excludeTestTenants Boolean              @default(true)
+  statsSent          Int                  @default(0)
+  statsViewed        Int                  @default(0)
+  notifyEmail        Boolean              @default(true)
+  notifyInApp        Boolean              @default(true)
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
   dismissals         AnnouncementDismissal[]
+  impressions        AnnouncementImpression[]
 
   @@index([startsAt, endsAt])
+  @@index([publishStatus, scheduledAt])
+}
+
+model AnnouncementImpression {
+  id             String               @id @default(uuid())
+  announcementId String
+  announcement   PlatformAnnouncement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  restaurantId   String
+  restaurant     Restaurant           @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
+  firstSeenAt    DateTime             @default(now())
+
+  @@unique([announcementId, restaurantId])
+  @@index([announcementId])
 }
 
 model AnnouncementDismissal {
@@ -359,6 +468,93 @@ model PlatformJobRun {
   lastFinishedAt DateTime?
   lastSuccessAt  DateTime?
   lastError      String?
+}
+
+model PlatformJobRunHistory {
+  id          String    @id @default(uuid())
+  jobKey      String
+  startedAt   DateTime  @default(now())
+  finishedAt  DateTime?
+  success     Boolean   @default(false)
+  error       String?
+  triggeredBy String    @default("scheduler")
+
+  @@index([jobKey, startedAt])
+}
+
+model PlatformFeatureFlag {
+  id             String   @id @default(uuid())
+  key            String   @unique
+  description    String   @default("")
+  defaultEnabled Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  tenantOverrides PlatformTenantFeatureFlag[]
+}
+
+model PlatformTenantFeatureFlag {
+  id           String              @id @default(uuid())
+  flagId       String
+  flag         PlatformFeatureFlag @relation(fields: [flagId], references: [id], onDelete: Cascade)
+  restaurantId String
+  restaurant   Restaurant          @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
+  enabled      Boolean
+  updatedAt    DateTime            @updatedAt
+
+  @@unique([flagId, restaurantId])
+  @@index([restaurantId])
+}
+
+model SupportTicket {
+  id              String                @id @default(uuid())
+  restaurantId    String
+  restaurant      Restaurant            @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
+  subject         String
+  status          SupportTicketStatus   @default(OPEN)
+  priority        SupportTicketPriority @default(NORMAL)
+  createdByEmail  String                @default("")
+  assignedToEmail String                @default("")
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  messages        SupportTicketMessage[]
+
+  @@index([restaurantId, status])
+  @@index([updatedAt])
+}
+
+model SupportTicketMessage {
+  id           String        @id @default(uuid())
+  ticketId     String
+  ticket       SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  body         String
+  authorEmail  String        @default("")
+  isOperator   Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+
+  @@index([ticketId, createdAt])
+}
+
+model PlatformAlertRule {
+  id            String               @id @default(uuid())
+  name          String
+  actionPattern String               @default("")
+  channel       PlatformAlertChannel @default(EMAIL)
+  target        String               @default("")
+  enabled       Boolean              @default(true)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+}
+
+model PlatformInvoiceReminderLog {
+  id          String          @id @default(uuid())
+  invoiceId   String
+  invoice     PlatformInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  reminderKey String
+  channel     String          @default("email")
+  sentAt      DateTime        @default(now())
+
+  @@unique([invoiceId, reminderKey])
+  @@index([sentAt])
 }
 
 /// Custom hostname mapped to a tenant (e.g. orders.client.com).

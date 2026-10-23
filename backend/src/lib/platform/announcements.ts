@@ -1,4 +1,9 @@
-import { AnnouncementAudience, TenantStatus, type PlatformAnnouncement } from "@prisma/client";
+import {
+  AnnouncementAudience,
+  AnnouncementPublishStatus,
+  TenantStatus,
+  type PlatformAnnouncement,
+} from "@prisma/client";
 import { basePrisma } from "../prisma-base";
 import { prisma } from "../prisma";
 import { getRestaurantId } from "../restaurant-context";
@@ -21,6 +26,11 @@ export async function createPlatformAnnouncement(input: {
   startsAt: Date;
   endsAt?: Date | null;
   dismissible?: boolean;
+  publishStatus?: AnnouncementPublishStatus;
+  scheduledAt?: Date | null;
+  excludeTestTenants?: boolean;
+  notifyEmail?: boolean;
+  notifyInApp?: boolean;
 }) {
   return withoutTenant("create announcement", () =>
     basePrisma.platformAnnouncement.create({
@@ -35,9 +45,32 @@ export async function createPlatformAnnouncement(input: {
         startsAt: input.startsAt,
         endsAt: input.endsAt ?? null,
         dismissible: input.dismissible ?? true,
+        publishStatus: input.publishStatus ?? AnnouncementPublishStatus.PUBLISHED,
+        scheduledAt: input.scheduledAt ?? null,
+        excludeTestTenants: input.excludeTestTenants ?? true,
+        notifyEmail: input.notifyEmail ?? true,
+        notifyInApp: input.notifyInApp ?? true,
       },
     })
   );
+}
+
+export async function recordAnnouncementImpression(announcementId: string, restaurantId: string) {
+  const created = await withoutTenant("announcement impression", async () => {
+    const existing = await basePrisma.announcementImpression.findUnique({
+      where: { announcementId_restaurantId: { announcementId, restaurantId } },
+    });
+    if (existing) return false;
+    await basePrisma.announcementImpression.create({
+      data: { announcementId, restaurantId },
+    });
+    await basePrisma.platformAnnouncement.update({
+      where: { id: announcementId },
+      data: { statsViewed: { increment: 1 } },
+    });
+    return true;
+  });
+  return created;
 }
 
 function announcementMatchesTenant(
@@ -61,7 +94,7 @@ export async function activeAnnouncementsForTenant() {
   const restaurantId = getRestaurantId();
   const now = new Date();
   const [restaurant, subscription, dismissed] = await Promise.all([
-    prisma.restaurant.findUnique({ where: { id: restaurantId }, select: { status: true } }),
+    prisma.restaurant.findUnique({ where: { id: restaurantId }, select: { status: true, isTest: true } }),
     prisma.subscription.findFirst({
       include: { plan: { select: { slug: true } } },
     }),
@@ -87,10 +120,17 @@ export async function activeAnnouncementsForTenant() {
     status: restaurant.status,
     planSlug: subscription?.plan?.slug ?? null,
   };
-  return rows
+  const matched = rows
+    .filter((row) => row.publishStatus === AnnouncementPublishStatus.PUBLISHED)
+    .filter((row) => !(row.excludeTestTenants && restaurant.isTest))
     .filter((row) => announcementMatchesTenant(row, ctx))
-    .filter((row) => !(dismissedIds.has(row.id) && row.dismissible))
-    .map((row) => ({
+    .filter((row) => !(dismissedIds.has(row.id) && row.dismissible));
+
+  for (const row of matched) {
+    void recordAnnouncementImpression(row.id, restaurantId);
+  }
+
+  return matched.map((row) => ({
       id: row.id,
       title: row.title,
       body: row.body,

@@ -17,6 +17,7 @@ export type ProvisionTenantInput = {
   planSlug?: string;
   trialDays?: number;
   ownerPassword?: string;
+  isTest?: boolean;
 };
 
 export function normalizeTenantSlug(raw: string) {
@@ -94,6 +95,7 @@ export async function provisionTenant(input: ProvisionTenantInput) {
           ownerPhone: input.ownerPhone?.trim() || "",
           city: input.city?.trim() || "",
           hostname,
+          isTest: Boolean(input.isTest),
           status: TenantStatus.TRIAL,
           statusChangedAt: now,
         },

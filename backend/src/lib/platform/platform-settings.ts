@@ -20,7 +20,22 @@ export type PlatformSettingsData = {
     startsAt?: string;
     endsAt?: string;
   };
+  require2FAForAllPlatformUsers?: boolean;
+  dunning?: {
+    enabled?: boolean;
+    /** Days relative to invoice due date (negative = before due). */
+    reminderOffsetsDays?: number[];
+  };
+  dunningEmailTemplates?: Partial<
+    Record<"trialEnding" | "invoiceIssued" | "paymentOverdue" | "suspended", string>
+  >;
+  statusPage?: {
+    headline?: string;
+    incidents?: Array<{ id: string; title: string; status: string; updatedAt: string; body?: string }>;
+  };
 };
+
+export const DEFAULT_DUNNING_OFFSETS_DAYS = [-3, 0, 3, 7];
 
 const DEFAULTS: PlatformSettingsData = {
   trialDays: 14,
@@ -49,7 +64,23 @@ function mergeSettings(raw: unknown): PlatformSettingsData {
     ...(typeof o.defaultPlanSlug === "string" ? { defaultPlanSlug: o.defaultPlanSlug } : {}),
     ...(Array.isArray(o.reservedSlugs) ? { reservedSlugs: o.reservedSlugs as string[] } : {}),
     ...(o.maintenance && typeof o.maintenance === "object" ? { maintenance: o.maintenance as PlatformSettingsData["maintenance"] } : {}),
+    ...(typeof o.require2FAForAllPlatformUsers === "boolean"
+      ? { require2FAForAllPlatformUsers: o.require2FAForAllPlatformUsers }
+      : {}),
+    ...(o.dunning && typeof o.dunning === "object" ? { dunning: o.dunning as PlatformSettingsData["dunning"] } : {}),
+    ...(o.dunningEmailTemplates && typeof o.dunningEmailTemplates === "object"
+      ? { dunningEmailTemplates: o.dunningEmailTemplates as PlatformSettingsData["dunningEmailTemplates"] }
+      : {}),
+    ...(o.statusPage && typeof o.statusPage === "object"
+      ? { statusPage: o.statusPage as PlatformSettingsData["statusPage"] }
+      : {}),
   };
+}
+
+export function dunningOffsetsFromSettings(data: PlatformSettingsData) {
+  const raw = data.dunning?.reminderOffsetsDays;
+  if (!Array.isArray(raw) || !raw.length) return [...DEFAULT_DUNNING_OFFSETS_DAYS];
+  return raw.map((n) => Number(n)).filter((n) => Number.isFinite(n));
 }
 
 export async function loadPlatformSettings() {

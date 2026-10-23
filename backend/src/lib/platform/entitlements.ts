@@ -39,13 +39,21 @@ export class EntitlementError extends Error {
   }
 }
 
-function parseEntitlements(raw: unknown): PlanEntitlements {
+export function mergePlanEntitlements(base: PlanEntitlements, patch: PlanEntitlements): PlanEntitlements {
+  return { ...base, ...patch };
+}
+
+export function parsePlanEntitlements(raw: unknown): PlanEntitlements {
   if (!raw || typeof raw !== "object") return {};
   const o = raw as Record<string, unknown>;
-  const ent: PlanEntitlements = {
-    maxBranches: typeof o.maxBranches === "number" ? o.maxBranches : o.maxBranches === null ? null : undefined,
-    maxStaff: typeof o.maxStaff === "number" ? o.maxStaff : o.maxStaff === null ? null : undefined,
-  };
+  const ent: PlanEntitlements = {};
+  if ("maxBranches" in o) {
+    ent.maxBranches =
+      typeof o.maxBranches === "number" ? o.maxBranches : o.maxBranches === null ? null : undefined;
+  }
+  if ("maxStaff" in o) {
+    ent.maxStaff = typeof o.maxStaff === "number" ? o.maxStaff : o.maxStaff === null ? null : undefined;
+  }
   for (const id of PLAN_MODULE_IDS) {
     const parsed = parseModuleAccessInput(o[id]);
     if (parsed !== undefined) ent[id] = parsed;
@@ -59,11 +67,17 @@ export function resolveModuleAccess(ent: PlanEntitlements, id: PlanModuleId): Mo
 
 export async function loadTenantEntitlements(): Promise<PlanEntitlements> {
   const subscription = await prisma.subscription.findFirst({
-    include: { plan: { select: { entitlements: true, isActive: true } } },
+    include: {
+      plan: { select: { entitlements: true, isActive: true } },
+      pinnedPlanVersion: { select: { entitlements: true } },
+    },
   });
   if (!subscription?.plan?.isActive) return { ...FALLBACK };
-  const fromPlan = parseEntitlements(subscription.plan.entitlements);
-  return { ...FALLBACK, ...fromPlan };
+  const fromPlan = parsePlanEntitlements(
+    subscription.pinnedPlanVersion?.entitlements ?? subscription.plan.entitlements
+  );
+  const overrides = parsePlanEntitlements(subscription.entitlementOverrides);
+  return { ...FALLBACK, ...fromPlan, ...overrides };
 }
 
 export async function loadTenantBillingSummary() {

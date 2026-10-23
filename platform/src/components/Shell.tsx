@@ -5,11 +5,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Building2,
+  Flag,
   Layers,
   LayoutDashboard,
+  LifeBuoy,
   LogOut,
   Megaphone,
   Menu,
+  Receipt,
   ScrollText,
   Settings,
   Stethoscope,
@@ -25,6 +28,8 @@ const GROUPS = [
     items: [
       { href: "/overview", label: "Overview", icon: LayoutDashboard },
       { href: "/tenants", label: "Tenants", icon: Building2 },
+      { href: "/billing", label: "Billing", icon: Receipt },
+      { href: "/support", label: "Support", icon: LifeBuoy },
       { href: "/plans", label: "Plans", icon: Layers },
       { href: "/announcements", label: "Announcements", icon: Megaphone },
     ],
@@ -34,6 +39,7 @@ const GROUPS = [
     items: [
       { href: "/audit", label: "Audit log", icon: ScrollText },
       { href: "/health", label: "Health", icon: Stethoscope },
+      { href: "/feature-flags", label: "Feature flags", icon: Flag },
       { href: "/settings", label: "Settings", icon: Settings },
     ],
   },

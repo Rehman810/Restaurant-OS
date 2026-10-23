@@ -17,8 +17,15 @@ platformSettingsRouter.patch("/", requirePlatformAuth, requirePlatformPermission
   if (!Number.isFinite(version)) {
     return res.status(400).json({ error: "Version is required." });
   }
+  const patch = body.data ?? {};
+  if (patch.require2FAForAllPlatformUsers !== undefined) {
+    const { platformHasPermission } = await import("../../lib/platform/permissions");
+    if (!platformHasPermission(req.platformUser!.role, "security:write")) {
+      return res.status(403).json({ error: "Only super admins can change security settings." });
+    }
+  }
   try {
-    const updated = await updatePlatformSettings(version, body.data ?? {});
+    const updated = await updatePlatformSettings(version, patch);
     if (body.data?.maintenance) invalidateMaintenanceCache();
     await writePlatformAudit({
       actorId: req.platformUser!.id,

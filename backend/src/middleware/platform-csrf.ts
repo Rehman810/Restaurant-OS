@@ -4,7 +4,13 @@ import { readPlatformCsrfCookie, readPlatformSessionCookie } from "../lib/platfo
 const SAFE = new Set(["GET", "HEAD", "OPTIONS"]);
 
 function csrfExempt(path: string) {
-  if (path === "/platform/auth/login" || path === "/platform/auth/csrf") return true;
+  if (
+    path === "/platform/auth/login" ||
+    path === "/platform/auth/login/2fa" ||
+    path === "/platform/auth/csrf"
+  ) {
+    return true;
+  }
   return false;
 }
 

@@ -8,9 +8,16 @@ import { platformOverviewRouter } from "./overview";
 import { platformAnnouncementsRouter } from "./announcements";
 import { platformSettingsRouter } from "./settings";
 import { platformHealthRouter } from "./health";
+import { platformUsersRouter } from "./users";
+import { platformPaymentProofsRouter } from "./payment-proofs";
+import { platformFeatureFlagsRouter } from "./feature-flags";
+import { platformSupportTicketsRouter } from "./support-tickets";
+import { platformAlertsRouter } from "./alerts";
+import { platformStatusRouter } from "./status";
 
 export const platformRouter = Router();
 
+platformRouter.use("/status", platformStatusRouter);
 platformRouter.use("/auth", platformAuthRouter);
 platformRouter.use("/overview", platformOverviewRouter);
 platformRouter.use("/announcements", platformAnnouncementsRouter);
@@ -20,3 +27,8 @@ platformRouter.use("/tenants", platformTenantsRouter);
 platformRouter.use("/plans", platformPlansRouter);
 platformRouter.use("/invoices", platformInvoicesRouter);
 platformRouter.use("/audit-logs", platformAuditRouter);
+platformRouter.use("/users", platformUsersRouter);
+platformRouter.use("/payment-proofs", platformPaymentProofsRouter);
+platformRouter.use("/feature-flags", platformFeatureFlagsRouter);
+platformRouter.use("/support-tickets", platformSupportTicketsRouter);
+platformRouter.use("/alert-rules", platformAlertsRouter);

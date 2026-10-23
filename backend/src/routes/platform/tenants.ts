@@ -13,6 +13,9 @@ import { invalidateTenantHostCache } from "../../lib/tenant-resolve";
 import { provisionTenant } from "../../lib/platform/provision";
 import { createTenantSupportSession } from "../../lib/platform/support-access";
 import { computeTenantHealthScore } from "../../lib/platform/tenant-health";
+import { loadTenantUsageSummary } from "../../lib/platform/tenant-usage-summary";
+import { parsePlanEntitlementsInput } from "../../lib/platform/plan-catalog";
+import { listFeatureFlagsForTenant } from "../../lib/platform/feature-flags";
 
 export const platformTenantsRouter = Router();
 
@@ -31,6 +34,7 @@ platformTenantsRouter.post("/", requirePlatformAuth, requirePlatformPermission("
       planSlug: body.planSlug ? String(body.planSlug) : undefined,
       trialDays: body.trialDays != null ? Number(body.trialDays) : undefined,
       ownerPassword: body.ownerPassword ? String(body.ownerPassword) : undefined,
+      isTest: body.isTest === true || body.isTest === "true",
     });
     await writePlatformAudit({
       actorId: req.platformUser!.id,
@@ -58,8 +62,10 @@ platformTenantsRouter.post("/", requirePlatformAuth, requirePlatformPermission("
 platformTenantsRouter.get("/", requirePlatformAuth, requirePlatformPermission("tenants:read"), async (req, res) => {
   const q = String(req.query.q || "").trim().toLowerCase();
   const status = String(req.query.status || "").trim();
+  const testFilter = String(req.query.test || "").trim();
   const rows = await basePrisma.restaurant.findMany({
     where: {
+      ...(testFilter === "test" ? { isTest: true } : testFilter === "real" ? { isTest: false } : {}),
       ...(status ? { status: status as TenantStatus } : {}),
       ...(q
         ? {
@@ -82,6 +88,7 @@ platformTenantsRouter.get("/", requirePlatformAuth, requirePlatformPermission("t
       id: r.id,
       slug: r.slug,
       displayName: r.displayName,
+      isTest: r.isTest,
       hostname: r.hostname,
       status: r.status,
       statusReason: r.statusReason,
@@ -111,6 +118,31 @@ platformTenantsRouter.get(
   }
 );
 
+platformTenantsRouter.get(
+  "/:id/feature-flags",
+  requirePlatformAuth,
+  requirePlatformPermission("flags:read"),
+  async (req, res) => {
+    const restaurant = await basePrisma.restaurant.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    if (!restaurant) return res.status(404).json({ error: "Not found." });
+    const flags = await listFeatureFlagsForTenant(restaurant.id);
+    res.json({ flags });
+  }
+);
+
+platformTenantsRouter.get(
+  "/:id/usage-summary",
+  requirePlatformAuth,
+  requirePlatformPermission("tenants:read"),
+  async (req, res) => {
+    const restaurant = await basePrisma.restaurant.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    if (!restaurant) return res.status(404).json({ error: "Not found." });
+    const summary = await loadTenantUsageSummary(restaurant.id);
+    if (!summary) return res.status(404).json({ error: "Not found." });
+    res.json({ summary });
+  }
+);
+
 platformTenantsRouter.get("/:id", requirePlatformAuth, requirePlatformPermission("tenants:read"), async (req, res) => {
   const row = await basePrisma.restaurant.findUnique({
     where: { id: req.params.id },
@@ -136,7 +168,7 @@ platformTenantsRouter.patch(
   requirePlatformAuth,
   requirePlatformPermission("tenants:write"),
   async (req, res) => {
-    const { status, statusReason, displayName, ownerEmail, ownerPhone, city, hostname } = req.body as {
+    const { status, statusReason, displayName, ownerEmail, ownerPhone, city, hostname, isTest, tags } = req.body as {
       status?: TenantStatus;
       statusReason?: string;
       displayName?: string;
@@ -144,6 +176,8 @@ platformTenantsRouter.patch(
       ownerPhone?: string;
       city?: string;
       hostname?: string | null;
+      isTest?: boolean;
+      tags?: string[];
     };
     const existing = await basePrisma.restaurant.findUnique({ where: { id: req.params.id } });
     if (!existing) return res.status(404).json({ error: "Not found." });
@@ -166,6 +200,12 @@ platformTenantsRouter.patch(
     if (ownerEmail !== undefined) data.ownerEmail = String(ownerEmail).trim();
     if (ownerPhone !== undefined) data.ownerPhone = String(ownerPhone).trim();
     if (city !== undefined) data.city = String(city).trim();
+    if (isTest !== undefined) data.isTest = Boolean(isTest);
+    if (tags !== undefined) {
+      data.tags = Array.isArray(tags)
+        ? tags.map((t) => String(t).trim()).filter(Boolean).slice(0, 20)
+        : [];
+    }
     if (hostname !== undefined) {
       const nextHost = hostname ? String(hostname).trim().toLowerCase() : null;
       if (nextHost) {
@@ -210,11 +250,13 @@ platformTenantsRouter.patch(
   requirePlatformAuth,
   requirePlatformPermission("tenants:write"),
   async (req, res) => {
-    const { planId, status, trialEndsAt, currentPeriodEnd } = req.body as {
+    const { planId, status, trialEndsAt, currentPeriodEnd, pinnedPlanVersionId, entitlementOverrides } = req.body as {
       planId?: string;
       status?: SubscriptionStatus;
       trialEndsAt?: string | null;
       currentPeriodEnd?: string;
+      pinnedPlanVersionId?: string | null;
+      entitlementOverrides?: Record<string, unknown>;
     };
     const restaurantId = req.params.id;
     const sub = await basePrisma.subscription.findUnique({ where: { restaurantId } });
@@ -225,6 +267,21 @@ platformTenantsRouter.patch(
     if (status) data.status = status;
     if (trialEndsAt !== undefined) data.trialEndsAt = trialEndsAt ? new Date(trialEndsAt) : null;
     if (currentPeriodEnd) data.currentPeriodEnd = new Date(currentPeriodEnd);
+    if (pinnedPlanVersionId !== undefined) {
+      if (pinnedPlanVersionId === null || pinnedPlanVersionId === "") {
+        data.pinnedPlanVersionId = null;
+      } else {
+        const version = await basePrisma.planVersion.findFirst({
+          where: { id: pinnedPlanVersionId, planId: sub.planId },
+          select: { id: true },
+        });
+        if (!version) return res.status(400).json({ error: "Plan version does not belong to the current plan." });
+        data.pinnedPlanVersionId = version.id;
+      }
+    }
+    if (entitlementOverrides !== undefined) {
+      data.entitlementOverrides = parsePlanEntitlementsInput(entitlementOverrides);
+    }
 
     const updated = await basePrisma.subscription.update({
       where: { id: sub.id },

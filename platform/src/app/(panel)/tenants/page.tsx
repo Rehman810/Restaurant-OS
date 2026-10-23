@@ -18,6 +18,7 @@ export default function TenantsPage() {
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
   const [status, setStatus] = useState("");
+  const [testFilter, setTestFilter] = useState("");
   const [tenants, setTenants] = useState<TenantRow[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -32,6 +33,7 @@ export default function TenantsPage() {
     const params = new URLSearchParams();
     if (debouncedQ.trim()) params.set("q", debouncedQ.trim());
     if (status) params.set("status", status);
+    if (testFilter) params.set("test", testFilter);
     const query = params.toString();
     void api<{ tenants: TenantRow[] }>(`/tenants${query ? `?${query}` : ""}`)
       .then((res) => {
@@ -40,7 +42,7 @@ export default function TenantsPage() {
       })
       .catch(() => setError("Could not load tenants."))
       .finally(() => setLoading(false));
-  }, [debouncedQ, status]);
+  }, [debouncedQ, status, testFilter]);
 
   return (
     <div className="space-y-6">
@@ -64,6 +66,11 @@ export default function TenantsPage() {
             aria-label="Search tenants"
           />
         </label>
+        <select className="input max-w-[10rem]" value={testFilter} onChange={(e) => setTestFilter(e.target.value)} aria-label="Filter test tenants">
+          <option value="">All tenants</option>
+          <option value="real">Real only</option>
+          <option value="test">Test only</option>
+        </select>
         <select className="input max-w-[12rem]" value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Filter by status">
           <option value="">All statuses</option>
           {["TRIAL", "ACTIVE", "PAST_DUE", "SUSPENDED", "CANCELLED", "ARCHIVED", "LEAD"].map((s) => (
@@ -101,6 +108,11 @@ export default function TenantsPage() {
                 <td>
                   <Link href={`/tenants/${t.id}`} className="font-semibold text-accent-600 hover:underline dark:text-accent-300">
                     {t.displayName || t.slug}
+                    {t.isTest ? (
+                      <span className="ml-2 rounded-md bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-300">
+                        Test
+                      </span>
+                    ) : null}
                   </Link>
                   <p className="text-xs text-slate-500">{t.slug}</p>
                 </td>

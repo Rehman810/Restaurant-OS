@@ -15,9 +15,15 @@ type Announcement = {
   body: string;
   severity: string;
   audience: string;
+  publishStatus?: string;
+  statsSent?: number;
+  statsViewed?: number;
   startsAt: string;
   endsAt: string | null;
 };
+
+type Plan = { slug: string; name: string };
+type TenantOpt = { id: string; slug: string; displayName: string };
 
 const SEVERITIES = ["INFO", "WARNING", "CRITICAL"] as const;
 
@@ -29,6 +35,15 @@ export default function AnnouncementsPage() {
   const [severity, setSeverity] = useState<(typeof SEVERITIES)[number]>("INFO");
   const [notifyEmail, setNotifyEmail] = useState(true);
   const [notifyInApp, setNotifyInApp] = useState(true);
+  const [audience, setAudience] = useState("ALL");
+  const [audiencePlanSlug, setAudiencePlanSlug] = useState("");
+  const [audienceStatus, setAudienceStatus] = useState("");
+  const [audienceTenantIds, setAudienceTenantIds] = useState("");
+  const [excludeTestTenants, setExcludeTestTenants] = useState(true);
+  const [asDraft, setAsDraft] = useState(false);
+  const [scheduledAt, setScheduledAt] = useState("");
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [tenants, setTenants] = useState<TenantOpt[]>([]);
   const [message, setMessage] = useState("");
   const [maintenance, setMaintenance] = useState(false);
   const [maintenanceMessage, setMaintenanceMessage] = useState("Scheduled maintenance is in progress.");
@@ -44,6 +59,8 @@ export default function AnnouncementsPage() {
 
   useEffect(() => {
     reload();
+    void api<{ plans: Plan[] }>("/plans").then((r) => setPlans(r.plans)).catch(() => undefined);
+    void api<{ tenants: TenantOpt[] }>("/tenants").then((r) => setTenants(r.tenants)).catch(() => undefined);
   }, []);
 
   async function createAnnouncement(e: FormEvent) {
@@ -57,7 +74,16 @@ export default function AnnouncementsPage() {
           title,
           body,
           severity,
-          audience: "ALL",
+          audience,
+          audiencePlanSlug: audience === "PLAN" ? audiencePlanSlug : undefined,
+          audienceStatus: audience === "STATUS" ? audienceStatus : undefined,
+          audienceTenantIds:
+            audience === "TENANTS"
+              ? audienceTenantIds.split(",").map((s) => s.trim()).filter(Boolean)
+              : [],
+          excludeTestTenants,
+          draft: asDraft,
+          scheduledAt: scheduledAt || undefined,
           notifyEmail,
           notifyInApp,
         }),
@@ -157,6 +183,59 @@ export default function AnnouncementsPage() {
                   ))}
                 </select>
               </label>
+              <label className="block text-sm">
+                <span className="field-label">Audience</span>
+                <select className="input" value={audience} onChange={(e) => setAudience(e.target.value)}>
+                  <option value="ALL">All tenants</option>
+                  <option value="PLAN">By plan</option>
+                  <option value="STATUS">By status</option>
+                  <option value="TENANTS">Specific tenants</option>
+                </select>
+              </label>
+              {audience === "PLAN" ? (
+                <select className="input text-sm" value={audiencePlanSlug} onChange={(e) => setAudiencePlanSlug(e.target.value)}>
+                  <option value="">Select plan</option>
+                  {plans.map((p) => (
+                    <option key={p.slug} value={p.slug}>{p.name}</option>
+                  ))}
+                </select>
+              ) : null}
+              {audience === "STATUS" ? (
+                <select className="input text-sm" value={audienceStatus} onChange={(e) => setAudienceStatus(e.target.value)}>
+                  {["TRIAL", "ACTIVE", "PAST_DUE", "SUSPENDED"].map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              ) : null}
+              {audience === "TENANTS" ? (
+                <select
+                  className="input text-sm"
+                  multiple
+                  value={audienceTenantIds.split(",").filter(Boolean)}
+                  onChange={(e) => {
+                    const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
+                    setAudienceTenantIds(selected.join(","));
+                  }}
+                >
+                  {tenants.map((t) => (
+                    <option key={t.id} value={t.id}>{t.displayName || t.slug}</option>
+                  ))}
+                </select>
+              ) : null}
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={excludeTestTenants} onChange={(e) => setExcludeTestTenants(e.target.checked)} />
+                Exclude test tenants
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={asDraft} onChange={(e) => setAsDraft(e.target.checked)} />
+                Save as draft (do not deliver)
+              </label>
+              {!asDraft ? (
+                <label className="block text-sm">
+                  <span className="field-label">Schedule for (optional)</span>
+                  <input type="datetime-local" className="input" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} />
+                </label>
+              ) : null}
               <div className="space-y-2 rounded-xl border border-white/10 bg-white/[0.03] p-3 text-sm">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Delivery</p>
                 <label className="flex cursor-pointer items-center gap-2">
@@ -206,8 +285,25 @@ export default function AnnouncementsPage() {
                 </div>
                 <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{a.body}</p>
                 <p className="mt-2 text-xs text-slate-500">
-                  {a.audience} · {formatPktDate(a.startsAt)}
+                  {a.audience} · {a.publishStatus || "PUBLISHED"} · sent {a.statsSent ?? 0} · viewed {a.statsViewed ?? 0} ·{" "}
+                  {formatPktDate(a.startsAt)}
                 </p>
+                {a.publishStatus === "DRAFT" || a.publishStatus === "SCHEDULED" ? (
+                  can("tenants:write") ? (
+                    <button
+                      type="button"
+                      className="mt-2 text-xs font-semibold text-accent-400 hover:underline"
+                      onClick={() =>
+                        void api(`/announcements/${a.id}/publish`, { method: "POST" }).then(() => {
+                          setMessage("Published.");
+                          reload();
+                        })
+                      }
+                    >
+                      Publish now
+                    </button>
+                  ) : null
+                ) : null}
               </li>
             ))}
           </ul>

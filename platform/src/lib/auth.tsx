@@ -6,10 +6,15 @@ import { api, ensurePlatformCsrf } from "./api";
 import { canAccess, type PlatformPermission } from "./permissions";
 import type { PlatformUser } from "./types";
 
+type LoginResult =
+  | { completed: true; user: PlatformUser }
+  | { completed: false; requiresTwoFactor: true; challengeToken: string };
+
 type AuthState = {
   user: PlatformUser | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<LoginResult>;
+  verifyTwoFactor: (challengeToken: string, code: string) => Promise<PlatformUser>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
   can: (permission: PlatformPermission) => boolean;
@@ -50,15 +55,39 @@ export function PlatformAuthProvider({ children }: { children: React.ReactNode }
     if (user && path === "/login") router.replace("/overview");
   }, [loading, user, path, router]);
 
-  const login = useCallback(
-    async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string) => {
+    await ensurePlatformCsrf();
+    const res = await api<{
+      user?: PlatformUser;
+      requiresTwoFactor?: boolean;
+      challengeToken?: string;
+    }>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+    if (res.requiresTwoFactor && res.challengeToken) {
+      return {
+        completed: false as const,
+        requiresTwoFactor: true as const,
+        challengeToken: res.challengeToken,
+      };
+    }
+    if (!res.user) throw new Error("Sign-in failed.");
+    setUser(res.user);
+    router.replace("/overview");
+    return { completed: true as const, user: res.user };
+  }, [router]);
+
+  const verifyTwoFactor = useCallback(
+    async (challengeToken: string, code: string) => {
       await ensurePlatformCsrf();
-      const res = await api<{ user: PlatformUser }>("/auth/login", {
+      const res = await api<{ user: PlatformUser }>("/auth/login/2fa", {
         method: "POST",
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ challengeToken, code }),
       });
       setUser(res.user);
       router.replace("/overview");
+      return res.user;
     },
     [router]
   );
@@ -79,8 +108,8 @@ export function PlatformAuthProvider({ children }: { children: React.ReactNode }
   );
 
   const value = useMemo(
-    () => ({ user, loading, login, logout, refresh, can }),
-    [user, loading, login, logout, refresh, can]
+    () => ({ user, loading, login, verifyTwoFactor, logout, refresh, can }),
+    [user, loading, login, verifyTwoFactor, logout, refresh, can]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -9,7 +9,12 @@ export type PlatformPermission =
   | "plans:write"
   | "audit:read"
   | "notes:write"
-  | "support:write";
+  | "support:write"
+  | "platform_users:read"
+  | "platform_users:write"
+  | "security:write"
+  | "flags:read"
+  | "flags:write";
 
 const ALL: PlatformPermission[] = [
   "tenants:read",
@@ -21,6 +26,11 @@ const ALL: PlatformPermission[] = [
   "audit:read",
   "notes:write",
   "support:write",
+  "platform_users:read",
+  "platform_users:write",
+  "security:write",
+  "flags:read",
+  "flags:write",
 ];
 
 const MATRIX: Record<PlatformRole, PlatformPermission[]> = {
@@ -29,6 +39,7 @@ const MATRIX: Record<PlatformRole, PlatformPermission[]> = {
     "tenants:read",
     "tenants:write",
     "billing:read",
+    "billing:write",
     "plans:read",
     "plans:write",
     "audit:read",

@@ -53,6 +53,7 @@ export default function CreateTenantPage() {
       trialDays: Number(form.get("trialDays") || 14),
       ownerPassword: String(form.get("ownerPassword") || ""),
       hostname: `${slugVal.toLowerCase()}.localhost`,
+      isTest: form.get("isTest") === "on",
     };
     try {
       const res = await api<{ tenant: { id: string } }>("/tenants", {
@@ -114,6 +115,10 @@ export default function CreateTenantPage() {
           <label className="text-sm">
             <span className="field-label">City</span>
             <input name="city" className="input" />
+          </label>
+          <label className="flex items-center gap-2 text-sm sm:col-span-2">
+            <input name="isTest" type="checkbox" className="h-4 w-4 rounded border-slate-400" />
+            <span>Mark as test / demo tenant (excluded from KPIs)</span>
           </label>
         </div>
         <hr className="border-slate-200 dark:border-white/10" />

@@ -8,8 +8,11 @@ import { createApp } from "./app";
 import { startDineInJobScheduler, stopDineInJobScheduler } from "./lib/dine-in/jobs";
 import { startAnalyticsEmailScheduler, stopAnalyticsEmailScheduler } from "./lib/analytics/scheduled-email";
 import { startPlatformBillingScheduler, stopPlatformBillingScheduler } from "./lib/platform/billing-scheduler";
+import { clearOrphanedPlatformJobsOnBoot } from "./lib/platform/job-runs";
 import { startTenantLifecycleScheduler, stopTenantLifecycleScheduler } from "./lib/platform/lifecycle-scheduler";
 import { startUsageRollupScheduler, stopUsageRollupScheduler } from "./lib/platform/usage-rollup-scheduler";
+import { startPlatformDunningScheduler, stopPlatformDunningScheduler } from "./lib/platform/dunning-scheduler";
+import { startAnnouncementScheduler, stopAnnouncementScheduler } from "./lib/platform/announcement-scheduler";
 import { databaseHelpText, verifyDatabaseConnection } from "./lib/db-health";
 import { initRealtime, shutdownRealtime } from "./lib/realtime";
 import { prisma } from "./lib/prisma";
@@ -50,6 +53,8 @@ async function gracefulShutdown(signal: string) {
   stopPlatformBillingScheduler();
   stopTenantLifecycleScheduler();
   stopUsageRollupScheduler();
+  stopPlatformDunningScheduler();
+  stopAnnouncementScheduler();
 
   const forceTimer = setTimeout(() => {
     console.error("[shutdown] timeout — forcing exit");
@@ -87,10 +92,13 @@ server.listen(PORT, () => {
         process.exit(1);
       }
     }
+    await clearOrphanedPlatformJobsOnBoot();
     startDineInJobScheduler();
     startAnalyticsEmailScheduler();
     startPlatformBillingScheduler();
     startTenantLifecycleScheduler();
     startUsageRollupScheduler();
+    startPlatformDunningScheduler();
+    startAnnouncementScheduler();
   })();
 });

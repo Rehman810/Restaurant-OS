@@ -4,6 +4,7 @@ import { basePrisma } from "../../lib/prisma-base";
 import { writePlatformAudit } from "../../lib/platform/platform-audit";
 import { clientIp } from "../../lib/client-ip";
 import { normalizePlanSlug, parsePlanEntitlementsInput, parsePlanInterval } from "../../lib/platform/plan-catalog";
+import { ensureInitialPlanVersion, snapshotPlanVersion } from "../../lib/platform/plan-versions";
 
 export const platformPlansRouter = Router();
 
@@ -84,6 +85,7 @@ platformPlansRouter.post("/", requirePlatformAuth, requirePlatformPermission("pl
         entitlements,
       },
     });
+    await snapshotPlanVersion(plan);
     await writePlatformAudit({
       actorId: req.platformUser!.id,
       actorEmail: req.platformUser!.email,
@@ -128,6 +130,9 @@ platformPlansRouter.patch("/:id", requirePlatformAuth, requirePlatformPermission
     if (body.entitlements !== undefined) data.entitlements = parsePlanEntitlementsInput(body.entitlements);
 
     const plan = await basePrisma.plan.update({ where: { id: existing.id }, data });
+    if (body.entitlements !== undefined || body.pricePkr !== undefined) {
+      await snapshotPlanVersion(plan);
+    }
     await writePlatformAudit({
       actorId: req.platformUser!.id,
       actorEmail: req.platformUser!.email,
@@ -145,3 +150,23 @@ platformPlansRouter.patch("/:id", requirePlatformAuth, requirePlatformPermission
     return res.status(status).json({ error: message });
   }
 });
+
+platformPlansRouter.get(
+  "/:id/versions",
+  requirePlatformAuth,
+  requirePlatformPermission("plans:read"),
+  async (req, res) => {
+    const plan = await basePrisma.plan.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, pricePkr: true, entitlements: true },
+    });
+    if (!plan) return res.status(404).json({ error: "Not found." });
+    await ensureInitialPlanVersion(plan);
+    const versions = await basePrisma.planVersion.findMany({
+      where: { planId: plan.id },
+      orderBy: { version: "desc" },
+      select: { id: true, version: true, pricePkr: true, createdAt: true },
+    });
+    res.json({ versions });
+  }
+);

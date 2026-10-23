@@ -22,8 +22,8 @@ async function withLock<T>(fn: () => Promise<T>): Promise<T | null> {
   }
 }
 
-export async function runTenantUsageRollupJob(now = new Date()) {
-  await markJobStarted(JOB_KEY);
+export async function runTenantUsageRollupJob(now = new Date(), triggeredBy = "scheduler") {
+  const historyId = await markJobStarted(JOB_KEY, triggeredBy);
   try {
     const result = await withLock(async () => {
       const tenants = await withoutTenant("usage rollup list tenants", () =>
@@ -43,11 +43,11 @@ export async function runTenantUsageRollupJob(now = new Date()) {
       }
       return { tenants: tenants.length, daysProcessed: daySpan, rowsUpserted: rows };
     });
-    await markJobFinished(JOB_KEY, result ? null : "Could not acquire advisory lock.");
+    await markJobFinished(JOB_KEY, result ? null : "Could not acquire advisory lock.", historyId);
     return result ?? { skipped: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    await markJobFinished(JOB_KEY, message);
+    await markJobFinished(JOB_KEY, message, historyId);
     throw err;
   }
 }

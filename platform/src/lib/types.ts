@@ -9,13 +9,19 @@ export type PlatformPermission =
   | "plans:write"
   | "audit:read"
   | "notes:write"
-  | "support:write";
+  | "support:write"
+  | "platform_users:read"
+  | "platform_users:write"
+  | "security:write"
+  | "flags:read"
+  | "flags:write";
 
 export type PlatformUser = {
   id: string;
   email: string;
   name: string;
   role: PlatformRole;
+  totpEnabled?: boolean;
   permissions?: PlatformPermission[];
 };
 
@@ -23,6 +29,7 @@ export type TenantRow = {
   id: string;
   slug: string;
   displayName: string;
+  isTest?: boolean;
   hostname: string | null;
   status: string;
   statusReason: string;

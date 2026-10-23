@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ScrollText } from "lucide-react";
+import { Download, ScrollText } from "lucide-react";
 import { api } from "@/lib/api";
 import { formatPktDate } from "@/lib/format";
 import type { TenantRow } from "@/lib/types";
@@ -16,10 +16,13 @@ type AuditRow = {
   id: string;
   action: string;
   actorEmail: string;
+  actorId: string | null;
   entityType: string;
   entityId: string;
   subjectTenantId: string | null;
   createdAt: string;
+  before: unknown;
+  after: unknown;
   tenant?: { id: string; slug: string; displayName: string } | null;
 };
 
@@ -29,7 +32,11 @@ function AuditPageContent() {
   const [tenants, setTenants] = useState<TenantRow[]>([]);
   const [tenantId, setTenantId] = useState("");
   const [actionQ, setActionQ] = useState("");
+  const [actorEmail, setActorEmail] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const [debouncedAction, setDebouncedAction] = useState("");
+  const [expanded, setExpanded] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -51,14 +58,30 @@ function AuditPageContent() {
     const params = new URLSearchParams({ limit: "100" });
     if (tenantId) params.set("tenantId", tenantId);
     if (debouncedAction.trim()) params.set("action", debouncedAction.trim());
+    if (actorEmail.trim()) params.set("actorEmail", actorEmail.trim());
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
     void api<{ logs: AuditRow[] }>(`/audit-logs?${params}`)
       .then((res) => setLogs(res.logs))
       .finally(() => setLoading(false));
-  }, [tenantId, debouncedAction]);
+  }, [tenantId, debouncedAction, actorEmail, from, to]);
+
+  const exportUrl = `/api/proxy/audit-logs/export.csv?${new URLSearchParams({
+    ...(tenantId ? { tenantId } : {}),
+    ...(debouncedAction ? { action: debouncedAction } : {}),
+    ...(actorEmail ? { actorEmail } : {}),
+    ...(from ? { from } : {}),
+    ...(to ? { to } : {}),
+  })}`;
 
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Security" title="Audit log" description="Platform actions with optional tenant filter" />
+      <PageHeader eyebrow="Security" title="Audit log" description="Platform actions with filters and change diffs">
+        <a href={exportUrl} className="btn-secondary">
+          <Download className="h-4 w-4" aria-hidden />
+          Export CSV
+        </a>
+      </PageHeader>
 
       <PanelCard>
         <div className="flex flex-wrap gap-3">
@@ -80,11 +103,18 @@ function AuditPageContent() {
               onChange={(e) => setActionQ(e.target.value)}
             />
           </label>
-          {tenantId ? (
-            <Link href={`/tenants/${tenantId}`} className="self-end pb-2 text-sm font-semibold text-accent-500 hover:underline">
-              Open tenant →
-            </Link>
-          ) : null}
+          <label className="text-sm">
+            <span className="field-label">Actor email</span>
+            <input className="input min-w-[12rem]" value={actorEmail} onChange={(e) => setActorEmail(e.target.value)} />
+          </label>
+          <label className="text-sm">
+            <span className="field-label">From</span>
+            <input type="date" className="input" value={from} onChange={(e) => setFrom(e.target.value)} />
+          </label>
+          <label className="text-sm">
+            <span className="field-label">To</span>
+            <input type="date" className="input" value={to} onChange={(e) => setTo(e.target.value)} />
+          </label>
         </div>
       </PanelCard>
 
@@ -103,32 +133,43 @@ function AuditPageContent() {
             <th>Actor</th>
             <th>Action</th>
             <th>Tenant</th>
-            <th>Entity</th>
+            <th>Changes</th>
           </tr>
         </thead>
         <tbody>
-          {!loading && logs.map((row) => (
-            <tr key={row.id}>
-              <td className="whitespace-nowrap text-slate-500">{formatPktDate(row.createdAt)}</td>
-              <td>{row.actorEmail || "—"}</td>
-              <td>
-                <code className="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-white/10">{row.action}</code>
-              </td>
-              <td>
-                {row.tenant ? (
-                  <Link href={`/tenants/${row.tenant.id}`} className="font-semibold text-accent-600 hover:underline dark:text-accent-300">
-                    {row.tenant.displayName || row.tenant.slug}
-                  </Link>
-                ) : (
-                  <span className="text-slate-400">—</span>
-                )}
-              </td>
-              <td className="text-xs text-slate-500">
-                {row.entityType}
-                <span className="block font-mono text-[10px] text-slate-400">{row.entityId.slice(0, 8)}…</span>
-              </td>
-            </tr>
-          ))}
+          {!loading &&
+            logs.map((row) => (
+              <tr key={row.id}>
+                <td className="whitespace-nowrap text-slate-500">{formatPktDate(row.createdAt)}</td>
+                <td>{row.actorEmail || "—"}</td>
+                <td>
+                  <code className="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-white/10">{row.action}</code>
+                </td>
+                <td>
+                  {row.tenant ? (
+                    <Link href={`/tenants/${row.tenant.id}`} className="font-semibold text-accent-600 hover:underline dark:text-accent-300">
+                      {row.tenant.displayName || row.tenant.slug}
+                    </Link>
+                  ) : (
+                    <span className="text-slate-400">—</span>
+                  )}
+                </td>
+                <td className="text-xs">
+                  {row.before || row.after ? (
+                    <button type="button" className="text-accent-400 hover:underline" onClick={() => setExpanded(expanded === row.id ? null : row.id)}>
+                      {expanded === row.id ? "Hide" : "View diff"}
+                    </button>
+                  ) : (
+                    <span className="text-slate-500">{row.entityType}</span>
+                  )}
+                  {expanded === row.id ? (
+                    <pre className="mt-2 max-h-40 overflow-auto rounded-lg bg-black/30 p-2 text-[10px] text-slate-300">
+                      {JSON.stringify({ before: row.before, after: row.after }, null, 2)}
+                    </pre>
+                  ) : null}
+                </td>
+              </tr>
+            ))}
         </tbody>
       </DataTable>
     </div>

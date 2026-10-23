@@ -1,5 +1,6 @@
 import {
   AnnouncementAudience,
+  AnnouncementPublishStatus,
   AnnouncementSeverity,
   Role,
   type PlatformAnnouncement,
@@ -16,6 +17,7 @@ type TenantTarget = {
   ownerEmail: string;
   status: string;
   planSlug: string | null;
+  isTest: boolean;
 };
 
 function severityToOps(severity: AnnouncementSeverity): "info" | "warning" | "urgent" {
@@ -25,6 +27,7 @@ function severityToOps(severity: AnnouncementSeverity): "info" | "warning" | "ur
 }
 
 function matchesAudience(row: PlatformAnnouncement, t: TenantTarget) {
+  if (row.excludeTestTenants && t.isTest) return false;
   if (row.audience === AnnouncementAudience.ALL) return true;
   if (row.audience === AnnouncementAudience.PLAN) {
     return row.audiencePlanSlug && t.planSlug && row.audiencePlanSlug === t.planSlug;
@@ -38,21 +41,21 @@ function matchesAudience(row: PlatformAnnouncement, t: TenantTarget) {
   return false;
 }
 
-async function loadTenantTargets(): Promise<TenantTarget[]> {
+async function loadTenantTargets(excludeTest = true): Promise<TenantTarget[]> {
   const rows = await withoutTenant("broadcast targets", () =>
     basePrisma.restaurant.findMany({
-      where: { status: { not: "ARCHIVED" } },
+      where: {
+        status: { not: "ARCHIVED" },
+        ...(excludeTest ? { isTest: false } : {}),
+      },
       select: {
         id: true,
         displayName: true,
         slug: true,
         ownerEmail: true,
         status: true,
-        subscriptions: {
-          take: 1,
-          orderBy: { updatedAt: "desc" },
-          select: { plan: { select: { slug: true } } },
-        },
+        isTest: true,
+        subscription: { select: { plan: { select: { slug: true } } } },
       },
     })
   );
@@ -62,7 +65,8 @@ async function loadTenantTargets(): Promise<TenantTarget[]> {
     slug: r.slug,
     ownerEmail: r.ownerEmail || "",
     status: r.status,
-    planSlug: r.subscriptions[0]?.plan?.slug ?? null,
+    isTest: r.isTest,
+    planSlug: r.subscription?.plan?.slug ?? null,
   }));
 }
 
@@ -87,10 +91,11 @@ export async function deliverPlatformAnnouncement(
   row: PlatformAnnouncement,
   opts: { email?: boolean; inApp?: boolean } = {}
 ) {
-  const sendEmail = opts.email !== false;
-  const inApp = opts.inApp !== false;
-  const targets = (await loadTenantTargets()).filter((t) => matchesAudience(row, t));
+  const sendEmail = opts.email ?? row.notifyEmail;
+  const inApp = opts.inApp ?? row.notifyInApp;
+  const targets = (await loadTenantTargets(row.excludeTestTenants)).filter((t) => matchesAudience(row, t));
   const severity = severityToOps(row.severity);
+  let sent = 0;
 
   for (const t of targets) {
     if (inApp) {
@@ -115,15 +120,28 @@ export async function deliverPlatformAnnouncement(
           body: row.body,
           severity: row.severity,
         });
+        sent++;
       }
     }
   }
-  return { tenantCount: targets.length };
+
+  await withoutTenant("announcement stats", () =>
+    basePrisma.platformAnnouncement.update({
+      where: { id: row.id },
+      data: {
+        statsSent: { increment: sent },
+        publishStatus: AnnouncementPublishStatus.PUBLISHED,
+        publishedAt: new Date(),
+      },
+    })
+  );
+
+  return { tenantCount: targets.length, emailsSent: sent };
 }
 
 export async function deliverMaintenanceBroadcast(message: string, active: boolean) {
   if (!active) return { tenantCount: 0 };
-  const targets = await loadTenantTargets();
+  const targets = await loadTenantTargets(true);
   const body = message.trim() || "Scheduled maintenance is in progress.";
   for (const t of targets) {
     emitOpsNotificationForRestaurant(t.id, {

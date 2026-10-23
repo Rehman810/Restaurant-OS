@@ -16,7 +16,7 @@ export type WritePlatformAuditInput = {
 };
 
 export async function writePlatformAudit(input: WritePlatformAuditInput) {
-  return withoutTenant("platform audit log", () =>
+  const row = await withoutTenant("platform audit log", () =>
     basePrisma.platformAuditLog.create({
       data: {
         actorId: input.actorId ?? null,
@@ -32,6 +32,14 @@ export async function writePlatformAudit(input: WritePlatformAuditInput) {
       },
     })
   );
+  void import("./platform-alerts").then(({ dispatchPlatformAlerts }) =>
+    dispatchPlatformAlerts({
+      action: input.action,
+      actorEmail: input.actorEmail,
+      subjectTenantId: input.subjectTenantId,
+    })
+  );
+  return row;
 }
 
 export type PlatformActor = {

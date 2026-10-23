@@ -22,15 +22,21 @@ import { EmptyState } from "@/components/EmptyState";
 import { StatusBadge } from "@/components/StatusBadge";
 
 type Overview = {
+  rangeDays: number;
   mrrPkr: number;
   arrPkr: number;
   trialsEndingIn7Days: number;
   overdue: { count: number; amountPkr: number };
-  gmv: { todayPkr: number; last7DaysPkr: number; last30DaysPkr: number; ordersToday: number };
+  gmv: { todayPkr: number; last7DaysPkr: number; last30DaysPkr: number; rangePkr: number; ordersToday: number };
   activeTenants7d: number;
   stuckOnboarding: number;
   atRiskTenants: Array<{ id: string; displayName: string; slug: string; reason: string }>;
   tenantsByStatus: Array<{ status: string; count: number }>;
+  gmvTrend: Array<{ date: string; collectedPkr: number }>;
+  mrrMovement: { newPkr: number; expansionPkr: number; contractionPkr: number; churnPkr: number; netPkr: number };
+  conversion: { trialToPaidRate: number; churnRate: number; arpaPkr: number };
+  funnel: { created: number; onboardingComplete: number; firstOrder: number; paid: number };
+  needsAttention: Array<{ id: string; kind: string; label: string; href: string }>;
 };
 
 const STATUS_BAR: Record<string, string> = {
@@ -43,18 +49,26 @@ const STATUS_BAR: Record<string, string> = {
   LEAD: "bg-violet-400",
 };
 
+const RANGES = [7, 30, 90] as const;
+
 export default function OverviewPage() {
+  const [range, setRange] = useState<number>(30);
   const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    void api<Overview>("/overview")
+    void api<Overview>(`/overview?range=${range}`)
       .then(setData)
       .catch(() => setError("Could not load overview."));
-  }, []);
+  }, [range]);
 
   const totalTenants = useMemo(
     () => data?.tenantsByStatus.reduce((sum, row) => sum + row.count, 0) ?? 0,
+    [data]
+  );
+
+  const gmvMax = useMemo(
+    () => Math.max(1, ...(data?.gmvTrend.map((p) => p.collectedPkr) ?? [1])),
     [data]
   );
 
@@ -63,15 +77,39 @@ export default function OverviewPage() {
       <PageHeader
         eyebrow="Live ops"
         title="Overview"
-        description="Karachi time · subscription, billing, and order metrics across all tenants"
-      />
+        description="Karachi time · subscription, billing, and order metrics (test tenants excluded)"
+      >
+        <div className="flex gap-1 rounded-xl border border-white/10 p-1">
+          {RANGES.map((d) => (
+            <button
+              key={d}
+              type="button"
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${range === d ? "bg-accent-500/20 text-accent-200" : "text-slate-400"}`}
+              onClick={() => setRange(d)}
+            >
+              {d}d
+            </button>
+          ))}
+        </div>
+      </PageHeader>
       {error ? <p className="flash-error">{error}</p> : null}
       {data ? (
         <>
           <div className="stagger-in grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <KpiCard label="MRR" value={formatPkr(data.mrrPkr)} icon={Wallet} hint="Recurring this month" />
             <KpiCard label="ARR" value={formatPkr(data.arrPkr)} icon={TrendingUp} hint="Annualized run rate" />
-            <KpiCard label="GMV (30 days)" value={formatPkr(data.gmv.last30DaysPkr)} icon={CircleDollarSign} hint={`Today ${formatPkr(data.gmv.todayPkr)}`} />
+            <KpiCard
+              label={`GMV (${data.rangeDays}d)`}
+              value={formatPkr(data.gmv.rangePkr)}
+              icon={CircleDollarSign}
+              hint={`Today ${formatPkr(data.gmv.todayPkr)}`}
+            />
+            <KpiCard
+              label="ARPA"
+              value={formatPkr(data.conversion.arpaPkr)}
+              icon={Wallet}
+              hint={`Trial→paid ${(data.conversion.trialToPaidRate * 100).toFixed(0)}%`}
+            />
             <KpiCard
               label="Active tenants (7d)"
               value={String(data.activeTenants7d)}
@@ -93,13 +131,55 @@ export default function OverviewPage() {
               tone={data.overdue.count > 0 ? "danger" : "default"}
             />
             <KpiCard label="Orders today" value={String(data.gmv.ordersToday)} icon={ShoppingBag} />
-            <KpiCard
-              label="Stuck onboarding"
-              value={String(data.stuckOnboarding)}
-              icon={AlertTriangle}
-              tone={data.stuckOnboarding > 0 ? "warning" : "default"}
-            />
           </div>
+
+          <section className="grid gap-6 lg:grid-cols-2">
+            <PanelCard title="GMV trend" description={`Daily collected PKR · last ${data.rangeDays} days`}>
+              {data.gmvTrend.length === 0 ? (
+                <EmptyState icon={TrendingUp} title="No GMV in this window" />
+              ) : (
+                <ul className="flex h-32 items-end gap-0.5">
+                  {data.gmvTrend.map((p) => (
+                    <li key={p.date} className="flex-1" title={`${p.date}: ${formatPkr(p.collectedPkr)}`}>
+                      <div
+                        className="mx-auto w-full max-w-[12px] rounded-t bg-accent-500/70"
+                        style={{ height: `${Math.max(4, (p.collectedPkr / gmvMax) * 100)}%` }}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </PanelCard>
+            <PanelCard title="MRR movement" description={`Last ${data.rangeDays} days (approx.)`}>
+              <ul className="space-y-2 text-sm">
+                <li className="flex justify-between"><span className="text-slate-500">New</span><span className="text-emerald-400">+{formatPkr(data.mrrMovement.newPkr)}</span></li>
+                <li className="flex justify-between"><span className="text-slate-500">Expansion</span><span className="text-emerald-300">+{formatPkr(data.mrrMovement.expansionPkr)}</span></li>
+                <li className="flex justify-between"><span className="text-slate-500">Contraction</span><span className="text-amber-300">−{formatPkr(data.mrrMovement.contractionPkr)}</span></li>
+                <li className="flex justify-between"><span className="text-slate-500">Churn</span><span className="text-rose-400">−{formatPkr(data.mrrMovement.churnPkr)}</span></li>
+                <li className="flex justify-between border-t border-white/10 pt-2 font-semibold">
+                  <span>Net</span>
+                  <span>{formatPkr(data.mrrMovement.netPkr)}</span>
+                </li>
+              </ul>
+            </PanelCard>
+          </section>
+
+          <PanelCard title="Signup funnel" description={`Cohort created in last ${data.rangeDays} days`}>
+            <div className="grid gap-3 sm:grid-cols-4 text-center text-sm">
+              {[
+                { label: "Created", value: data.funnel.created },
+                { label: "Onboarding done", value: data.funnel.onboardingComplete },
+                { label: "First order", value: data.funnel.firstOrder },
+                { label: "Paid", value: data.funnel.paid },
+              ].map((step) => (
+                <div key={step.label} className="rounded-xl border border-white/5 bg-white/[0.02] px-3 py-4">
+                  <p className="text-2xl font-semibold tabular-nums">{step.value}</p>
+                  <p className="mt-1 text-xs text-slate-500">{step.label}</p>
+                </div>
+              ))}
+            </div>
+          </PanelCard>
+
           <section className="grid gap-6 lg:grid-cols-2">
             <PanelCard title="Tenants by status" description={totalTenants ? `${totalTenants} accounts` : "No tenants yet"}>
               {data.tenantsByStatus.length === 0 ? (
@@ -126,32 +206,31 @@ export default function OverviewPage() {
                 </ul>
               )}
             </PanelCard>
-            <PanelCard
-              title="Needs attention"
-              description="Trials, billing, and health signals"
-              actions={
-                <Link href="/tenants" className="text-xs font-semibold text-accent-500 hover:text-accent-400">
-                  View all tenants
-                </Link>
-              }
-            >
-              {data.atRiskTenants.length === 0 ? (
-                <EmptyState
-                  icon={UserCheck}
-                  title="No at-risk tenants right now"
-                  description="Trials, overdue invoices, and stuck onboarding will show up here."
-                />
+            <PanelCard title="Needs attention" description="Trials, billing, and health signals">
+              {data.needsAttention.length === 0 && data.atRiskTenants.length === 0 && data.stuckOnboarding === 0 ? (
+                <EmptyState icon={UserCheck} title="All clear" description="Nothing urgent right now." />
               ) : (
                 <ul className="space-y-2">
+                  {data.stuckOnboarding > 0 ? (
+                    <li className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-sm">
+                      <Link href="/tenants?status=TRIAL" className="font-semibold text-amber-200 hover:underline">
+                        {data.stuckOnboarding} stuck in onboarding
+                      </Link>
+                    </li>
+                  ) : null}
+                  {data.needsAttention.map((item) => (
+                    <li key={item.id} className="rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-2.5 dark:border-white/[0.06] dark:bg-white/[0.03]">
+                      <Link href={item.href} className="text-sm font-semibold text-accent-600 hover:underline dark:text-accent-300">
+                        {item.label}
+                      </Link>
+                    </li>
+                  ))}
                   {data.atRiskTenants.map((t) => (
-                    <li
-                      key={t.id}
-                      className="rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-2.5 dark:border-white/[0.06] dark:bg-white/[0.03]"
-                    >
-                      <Link href={`/tenants/${t.id}`} className="text-sm font-semibold text-accent-600 hover:underline dark:text-accent-300">
+                    <li key={t.id} className="rounded-xl border border-slate-100 px-3 py-2 dark:border-white/[0.06]">
+                      <Link href={`/tenants/${t.id}`} className="text-sm font-semibold text-accent-400 hover:underline">
                         {t.displayName || t.slug}
                       </Link>
-                      <p className="mt-0.5 text-xs text-slate-500">{t.reason}</p>
+                      <p className="text-xs text-slate-500">{t.reason}</p>
                     </li>
                   ))}
                 </ul>
